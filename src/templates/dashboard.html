@@ -239,14 +239,95 @@
         </div>
     </div>
 
+    <div id="job-discovery-modal"
+        class="hidden fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 class="text-base font-bold text-purple-400">🎯 Job Board Outsourcing Scanner</h3>
+                <button onclick="toggleJobDiscoveryModal(false)"
+                    class="text-slate-500 hover:text-slate-300 text-sm cursor-pointer">✕</button>
+            </div>
+            <p class="text-xs text-slate-500 leading-relaxed">Finds companies <strong class="text-slate-400">actively hiring</strong> for roles you can replace with your offshore team. Each job posting = a warm outsourcing prospect.</p>
+            <div>
+                <label class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-2">Service Offerings to Scan</label>
+                <div class="space-y-2 bg-slate-950 p-3 border border-slate-800 rounded-lg text-xs text-slate-300">
+                    <label class="flex items-center gap-2 cursor-pointer py-0.5"><input type="checkbox" name="job-service" value="video_editing" checked class="accent-purple-500"> <span>🎬 <strong>Video Editing</strong> — companies hiring in-house video editors</span></label>
+                    <label class="flex items-center gap-2 cursor-pointer py-0.5"><input type="checkbox" name="job-service" value="bpo_customer_service" class="accent-purple-500"> <span>📞 <strong>Customer Service BPO</strong> — companies hiring CS / support agents</span></label>
+                    <label class="flex items-center gap-2 cursor-pointer py-0.5"><input type="checkbox" name="job-service" value="bpo_data_entry" class="accent-purple-500"> <span>📋 <strong>Data Entry BPO</strong> — companies hiring data processors</span></label>
+                    <label class="flex items-center gap-2 cursor-pointer py-0.5"><input type="checkbox" name="job-service" value="social_media_management" class="accent-purple-500"> <span>📱 <strong>Social Media Management</strong> — companies hiring SMM staff</span></label>
+                    <label class="flex items-center gap-2 cursor-pointer py-0.5"><input type="checkbox" name="job-service" value="virtual_assistant" class="accent-purple-500"> <span>💼 <strong>Virtual Assistant</strong> — companies hiring remote assistants</span></label>
+                </div>
+            </div>
+            <div>
+                <label class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">Target Country <span class="text-slate-600 normal-case font-normal">(optional — leave blank for global)</span></label>
+                <input id="job-country-input" type="text" placeholder="e.g., United States, Australia, United Kingdom..."
+                    class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-purple-500">
+            </div>
+            <div class="flex items-center justify-end gap-3 border-t border-slate-800 pt-3">
+                <button onclick="toggleJobDiscoveryModal(false)"
+                    class="bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-400 text-xs px-5 py-2 rounded-lg transition cursor-pointer">Cancel</button>
+                <button onclick="submitJobDiscoveryRequest()"
+                    class="bg-purple-500 hover:bg-purple-600 text-white font-bold text-xs px-6 py-2 rounded-lg transition shadow-lg shadow-purple-500/10 cursor-pointer">🎯 Scan Job Boards</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="bulk-pitch-modal"
+        class="hidden fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 class="text-base font-bold text-emerald-400">🤖 Bulk AI Pitch Generator</h3>
+                <button onclick="document.getElementById('bulk-pitch-modal').classList.add('hidden')"
+                    class="text-slate-500 hover:text-slate-300 text-sm cursor-pointer">✕</button>
+            </div>
+            <p class="text-xs text-slate-500 leading-relaxed">Generates email pitches + subject lines for all <strong class="text-slate-400">Discovered</strong> leads with no draft yet. Highest-scored leads processed first.</p>
+            <div>
+                <label class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">Batch Size</label>
+                <select id="bulk-pitch-limit"
+                    class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer">
+                    <option value="5">5 leads</option>
+                    <option value="10" selected>10 leads</option>
+                    <option value="25">25 leads</option>
+                    <option value="50">50 leads</option>
+                </select>
+            </div>
+            <div class="flex items-center justify-end gap-3 border-t border-slate-800 pt-3">
+                <button onclick="document.getElementById('bulk-pitch-modal').classList.add('hidden')"
+                    class="bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-400 text-xs px-5 py-2 rounded-lg transition cursor-pointer">Cancel</button>
+                <button onclick="submitBulkPitchRequest()"
+                    class="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs px-6 py-2 rounded-lg transition shadow-lg cursor-pointer">Generate Pitches</button>
+            </div>
+        </div>
+    </div>
+
     <header
         class="border-b border-slate-800 bg-slate-950 p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
         <h1 class="text-xl font-bold tracking-tight text-emerald-400">AsuraTECH Solutions // Engine Panel</h1>
-        <div>
+        <div class="flex items-center gap-2 flex-wrap justify-end">
             <button id="btn-global-discover" onclick="toggleDiscoveryModal(true)"
-                class="bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 text-xs px-4 py-2 rounded-lg font-medium shadow-sm">
-                ⚡ Run Discovery Scan
+                class="bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 text-xs px-3 py-2 rounded-lg font-medium cursor-pointer">
+                ⚡ Web Discovery
             </button>
+            <button id="btn-job-discover" onclick="toggleJobDiscoveryModal(true)"
+                class="bg-slate-900 hover:bg-slate-800 border border-purple-800/60 text-purple-300 text-xs px-3 py-2 rounded-lg font-medium cursor-pointer">
+                🎯 Job Board Scan
+            </button>
+            <button id="btn-bulk-pitch" onclick="document.getElementById('bulk-pitch-modal').classList.remove('hidden')"
+                class="bg-slate-900 hover:bg-slate-800 border border-emerald-800/60 text-emerald-300 text-xs px-3 py-2 rounded-lg font-medium cursor-pointer">
+                🤖 Bulk Pitch
+            </button>
+            <button id="btn-score-leads" onclick="triggerScoreLeads()"
+                class="bg-slate-900 hover:bg-slate-800 border border-amber-800/60 text-amber-300 text-xs px-3 py-2 rounded-lg font-medium cursor-pointer">
+                🧮 Score Leads
+            </button>
+            <button id="btn-followup-sweep" onclick="triggerFollowupSweep()"
+                class="bg-slate-900 hover:bg-slate-800 border border-fuchsia-800/60 text-fuchsia-300 text-xs px-3 py-2 rounded-lg font-medium cursor-pointer">
+                ⏰ Follow-Up Sweep
+            </button>
+            <a href="/api/export" target="_blank"
+                class="bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-400 text-xs px-3 py-2 rounded-lg font-medium cursor-pointer">
+                📥 Export CSV
+            </a>
         </div>
     </header>
 
@@ -475,7 +556,10 @@
                             const threadFinished = data.logs.some(line =>
                                 line.toLowerCase().includes("complete process") ||
                                 line.toLowerCase().includes("synchronization complete") ||
-                                line.toLowerCase().includes("cleared background pass")
+                                line.toLowerCase().includes("cleared background pass") ||
+                                line.toLowerCase().includes("bulk pitch] complete") ||
+                                (line.toLowerCase().includes("job discovery") && line.toLowerCase().includes("complete")) ||
+                                (line.includes("🏁") && line.toLowerCase().includes("complete"))
                             );
 
                             if (threadFinished) {
@@ -599,15 +683,21 @@
             'drafted': '<span class="px-2 py-0.5 text-xs rounded font-medium bg-amber-950 text-amber-400 border border-amber-900">Drafted</span>',
             'sent': '<span class="px-2 py-0.5 text-xs rounded font-medium bg-emerald-950 text-emerald-400 border border-emerald-900">Sent</span>',
             'followup_1': '<span class="px-2 py-0.5 text-xs rounded font-medium bg-purple-950 text-purple-400 border border-purple-900">Follow-Up 1</span>',
-            'sent_followup_1': '<span class="px-2 py-0.5 text-xs rounded font-medium bg-indigo-950 text-indigo-400 border border-indigo-900">Follow-Up Complete</span>',
+            'followup_2': '<span class="px-2 py-0.5 text-xs rounded font-medium bg-violet-950 text-violet-400 border border-violet-900">Follow-Up 2</span>',
+            'sent_followup_1': '<span class="px-2 py-0.5 text-xs rounded font-medium bg-indigo-950 text-indigo-400 border border-indigo-900">Follow-Up Sent</span>',
+            'cold': '<span class="px-2 py-0.5 text-xs rounded font-medium bg-slate-900 text-slate-600 border border-slate-800">Cold</span>',
+            'closed_won': '<span class="px-2 py-0.5 text-xs rounded font-medium bg-emerald-900 text-emerald-300 border border-emerald-700">Closed Won 🎉</span>',
             'rejected': '<span class="px-2 py-0.5 text-xs rounded font-medium bg-slate-900 text-slate-500 border border-slate-800">Archived</span>'
         };
 
-        function renderSourceBadge(placeId) {
+        function renderSourceBadge(sourcePlatform, placeId) {
+            const platform = String(sourcePlatform || '').toLowerCase();
             const strId = String(placeId || '');
-            if (strId.startsWith('fb_')) {
+            if (platform === 'job_board') {
+                return '<span class="bg-purple-950 border border-purple-800 text-purple-400 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">Job Board</span>';
+            } else if (platform === 'facebook' || strId.startsWith('fb_')) {
                 return '<span class="bg-blue-950 border border-blue-800 text-blue-400 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">FB Page</span>';
-            } else if (strId.startsWith('ln_') || strId.startsWith('b2b_')) {
+            } else if (platform === 'linkedin' || strId.startsWith('ln_') || strId.startsWith('b2b_')) {
                 return '<span class="bg-indigo-950 border border-indigo-800 text-indigo-400 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">B2B Link</span>';
             } else {
                 return '<span class="bg-emerald-950 border border-emerald-800 text-emerald-400 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">G Maps</span>';
@@ -641,7 +731,7 @@
                 tr.innerHTML = `
                     <td class="p-3 font-medium text-slate-200">${lead.business_name}</td>
                     <td class="p-3 text-slate-400">${lead.category}</td>
-                    <td class="p-3 text-center">${renderSourceBadge(lead.google_place_id)}</td> 
+                    <td class="p-3 text-center">${renderSourceBadge(lead.source_platform, lead.google_place_id)}</td>
                     <td class="p-3 text-center text-amber-400 font-bold font-mono">★ ${ratingDisplay}</td> 
                     <td class="p-3">${statusBadges[lead.status] || lead.status}</td>
                 `;
@@ -651,9 +741,12 @@
 
         function setGlobalLock(lockState) {
             isWorking = lockState;
-            document.getElementById('btn-global-discover').disabled = lockState;
-            document.getElementById('btn-individual-ai').disabled = lockState;
-            document.getElementById('btn-view-more').disabled = lockState;
+            ['btn-global-discover', 'btn-job-discover', 'btn-bulk-pitch',
+             'btn-score-leads', 'btn-followup-sweep',
+             'btn-individual-ai', 'btn-view-more'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.disabled = lockState;
+            });
         }
 
         function toggleDiscoveryModal(show) { if (isWorking && show) return; document.getElementById('discovery-modal').classList.toggle('hidden', !show); }
@@ -765,8 +858,9 @@
 
             btnSend.disabled = false; btnViewMore.disabled = false; btnAi.disabled = !['discovered', 'drafted'].includes(lead.status); btnReject.disabled = ['sent', 'followup_1', 'sent_followup_1'].includes(lead.status);
             if (lead.status === 'sent') { btnSend.innerText = "Queue Follow-Up Draft"; btnSend.className = "col-span-2 bg-purple-600 text-white font-bold text-sm py-2.5 rounded-lg cursor-pointer shadow-lg"; }
-            else if (lead.status === 'followup_1') { btnSend.innerText = "Send Follow-Up Email"; btnSend.className = "col-span-2 bg-fuchsia-600 text-white font-bold text-sm py-2.5 rounded-lg cursor-pointer shadow-lg"; }
-            else if (lead.status === 'sent_followup_1') { btnSend.innerText = "Sequence Completed"; btnSend.disabled = true; btnSend.className = "col-span-2 bg-slate-800 text-slate-500 font-bold text-sm py-2.5 rounded-lg cursor-not-allowed"; }
+            else if (lead.status === 'followup_1') { btnSend.innerText = "Send Follow-Up 1"; btnSend.className = "col-span-2 bg-fuchsia-600 text-white font-bold text-sm py-2.5 rounded-lg cursor-pointer shadow-lg"; }
+            else if (lead.status === 'followup_2') { btnSend.innerText = "Send Final Follow-Up"; btnSend.className = "col-span-2 bg-violet-600 text-white font-bold text-sm py-2.5 rounded-lg cursor-pointer shadow-lg"; }
+            else if (lead.status === 'sent_followup_1' || lead.status === 'cold') { btnSend.innerText = lead.status === 'cold' ? 'Sequence Ended' : 'Sequence Completed'; btnSend.disabled = true; btnSend.className = "col-span-2 bg-slate-800 text-slate-500 font-bold text-sm py-2.5 rounded-lg cursor-not-allowed"; }
             else { btnSend.innerText = "Approve & Send"; btnSend.className = "col-span-2 bg-amber-500 text-slate-950 font-bold text-sm py-2.5 rounded-lg cursor-pointer shadow-lg"; if (!lead.ai_pitch_draft) btnSend.disabled = true; }
         }
 
@@ -849,6 +943,91 @@
             document.getElementById('test-email-input').value = ''; document.getElementById('test-email-input').disabled = true; document.getElementById('editor').value = ''; document.getElementById('editor').disabled = true;
             document.getElementById('btn-reject').disabled = true; document.getElementById('btn-individual-ai').disabled = true; document.getElementById('btn-view-more').disabled = true;
             document.getElementById('btn-send').disabled = true; document.getElementById('btn-send').innerText = "Approve & Send Test"; document.getElementById('btn-send').className = "col-span-2 bg-slate-800 text-slate-500 font-bold text-sm py-2.5 rounded-lg opacity-50";
+        }
+
+        function toggleJobDiscoveryModal(show) {
+            if (isWorking && show) return;
+            document.getElementById('job-discovery-modal').classList.toggle('hidden', !show);
+        }
+
+        async function submitJobDiscoveryRequest() {
+            const checkedServices = document.querySelectorAll('input[name="job-service"]:checked');
+            const serviceTypes = Array.from(checkedServices).map(cb => cb.value);
+            const country = document.getElementById('job-country-input').value.trim();
+            if (serviceTypes.length === 0) return;
+
+            toggleJobDiscoveryModal(false);
+            setGlobalLock(true);
+            await fetch('/api/discovery/logs/clear', { method: 'POST' });
+
+            const overlay = document.getElementById('loading-overlay');
+            document.getElementById('loading-overlay-text').innerText = 'Scanning job boards for outsourcing signals...';
+            overlay.classList.remove('hidden');
+            await startLiveConsoleLogStreamingLoop();
+
+            try {
+                await fetch('/api/trigger/discover-jobs', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ service_types: serviceTypes, country })
+                });
+            } catch (err) {
+                console.error('Job discovery error:', err);
+                clearInterval(liveLogPollingInterval);
+                overlay.classList.add('hidden');
+                setGlobalLock(false);
+            }
+        }
+
+        async function submitBulkPitchRequest() {
+            const limit = parseInt(document.getElementById('bulk-pitch-limit').value);
+            document.getElementById('bulk-pitch-modal').classList.add('hidden');
+            setGlobalLock(true);
+            await fetch('/api/discovery/logs/clear', { method: 'POST' });
+
+            const overlay = document.getElementById('loading-overlay');
+            document.getElementById('loading-overlay-text').innerText = 'Generating AI pitches for discovered leads...';
+            overlay.classList.remove('hidden');
+            await startLiveConsoleLogStreamingLoop();
+
+            try {
+                await fetch('/api/trigger/pitch-bulk', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ limit })
+                });
+            } catch (err) {
+                console.error('Bulk pitch error:', err);
+                clearInterval(liveLogPollingInterval);
+                overlay.classList.add('hidden');
+                setGlobalLock(false);
+            }
+        }
+
+        async function triggerScoreLeads() {
+            if (isWorking) return;
+            try {
+                await fetch('/api/trigger/score-leads', { method: 'POST' });
+                showToast('🧮 Lead scoring started. Refreshing in 3s...');
+                setTimeout(() => loadQueue(), 3000);
+            } catch (err) { console.error(err); }
+        }
+
+        async function triggerFollowupSweep() {
+            if (isWorking) return;
+            try {
+                await fetch('/api/trigger/followup-sweep', { method: 'POST' });
+                showToast('⏰ Follow-up sweep started. Refreshing in 3s...');
+                setTimeout(() => loadQueue(), 3000);
+            } catch (err) { console.error(err); }
+        }
+
+        function showToast(message) {
+            const toast = document.createElement('div');
+            toast.className = 'fixed bottom-6 right-6 z-50 bg-slate-800 border border-slate-700 text-slate-200 text-xs font-medium px-4 py-3 rounded-xl shadow-2xl';
+            toast.innerText = message;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 4000);
         }
 
         window.onload = loadQueue;
