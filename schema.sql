@@ -35,3 +35,20 @@ CREATE TRIGGER update_prospects_modtime
     BEFORE UPDATE ON prospects
     FOR EACH ROW
     EXECUTE FUNCTION update_modified_column();
+
+-- Phase 2: International Lead Gen Expansion Migration
+-- Run these ALTER statements once on an existing database to apply the upgrade.
+-- The CREATE TABLE above already includes all columns for fresh installs.
+ALTER TABLE prospects ADD COLUMN IF NOT EXISTS lead_score        INT          DEFAULT 0;
+ALTER TABLE prospects ADD COLUMN IF NOT EXISTS site_quality_score INT         DEFAULT NULL;
+ALTER TABLE prospects ADD COLUMN IF NOT EXISTS lead_type         VARCHAR(50)  DEFAULT 'web_design';
+ALTER TABLE prospects ADD COLUMN IF NOT EXISTS subject_line      TEXT;
+ALTER TABLE prospects ADD COLUMN IF NOT EXISTS followup_due_at   TIMESTAMP    DEFAULT NULL;
+ALTER TABLE prospects ADD COLUMN IF NOT EXISTS website_url       TEXT;
+ALTER TABLE prospects ADD COLUMN IF NOT EXISTS source_platform   VARCHAR(50)  DEFAULT 'google_maps';
+
+-- New indexes for priority sorting and follow-up queue
+CREATE INDEX IF NOT EXISTS idx_prospects_lead_score  ON prospects (lead_score DESC);
+CREATE INDEX IF NOT EXISTS idx_prospects_lead_type   ON prospects (lead_type);
+CREATE INDEX IF NOT EXISTS idx_prospects_followup    ON prospects (followup_due_at)
+    WHERE followup_due_at IS NOT NULL;

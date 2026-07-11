@@ -1,5 +1,7 @@
 import os
 import sys
+import csv
+import io
 import smtplib
 import requests
 import threading
@@ -7,7 +9,7 @@ import psycopg2
 from email.mime.text import MIMEText
 from email.header import Header
 from psycopg2.extras import RealDictCursor
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, Response
 from dotenv import load_dotenv
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -111,79 +113,143 @@ def trigger_single_pitch_generation(lead_id):
     if not OPENAI_KEY:
         return jsonify({"status": "error", "message": "OpenAI credentials missing inside environment config."}), 401
 
-    with psycopg2.connect(DB_DSN) as conn:
+    with psycopg2.connect(DB_DSN, cursor_factory=RealDictCursor) as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT business_name, category FROM prospects WHERE id = %s;", (lead_id,))
+            cur.execute(
+                "SELECT business_name, category, lead_type FROM prospects WHERE id = %s;",
+                (lead_id,)
+            )
             res = cur.fetchone()
             if not res:
                 return jsonify({"status": "error", "message": "Target lead record not found."}), 404
-            
-            business_name, category = res[0], res[1]
-            print(f"[AI WORKER] Extracting targeted copy parameters for industry: '{category}'...")
 
-            from niche_prompts import get_niche_parameters
-            niche_strategy = get_niche_parameters(category)
+            business_name = res['business_name']
+            category = res['category']
+            lead_type = res.get('lead_type') or 'web_design'
 
-            headers = {
-                "Authorization": f"Bearer {OPENAI_KEY}",
-                "Content-Type": "application/json"
-            }
-            system_prompt = (
-                "You are an elite B2B SaaS outreach copywriting specialist and full-stack engineer. "
-                "Write a highly compelling, cold peer-to-peer outreach email from an agency to a business owner. "
-                "Keep the tone direct, professional, and entirely free of corporate fluff or hype. "
-                "CRITICAL: Do NOT write a subject line. Start drafting directly from the greeting (e.g., 'Hi [Owner's Name],'). "
-                f"You must tailor the pitch around these specific industry pain points: {niche_strategy['pain_points']}. "
-                f"Naturally weave in some of this specific terminology to demonstrate elite industry fluency: {niche_strategy['buzzwords']}."
-            )
-            user_prompt = (
-                f"Write a hyper-personalized outreach script for '{business_name}', a highly-rated local business in the '{category}' niche.\n\n"
-                f"Core Strategy Hook to use: {niche_strategy['hook_angle']}\n\n"
-                "Requirements:\n"
-                "1. Explicitly complement their strong Google Maps review history.\n"
-                "2. Address how lacking a high-performance modern website strategy causes them to bleed local market share.\n"
-                "3. Conclude with a low-friction call to action asking for a quick 5-minute sanity check sync.\n"
-                "4. Do NOT output a subject header prefix line under any circumstances."
+            print(f"[AI WORKER] Generating pitch for '{business_name}' | type: {lead_type} | category: {category}")
+
+            from niche_prompts import (
+                get_niche_parameters, get_service_parameters, OUTSOURCING_SERVICE_TYPES
             )
 
-            payload = {
+            ai_headers = {"Authorization": f"Bearer {OPENAI_KEY}", "Content-Type": "application/json"}
+
+            # --- Route to appropriate prompt strategy based on lead type ---
+            if lead_type in OUTSOURCING_SERVICE_TYPES:
+                strategy = get_service_parameters(lead_type)
+                system_prompt = (
+                    "You are a B2B outreach specialist for a Philippine-based outsourcing and digital services agency. "
+                    "Write a compelling cold outreach email to a company decision-maker. "
+                    "Be direct, professional, and concise. Zero corporate fluff or buzzword stuffing. "
+                    "CRITICAL: Do NOT write a subject line. Start directly with the greeting. "
+                    f"Service we're pitching: {lead_type.replace('_', ' ')}. "
+                    f"Core pain points to address: {strategy['pain_points']}. "
+                    f"Use this terminology naturally: {strategy['buzzwords']}."
+                )
+                user_prompt = (
+                    f"Write a cold outreach email to '{business_name}', a company actively hiring for '{category}' roles.\n\n"
+                    f"Use this hook angle: {strategy['hook_angle']}\n\n"
+                    f"End with this CTA: {strategy['cta']}\n\n"
+                    "Keep it under 160 words. Do NOT write a subject line under any circumstances."
+                )
+                suggested_angle_summary = f"[{lead_type.replace('_', ' ').title()}] {strategy['hook_angle'][:80]}..."
+            else:
+                strategy = get_niche_parameters(category)
+                system_prompt = (
+                    "You are an elite B2B outreach copywriting specialist for an international web design agency. "
+                    "Write a highly compelling cold outreach email from the agency to a business owner. "
+                    "Keep the tone direct, professional, and entirely free of corporate fluff. "
+                    "CRITICAL: Do NOT write a subject line. Start drafting directly from the greeting. "
+                    f"Tailor the pitch around these industry pain points: {strategy['pain_points']}. "
+                    f"Weave in this terminology naturally: {strategy['buzzwords']}."
+                )
+                user_prompt = (
+                    f"Write a personalized outreach email for '{business_name}', a business in the '{category}' space.\n\n"
+                    f"Core Strategy Hook: {strategy['hook_angle']}\n\n"
+                    "Requirements:\n"
+                    "1. Acknowledge their strong reputation and review history.\n"
+                    "2. Address the digital visibility gap they're losing market share to.\n"
+                    "3. Conclude with a low-friction CTA for a quick 5-minute sync or free mockup.\n"
+                    "4. Do NOT output a subject line under any circumstances."
+                )
+                suggested_angle_summary = f"[Web Design] {strategy['hook_angle'][:80]}..."
+
+            # --- Generate pitch body ---
+            pitch_payload = {
                 "model": "gpt-4o-mini",
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
                 "temperature": 0.65,
-                "max_tokens": 400
+                "max_tokens": 420
             }
 
-            response = requests.post("https://api.openai.com/v1/chat/completions", json=payload, headers=headers, timeout=15)
+            response = requests.post(
+                "https://api.openai.com/v1/chat/completions",
+                json=pitch_payload, headers=ai_headers, timeout=15
+            )
             if response.status_code != 200:
-                return jsonify({"status": "error", "message": f"OpenAI Gateway rejection: {response.text}"}), response.status_code
+                return jsonify({"status": "error", "message": f"OpenAI rejection: {response.text}"}), response.status_code
 
-            ai_data = response.json()
-            generated_copy = ai_data["choices"][0]["message"]["content"].strip()
-            
-            # Defensive clean block to ensure no sneaky 'Subject:' lines pass to the texteditor
+            generated_copy = response.json()["choices"][0]["message"]["content"].strip()
+
             if "subject:" in generated_copy.lower():
                 lines = generated_copy.split('\n')
-                lines = [line for line in lines if not line.lower().startswith('subject:')]
-                generated_copy = '\n'.join(lines).strip()
+                generated_copy = '\n'.join(
+                    l for l in lines if not l.lower().startswith('subject:')
+                ).strip()
 
-            suggested_angle_summary = f"Leveraging localized domain authority hooks with tailored focus on: {niche_strategy['hook_angle'][:70]}..."
+            # --- Generate subject line ---
+            subj_payload = {
+                "model": "gpt-4o-mini",
+                "messages": [
+                    {"role": "system", "content": (
+                        "Generate ONE compelling cold email subject line. "
+                        "Rules: Under 8 words. No clickbait. No ALL CAPS. No generic words like 'opportunity' or 'partnership'. "
+                        "Sound peer-to-peer, not like a mass sales blast. Output only the subject line, no quotes, no prefix."
+                    )},
+                    {"role": "user", "content": (
+                        f"Business: {business_name}\n"
+                        f"Service: {lead_type.replace('_', ' ')}\n"
+                        f"Hook: {strategy.get('hook_angle', '')[:100]}"
+                    )}
+                ],
+                "temperature": 0.85,
+                "max_tokens": 25
+            }
+            subj_resp = requests.post(
+                "https://api.openai.com/v1/chat/completions",
+                json=subj_payload, headers=ai_headers, timeout=10
+            )
+            subject_line = (
+                subj_resp.json()["choices"][0]["message"]["content"].strip().strip('"')
+                if subj_resp.status_code == 200
+                else f"Quick concept for {business_name}"
+            )
 
             cur.execute(
-                "UPDATE prospects SET ai_pitch_draft = %s, suggested_angle = %s, status = 'drafted' WHERE id = %s;",
-                (generated_copy, suggested_angle_summary, lead_id)
+                """UPDATE prospects
+                   SET ai_pitch_draft = %s, subject_line = %s,
+                       suggested_angle = %s, status = 'drafted'
+                   WHERE id = %s;""",
+                (generated_copy, subject_line, suggested_angle_summary, lead_id)
             )
             conn.commit()
-            
-            return jsonify({"status": "success", "message": f"Custom script drafted for {business_name} successfully."})
+
+            return jsonify({
+                "status": "success",
+                "message": f"Pitch and subject line drafted for {business_name}.",
+                "subject_line": subject_line
+            })
+
 
 @app.route('/api/queue', methods=['GET'])
 def get_review_queue():
     page = int(request.args.get('page', 1))
     per_page = int(request.args.get('per_page', 10))
-    search_query = request.args.get('q', '').strip() 
+    search_query = request.args.get('q', '').strip()
     offset = (page - 1) * per_page
 
     where_clause = "WHERE status != 'rejected'"
@@ -194,32 +260,36 @@ def get_review_queue():
         query_params.extend([f"%{search_query}%", f"%{search_query}%"])
 
     metrics_query = f"""
-        SELECT 
+        SELECT
             COUNT(*) as total,
             COUNT(*) FILTER (WHERE status IN ('discovered', 'drafted')) as pending,
             COUNT(*) FILTER (WHERE status IN ('sent', 'sent_followup_1')) as sent,
-            COUNT(*) FILTER (WHERE status = 'followup_1') as followup
-        FROM prospects 
+            COUNT(*) FILTER (WHERE status IN ('followup_1', 'followup_2')) as followup
+        FROM prospects
         {where_clause};
     """
-    
+
     data_query = f"""
-        SELECT id, business_name, category, rating, review_count, suggested_angle, ai_pitch_draft, phone, email, formatted_address, google_place_id, screenshot_path, status
-        FROM prospects 
+        SELECT id, business_name, category, lead_type, source_platform,
+               rating, review_count, lead_score, site_quality_score,
+               suggested_angle, subject_line, ai_pitch_draft,
+               phone, email, formatted_address, website_url,
+               google_place_id, screenshot_path, followup_due_at, status
+        FROM prospects
         {where_clause}
-        ORDER BY id DESC
+        ORDER BY lead_score DESC, id DESC
         LIMIT %s OFFSET %s;
     """
-    
+
     with psycopg2.connect(DB_DSN, cursor_factory=RealDictCursor) as conn:
         with conn.cursor() as cur:
             cur.execute(metrics_query, tuple(query_params))
             metrics = cur.fetchone()
-            
+
             extended_params = query_params + [per_page, offset]
             cur.execute(data_query, tuple(extended_params))
             records = cur.fetchall()
-            
+
             return jsonify({
                 "status": "success",
                 "current_page": page,
@@ -249,33 +319,38 @@ def dispatch_lead_pitch(lead_id):
 
     final_recipient = test_destination_email if test_destination_email else SMTP_USER
 
-    with psycopg2.connect(DB_DSN) as conn:
+    with psycopg2.connect(DB_DSN, cursor_factory=RealDictCursor) as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT business_name, status FROM prospects WHERE id = %s;", (lead_id,))
+            cur.execute(
+                "SELECT business_name, status, subject_line FROM prospects WHERE id = %s;",
+                (lead_id,)
+            )
             res = cur.fetchone()
             if not res:
                 return jsonify({"status": "error", "message": "Target lead entry absent."}), 404
-            
-            business_name, current_status = res[0], res[1]
-            
-            if current_status == 'sent':
-                followup_draft = (
-                    f"Hi {business_name} Team,\n\n"
-                    f"I dropped a quick custom breakdown video concept over to your inbox a couple of days ago regarding your local "
-                    f"contracting digital visibility framework. I know things get chaotic out on job sites!\n\n"
-                    f"Just wanted to see if you caught that breakdown layout. Let me know if you have five minutes to connect.\n\n"
-                    f"Best,\nAsuraTECH Solutions Team"
-                )
-                cur.execute("UPDATE prospects SET ai_pitch_draft = %s, status = 'followup_1' WHERE id = %s;", (followup_draft, lead_id))
-                conn.commit()
-                return jsonify({"status": "success", "message": "Automated Follow-Up message draft constructed."})
 
-            # Production Flag Configuration Layer: Change to False when you want to remove the safety [TEST RUN] label prefix
-            IS_PRODUCTION_ENVIRONMENT = True 
-            
+            business_name = res['business_name']
+            current_status = res['status']
+            stored_subject = res.get('subject_line') or ''
+
+            if current_status == 'sent':
+                from followup_scheduler import schedule_followup
+                schedule_followup(lead_id, 'sent')
+                return jsonify({"status": "success", "message": "Follow-up scheduled. Use the follow-up sweep to stage the draft."})
+
+            # Production Flag: set to False to prefix subject with [TEST RUN]
+            IS_PRODUCTION_ENVIRONMENT = True
+
             prefix_label = "" if IS_PRODUCTION_ENVIRONMENT else "[TEST RUN] "
-            subject_header = f"{prefix_label}Quick sanity check for {business_name}" if current_status == 'followup_1' else f"{prefix_label}Strategic digital concept for {business_name}"
-            next_pipeline_status = 'sent' if current_status != 'followup_1' else 'sent_followup_1'
+
+            if current_status == 'followup_1':
+                fallback_subject = f"Quick follow-up for {business_name}"
+            else:
+                fallback_subject = f"Digital strategy concept for {business_name}"
+
+            raw_subject = stored_subject if stored_subject else fallback_subject
+            subject_header = f"{prefix_label}{raw_subject}"
+            next_pipeline_status = 'sent' if current_status not in ('followup_1', 'followup_2') else 'sent_followup_1'
 
             # --- DYNAMIC SIGNATURE HIGH FIDELITY LAYOUT INTEGRATION ---
             signature_html = """
@@ -372,11 +447,17 @@ def dispatch_lead_pitch(lead_id):
                     server.login(SMTP_USER, clean_pass)
                     server.sendmail(SMTP_USER, [final_recipient], msg.as_string())
             
-            cur.execute("UPDATE prospects SET ai_pitch_draft = %s, email = %s, status = %s WHERE id = %s;", 
-                        (final_pitch_text, final_recipient, next_pipeline_status, lead_id))
+            cur.execute(
+                "UPDATE prospects SET ai_pitch_draft = %s, email = %s, status = %s WHERE id = %s;",
+                (final_pitch_text, final_recipient, next_pipeline_status, lead_id)
+            )
             conn.commit()
-            
-            return jsonify({"status": "success", "message": f"Pipeline step executed successfully to {final_recipient}."})
+
+            # Auto-schedule the follow-up timer after a successful send
+            from followup_scheduler import schedule_followup
+            schedule_followup(lead_id, next_pipeline_status)
+
+            return jsonify({"status": "success", "message": f"Email sent to {final_recipient}. Follow-up auto-scheduled."})
 
 @app.route('/api/reject/<int:lead_id>', methods=['POST'])
 def reject_lead(lead_id):
@@ -403,11 +484,306 @@ def update_prospect_email(lead_id):
 
 @app.route('/favicon.ico')
 def silence_favicon():
-    return '', 204  
+    return '', 204
 
 @app.route('/.well-known/appspecific/<path:filename>')
 def silence_chrome_devtools(filename):
     return '', 204
+
+
+# ---------------------------------------------------------------------------
+# NEW ROUTES — International Lead Gen Expansion
+# ---------------------------------------------------------------------------
+
+@app.route('/api/trigger/discover-jobs', methods=['POST'])
+def trigger_job_discovery():
+    """
+    Scans Google Jobs for companies actively hiring roles that signal outsourcing need.
+    service_types: list of any of ['video_editing', 'bpo_customer_service',
+                   'bpo_data_entry', 'social_media_management', 'virtual_assistant']
+    country: optional country filter string (e.g. 'United States', 'Australia')
+    """
+    data = request.get_json() or {}
+    service_types = data.get('service_types', [])
+    country = data.get('country', '').strip()
+
+    if not service_types:
+        return jsonify({"status": "error", "message": "Provide at least one service_type to scan."}), 400
+
+    def job_discovery_worker():
+        from discovery_jobs import run_job_discovery
+        emit_ui_log(f"🚀 [JOB DISCOVERY] Starting scan for {len(service_types)} service type(s)...")
+        for stype in service_types:
+            run_job_discovery(stype, country)
+        emit_ui_log("✅ [JOB DISCOVERY] All service type scans complete.")
+
+    thread = threading.Thread(target=job_discovery_worker)
+    thread.daemon = True
+    thread.start()
+
+    return jsonify({
+        "status": "success",
+        "message": f"Job board discovery started for: {', '.join(service_types)}"
+    }), 202
+
+
+@app.route('/api/trigger/pitch-bulk', methods=['POST'])
+def trigger_bulk_pitch_generation():
+    """
+    Generates AI pitches (body + subject line) for all 'discovered' leads with no draft.
+    Processes highest-scored leads first. Default batch size: 10.
+    """
+    if not OPENAI_KEY:
+        return jsonify({"status": "error", "message": "OpenAI API key missing."}), 401
+
+    data = request.get_json() or {}
+    limit = int(data.get('limit', 10))
+
+    def bulk_pitch_worker():
+        from niche_prompts import (
+            get_niche_parameters, get_service_parameters, OUTSOURCING_SERVICE_TYPES
+        )
+        emit_ui_log(f"🤖 [BULK PITCH] Starting AI generation for up to {limit} leads...")
+
+        try:
+            with psycopg2.connect(DB_DSN, cursor_factory=RealDictCursor) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        SELECT id, business_name, category, lead_type
+                        FROM prospects
+                        WHERE status = 'discovered'
+                          AND (ai_pitch_draft IS NULL OR ai_pitch_draft = '')
+                        ORDER BY lead_score DESC, id DESC
+                        LIMIT %s;
+                        """,
+                        (limit,)
+                    )
+                    leads = cur.fetchall()
+
+                    if not leads:
+                        emit_ui_log("[BULK PITCH] No pending leads in discovery queue.")
+                        return
+
+                    ai_headers = {
+                        "Authorization": f"Bearer {OPENAI_KEY}",
+                        "Content-Type": "application/json"
+                    }
+                    success = 0
+
+                    for lead in leads:
+                        lead_type = lead.get('lead_type') or 'web_design'
+                        category = lead.get('category', '')
+                        business_name = lead.get('business_name', '')
+
+                        if lead_type in OUTSOURCING_SERVICE_TYPES:
+                            strategy = get_service_parameters(lead_type)
+                            system_prompt = (
+                                "You are a B2B outreach specialist for a Philippine-based outsourcing agency. "
+                                "Write a compelling cold outreach email to a company decision-maker. "
+                                "Direct, professional, concise. Zero fluff. "
+                                "CRITICAL: No subject line. Start with the greeting. "
+                                f"Service: {lead_type.replace('_', ' ')}. "
+                                f"Pain points: {strategy['pain_points']}. "
+                                f"Terminology: {strategy['buzzwords']}."
+                            )
+                            user_prompt = (
+                                f"Write a cold outreach email to '{business_name}', "
+                                f"actively hiring for '{category}' roles.\n\n"
+                                f"Hook: {strategy['hook_angle']}\n"
+                                f"CTA: {strategy['cta']}\n\n"
+                                "Under 160 words. No subject line."
+                            )
+                            suggested_angle = f"[{lead_type.replace('_', ' ').title()}] {strategy['hook_angle'][:80]}..."
+                        else:
+                            strategy = get_niche_parameters(category)
+                            system_prompt = (
+                                "You are a B2B outreach specialist for an international web design agency. "
+                                "Write a compelling cold outreach email to a business owner. "
+                                "Direct, professional. Zero fluff. "
+                                "CRITICAL: No subject line. Start with the greeting. "
+                                f"Pain points: {strategy['pain_points']}. "
+                                f"Terminology: {strategy['buzzwords']}."
+                            )
+                            user_prompt = (
+                                f"Cold outreach email for '{business_name}' in '{category}'.\n\n"
+                                f"Hook: {strategy['hook_angle']}\n\n"
+                                "1. Acknowledge their reputation. "
+                                "2. Address their digital gap. "
+                                "3. Low-friction CTA. No subject line."
+                            )
+                            suggested_angle = f"[Web Design] {strategy['hook_angle'][:80]}..."
+
+                        try:
+                            pitch_payload = {
+                                "model": "gpt-4o-mini",
+                                "messages": [
+                                    {"role": "system", "content": system_prompt},
+                                    {"role": "user", "content": user_prompt}
+                                ],
+                                "temperature": 0.65,
+                                "max_tokens": 420
+                            }
+                            resp = requests.post(
+                                "https://api.openai.com/v1/chat/completions",
+                                json=pitch_payload, headers=ai_headers, timeout=15
+                            )
+                            if resp.status_code != 200:
+                                emit_ui_log(f"⚠️ GPT error for {business_name}: {resp.status_code}")
+                                continue
+
+                            pitch_body = resp.json()['choices'][0]['message']['content'].strip()
+                            if "subject:" in pitch_body.lower():
+                                pitch_body = '\n'.join(
+                                    l for l in pitch_body.split('\n')
+                                    if not l.lower().startswith('subject:')
+                                ).strip()
+
+                            # Subject line generation
+                            subj_payload = {
+                                "model": "gpt-4o-mini",
+                                "messages": [
+                                    {"role": "system", "content": (
+                                        "Generate ONE cold email subject line. Under 8 words. "
+                                        "No clickbait. No ALL CAPS. Peer-to-peer tone. "
+                                        "Output only the text, no quotes."
+                                    )},
+                                    {"role": "user", "content": (
+                                        f"Business: {business_name}\n"
+                                        f"Service: {lead_type.replace('_', ' ')}\n"
+                                        f"Hook: {strategy.get('hook_angle', '')[:80]}"
+                                    )}
+                                ],
+                                "temperature": 0.85,
+                                "max_tokens": 25
+                            }
+                            subj_resp = requests.post(
+                                "https://api.openai.com/v1/chat/completions",
+                                json=subj_payload, headers=ai_headers, timeout=10
+                            )
+                            subject_line = (
+                                subj_resp.json()['choices'][0]['message']['content'].strip().strip('"')
+                                if subj_resp.status_code == 200
+                                else f"Quick concept for {business_name}"
+                            )
+
+                            cur.execute(
+                                """UPDATE prospects
+                                   SET ai_pitch_draft = %s, subject_line = %s,
+                                       suggested_angle = %s, status = 'drafted'
+                                   WHERE id = %s;""",
+                                (pitch_body, subject_line, suggested_angle, lead['id'])
+                            )
+                            conn.commit()
+                            success += 1
+                            emit_ui_log(f"✅ [BULK PITCH] Drafted: {business_name}")
+
+                        except Exception as e:
+                            emit_ui_log(f"⚠️ [BULK PITCH] Failed on {business_name}: {e}")
+                            continue
+
+                    emit_ui_log(f"🏁 [BULK PITCH] Complete — {success}/{len(leads)} leads drafted.")
+
+        except Exception as e:
+            emit_ui_log(f"❌ [BULK PITCH CRITICAL ERROR] {e}")
+
+    thread = threading.Thread(target=bulk_pitch_worker)
+    thread.daemon = True
+    thread.start()
+
+    return jsonify({
+        "status": "success",
+        "message": f"Bulk pitch generation started for up to {limit} leads."
+    }), 202
+
+
+@app.route('/api/export', methods=['GET'])
+def export_leads_csv():
+    """
+    Exports all prospects to a downloadable CSV file.
+    Optional query param: ?status=drafted  to filter by status.
+    Sorted by lead_score descending.
+    """
+    status_filter = request.args.get('status', '').strip()
+
+    columns = [
+        'id', 'business_name', 'category', 'lead_type', 'source_platform',
+        'rating', 'review_count', 'lead_score', 'site_quality_score',
+        'email', 'phone', 'formatted_address', 'website_url',
+        'subject_line', 'ai_pitch_draft', 'suggested_angle',
+        'status', 'followup_due_at', 'created_at'
+    ]
+    col_str = ', '.join(columns)
+    query = f"SELECT {col_str} FROM prospects"
+    params = []
+
+    if status_filter:
+        query += " WHERE status = %s"
+        params.append(status_filter)
+
+    query += " ORDER BY lead_score DESC, id DESC;"
+
+    with psycopg2.connect(DB_DSN, cursor_factory=RealDictCursor) as conn:
+        with conn.cursor() as cur:
+            cur.execute(query, params)
+            rows = cur.fetchall()
+
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=columns)
+    writer.writeheader()
+    for row in rows:
+        writer.writerow({k: row.get(k, '') for k in columns})
+
+    output.seek(0)
+    filename = f"leads_{status_filter or 'all'}.csv"
+    return Response(
+        output.getvalue(),
+        mimetype='text/csv',
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
+@app.route('/api/trigger/score-leads', methods=['POST'])
+def trigger_lead_scoring():
+    """Runs the lead scoring engine on all unscored prospects."""
+    def score_worker():
+        from lead_scorer import run_lead_scoring
+        run_lead_scoring()
+
+    thread = threading.Thread(target=score_worker)
+    thread.daemon = True
+    thread.start()
+
+    return jsonify({"status": "success", "message": "Lead scoring pass started."}), 202
+
+
+@app.route('/api/trigger/check-websites', methods=['POST'])
+def trigger_website_checker():
+    """Runs Google PageSpeed audit on prospects that have a website but no quality score yet."""
+    def checker_worker():
+        from website_checker import run_website_quality_check
+        run_website_quality_check()
+
+    thread = threading.Thread(target=checker_worker)
+    thread.daemon = True
+    thread.start()
+
+    return jsonify({"status": "success", "message": "Website quality audit started."}), 202
+
+
+@app.route('/api/trigger/followup-sweep', methods=['POST'])
+def trigger_followup_sweep():
+    """Runs the follow-up scheduler sweep — stages next-in-sequence drafts for overdue leads."""
+    def sweep_worker():
+        from followup_scheduler import run_followup_sweep
+        run_followup_sweep()
+
+    thread = threading.Thread(target=sweep_worker)
+    thread.daemon = True
+    thread.start()
+
+    return jsonify({"status": "success", "message": "Follow-up sweep started."}), 202
+
 
 if __name__ == '__main__':
     app.run(host='127.0.0.1', port=5000, debug=True)
