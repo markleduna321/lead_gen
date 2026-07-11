@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AsuraTECH Core - Pipeline Controller</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <style>
+        .processing-row {
+            opacity: 0.4;
+            pointer-events: none;
+            transition: all 0.3s ease;
+        }
+    </style>
+</head>
+
+<body class="bg-slate-900 text-slate-100 min-h-screen font-sans relative">
+
+    <div id="loading-overlay"
+        class="hidden fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex flex-col items-center justify-center p-4">
+        <div class="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+
+        <div class="text-center mb-4">
+            <h3 class="text-base font-bold tracking-wider text-emerald-400 uppercase">Engine Processing Pipelines</h3>
+            <p id="loading-overlay-text" class="text-xs text-slate-500 mt-0.5 font-mono">Synchronizing telemetry
+                parameters...</p>
+        </div>
+
+        <div
+            class="max-w-xl w-full bg-slate-950 border border-slate-800 rounded-xl p-4 shadow-2xl h-48 flex flex-col justify-between">
+            <div
+                class="flex items-center justify-between border-b border-slate-900 pb-1.5 mb-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest font-sans">
+                <span>AsuraTECH Lead Engine Console Logs</span>
+                <span class="animate-pulse text-emerald-500">● Core Active</span>
+            </div>
+
+            <div id="terminal-stream-log"
+                class="flex-1 overflow-y-auto font-mono text-[11px] text-slate-400 space-y-1 scrollbar-thin text-left leading-relaxed">
+                <div class="text-slate-600">&gt;_ Initializing localized sequence parameters...</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="profile-modal"
+        class="hidden fixed inset-0 z-40 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 id="modal-profile-title" class="text-base font-bold text-emerald-400">Prospect Profile</h3>
+                <button onclick="toggleProfileModal(false)"
+                    class="text-slate-500 hover:text-slate-300 text-sm cursor-pointer">✕</button>
+            </div>
+            <div class="space-y-3 text-sm">
+                <div>
+                    <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-0.5">Business
+                        Category</label>
+                    <p id="profile-category" class="text-slate-300 font-medium"></p>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-0.5">Rating
+                            Score</label>
+                        <p id="profile-rating" class="text-amber-400 font-bold"></p>
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-0.5">Total
+                            Reviews</label>
+                        <p id="profile-reviews" class="text-slate-300 font-medium"></p>
+                    </div>
+                </div>
+                <div>
+                    <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-0.5">Public
+                        Maps Phone Number</label>
+                    <p id="profile-phone" class="text-slate-300 font-mono"></p>
+                </div>
+                <div>
+                    <label class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">Company
+                        Physical Address</label>
+                    <p id="profile-address"
+                        class="text-xs text-slate-400 leading-relaxed bg-slate-950 p-2.5 rounded border border-slate-800">
+                    </p>
+                </div>
+                <hr class="border-slate-800 my-2">
+                <div>
+                    <label class="text-[10px] font-bold uppercase tracking-wider text-amber-400 block mb-1">Target
+                        Contact Email</label>
+                    <input id="profile-email-input" type="email" placeholder="No email saved. Paste social find here..."
+                        class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-amber-500 font-mono">
+                </div>
+            </div>
+            <div class="flex items-center gap-3 pt-2">
+                <button onclick="toggleProfileModal(false)"
+                    class="w-full bg-slate-950 border border-slate-800 text-slate-400 text-xs py-2 rounded-lg">Close</button>
+                <button onclick="saveProfileEmailUpdates()"
+                    class="w-full bg-amber-500 text-slate-950 font-bold text-xs py-2 rounded-lg shadow-md shadow-amber-500/10">Update
+                    Record</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="discovery-modal"
+        class="hidden fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-3xl w-full p-6 shadow-2xl space-y-4">
+
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 class="text-base font-bold text-emerald-400">⚡ Target Market Discovery Engine</h3>
+                <button onclick="toggleDiscoveryModal(false)"
+                    class="text-slate-500 hover:text-slate-300 text-sm cursor-pointer">✕</button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">Target
+                            Location Search</label>
+                        <div class="flex gap-2">
+                            <input id="modal-location" type="text" placeholder="e.g., Bacolod City, PH"
+                                class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500">
+                            <button onclick="geocodeAddressTarget()"
+                                class="bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1 text-xs rounded-lg font-medium transition cursor-pointer">📍
+                                Pin</button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="flex items-center justify-between mb-1">
+                            <label class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Scan Radius
+                                Boundary Range</label>
+                            <span id="radius-val-label" class="text-xs text-emerald-400 font-mono font-bold">10
+                                km</span>
+                        </div>
+                        <input id="modal-radius" type="range" min="2" max="50" value="10"
+                            oninput="updateMapProximityRadius(this.value)"
+                            class="w-full accent-emerald-500 bg-slate-950 h-1 rounded cursor-pointer">
+                    </div>
+
+                    <div>
+                        <label
+                            class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1.5">Discovery
+                            Data Sources</label>
+                        <div
+                            class="grid grid-cols-3 gap-2 bg-slate-950 p-2.5 border border-slate-800 rounded-lg text-[11px] font-medium">
+                            <label class="flex items-center gap-1.5 cursor-pointer text-slate-300"><input
+                                    type="checkbox" name="scan-source" value="google" checked
+                                    class="accent-emerald-500"> Google Maps</label>
+                            <label class="flex items-center gap-1.5 cursor-pointer text-slate-300"><input
+                                    type="checkbox" name="scan-source" value="facebook" class="accent-blue-500">
+                                Facebook</label>
+                            <label class="flex items-center gap-1.5 cursor-pointer text-slate-300"><input
+                                    type="checkbox" name="scan-source" value="linkedin" class="accent-indigo-500">
+                                LinkedIn</label>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1.5">Target
+                            Industry Group (Select Multiple)</label>
+                        <div
+                            class="grid grid-cols-2 gap-2 bg-slate-950 p-3 border border-slate-800 rounded-lg text-xs text-slate-300 max-h-32 overflow-y-auto">
+                            <label class="flex items-center gap-2 cursor-pointer py-1"><input type="checkbox"
+                                    name="biz-type" value="Roofing Contractor" checked class="accent-emerald-500">
+                                Roofers</label>
+                            <label class="flex items-center gap-2 cursor-pointer py-1"><input type="checkbox"
+                                    name="biz-type" value="HVAC Contractor" class="accent-emerald-500"> HVAC /
+                                AC</label>
+                            <label class="flex items-center gap-2 cursor-pointer py-1"><input type="checkbox"
+                                    name="biz-type" value="Plumbing Service" class="accent-emerald-500">
+                                Plumbers</label>
+                            <label class="flex items-center gap-2 cursor-pointer py-1"><input type="checkbox"
+                                    name="biz-type" value="Law Firm" class="accent-emerald-500"> Law Firms</label>
+                            <label class="flex items-center gap-2 cursor-pointer py-1"><input type="checkbox"
+                                    name="biz-type" value="Accounting Firm" class="accent-emerald-500">
+                                Accountants</label>
+                            <label class="flex items-center gap-2 cursor-pointer py-1"><input type="checkbox"
+                                    name="biz-type" value="Real Estate Agency" class="accent-emerald-500"> Real
+                                Estate</label>
+                            <label class="flex items-center gap-2 cursor-pointer py-1"><input type="checkbox"
+                                    name="biz-type" value="Medical Clinic" class="accent-emerald-500"> Medical
+                                Clinics</label>
+                            <label class="flex items-center gap-2 cursor-pointer py-1"><input type="checkbox"
+                                    name="biz-type" value="Dental Clinic" class="accent-emerald-500"> Dental
+                                Clinics</label>
+                            <label class="flex items-center gap-2 cursor-pointer py-1"><input type="checkbox"
+                                    name="biz-type" value="Chiropractor" class="accent-emerald-500">
+                                Chiropractors</label>
+                            <label class="flex items-center gap-2 cursor-pointer py-1"><input type="checkbox"
+                                    name="biz-type" value="Boutique Hotel" class="accent-emerald-500"> Boutique
+                                Hotels</label>
+                            <label class="flex items-center gap-2 cursor-pointer py-1"><input type="checkbox"
+                                    name="biz-type" value="Fitness Center" class="accent-emerald-500"> Gyms &
+                                Fitness</label>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">Min
+                                Map Rating Threshold</label>
+                            <select id="modal-rating-min"
+                                class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer">
+                                <option value="0.0" selected>0.0 (Include All)</option>
+                                <option value="3.0">3.0+ Stars</option>
+                                <option value="4.0">4.0+ Stars</option>
+                                <option value="4.5">4.5+ Stars</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">Max
+                                Reviews Filter</label>
+                            <select id="modal-reviews-max"
+                                class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer">
+                                <option value="25">Under 25 Reviews</option>
+                                <option value="50">Under 50 Reviews</option>
+                                <option value="100" selected>Under 100 Reviews</option>
+                                <option value="99999">No Upper Limit</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex flex-col h-full min-h-[300px] md:min-h-full">
+                    <label class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">Interactive
+                        Target Range Matrix</label>
+                    <div id="modal-map-canvas"
+                        class="w-full flex-1 bg-slate-950 rounded-xl border border-slate-800 overflow-hidden relative z-10">
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="flex items-center justify-end gap-3 border-t border-slate-800 pt-3 mt-2">
+                <button onclick="toggleDiscoveryModal(false)"
+                    class="bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-400 text-xs px-5 py-2 rounded-lg transition cursor-pointer">Cancel</button>
+                <button onclick="submitDiscoveryRequest()"
+                    class="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs px-6 py-2 rounded-lg transition shadow-lg shadow-emerald-500/10 cursor-pointer">Apply
+                    Scan</button>
+            </div>
+        </div>
+    </div>
+
+    <header
+        class="border-b border-slate-800 bg-slate-950 p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <h1 class="text-xl font-bold tracking-tight text-emerald-400">AsuraTECH Solutions // Engine Panel</h1>
+        <div>
+            <button id="btn-global-discover" onclick="toggleDiscoveryModal(true)"
+                class="bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 text-xs px-4 py-2 rounded-lg font-medium shadow-sm">
+                ⚡ Run Discovery Scan
+            </button>
+        </div>
+    </header>
+
+    <main class="max-w-8xl mx-auto p-6 space-y-6">
+
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="bg-slate-950 border border-slate-800 rounded-xl p-4 shadow-sm">
+                <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Discovered</p>
+                <p id="stat-total" class="text-2xl font-bold text-slate-200 mt-1">0</p>
+            </div>
+            <div class="bg-slate-950 border border-slate-800 rounded-xl p-4 shadow-sm">
+                <p class="text-xs font-semibold text-amber-500 uppercase tracking-wider">Awaiting AI/Review</p>
+                <p id="stat-pending" class="text-2xl font-bold text-amber-400 mt-1">0</p>
+            </div>
+            <div class="bg-slate-950 border border-slate-800 rounded-xl p-4 shadow-sm">
+                <p class="text-xs font-semibold text-emerald-500 uppercase tracking-wider">Pitches Sent</p>
+                <p id="stat-sent" class="text-2xl font-bold text-emerald-400 mt-1">0</p>
+            </div>
+            <div class="bg-slate-950 border border-slate-800 rounded-xl p-4 shadow-sm">
+                <p class="text-xs font-semibold text-purple-500 uppercase tracking-wider">In Follow-Up</p>
+                <p id="stat-followup" class="text-2xl font-bold text-purple-400 mt-1">0</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+            <div
+                class="lg:col-span-2 bg-slate-950 border border-slate-800 rounded-xl p-5 shadow-xl flex flex-col justify-between min-h-[680px]">
+                <div>
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                        <h2 class="text-lg font-semibold text-slate-300">Pipeline Master Log</h2>
+
+                        <div class="relative max-w-xs w-full">
+                            <input id="table-search-input" type="text" oninput="handleSearchFilteringInput(this.value)"
+                                placeholder="🔍 Search name or industry..."
+                                class="w-full bg-slate-900 border border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-emerald-500">
+                        </div>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm">
+                            <thead>
+                                <tr class="border-b border-slate-800 text-slate-400 font-medium">
+                                    <th class="p-3">Business Name</th>
+                                    <th class="p-3">Industry</th>
+                                    <th class="p-3 text-center">Source</th>
+                                    <th class="p-3 text-center">Rating</th>
+                                    <th class="p-3">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="table-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between border-t border-slate-900 pt-4 mt-4 text-xs">
+                    <div class="text-slate-500">
+                        Page <span id="page-num-indicator" class="text-slate-300 font-bold font-mono">1</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <button id="btn-page-prev" onclick="changePage(-1)"
+                            class="bg-slate-900 hover:bg-slate-800 border border-slate-800 px-2.5 py-1.5 rounded-lg text-slate-300 transition font-bold disabled:opacity-20 disabled:cursor-not-allowed cursor-pointer">
+                            &lt;
+                        </button>
+                        <div id="numeric-pages-container" class="flex items-center gap-1"></div>
+                        <button id="btn-page-next" onclick="changePage(1)"
+                            class="bg-slate-900 hover:bg-slate-800 border border-slate-800 px-2.5 py-1.5 rounded-lg text-slate-300 transition font-bold disabled:opacity-20 disabled:cursor-not-allowed cursor-pointer">
+                            &gt;
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="inspector-card"
+                class="bg-slate-950 border border-slate-800 rounded-xl p-5 flex flex-col h-[680px] shadow-xl">
+                <div class="flex items-center justify-between border-b border-slate-900 pb-2 mb-3">
+                    <h2 class="text-xs font-bold text-slate-300 uppercase tracking-wider">Inspector Panel</h2>
+                    <div class="flex items-center gap-1.5">
+                        <button id="btn-view-more" disabled onclick="toggleProfileModal(true)"
+                            class="bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-[11px] font-bold px-2 py-1 rounded transition disabled:opacity-30">
+                            📋 View More Data
+                        </button>
+                        <button id="btn-individual-ai" disabled onclick="generateSingleLeadPitch()"
+                            class="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[11px] font-bold px-2.5 py-1 rounded transition disabled:opacity-30">
+                            🤖 Draft with AI
+                        </button>
+                    </div>
+                </div>
+
+                <p id="inspector-hint" class="text-xs text-slate-500 mb-3">Select any lead row to engage workstation
+                    nodes.</p>
+
+                <div class="mb-3">
+                    <label class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">Target Test
+                        Destination Address</label>
+                    <input id="test-email-input" type="email" disabled
+                        class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-amber-500 disabled:opacity-50">
+                </div>
+
+                <div class="mb-3">
+                    <span id="badge-container"
+                        class="text-[10px] font-bold uppercase tracking-wider bg-slate-800 px-2 py-0.5 rounded text-slate-300">Strategy
+                        Focus</span>
+                    <p id="angle-box"
+                        class="text-xs text-emerald-400 mt-1.5 italic bg-emerald-950/20 p-2 rounded border border-emerald-900/40">
+                        Select a candidate row...</p>
+                </div>
+
+                <div id="inspector-screenshot-frame" class="mb-3 hidden">
+                    <label class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">Live
+                        Captured Site Footprint Preview</label>
+                    <div class="w-full h-32 rounded-lg border border-slate-800 bg-slate-950 overflow-hidden relative group cursor-zoom-in"
+                        onclick="openExpandedScreenshotView()">
+                        <img id="inspector-img-placeholder" src=""
+                            class="w-full h-full object-cover object-top transition duration-300 group-hover:scale-105"
+                            alt="Prospect Site View">
+                        <div
+                            class="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-[10px] font-bold text-slate-200 uppercase tracking-widest gap-1 bg-slate-950/60">
+                            🔍 Expand Target Image
+                        </div>
+                    </div>
+                </div>
+
+                <textarea id="editor" disabled
+                    class="w-full flex-1 bg-slate-900 border border-slate-800 rounded-lg p-3 text-sm text-slate-300 focus:outline-none focus:border-emerald-500 font-mono resize-none disabled:opacity-50"></textarea>
+
+                <div class="grid grid-cols-3 gap-3 mt-4">
+                    <button id="btn-reject" disabled onclick="archiveLead()"
+                        class="bg-slate-900 hover:bg-red-950/40 border border-slate-800 hover:border-red-900 text-slate-400 hover:text-red-400 text-xs py-2.5 rounded-lg font-medium transition disabled:opacity-40">
+                        Reject
+                    </button>
+                    <button id="btn-send" disabled onclick="dispatchLead()"
+                        class="col-span-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-sm py-2.5 rounded-lg transition disabled:opacity-40 shadow-lg">
+                        Approve & Send
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        let currentLeads = [];
+        let selectedLeadId = null;
+        let isWorking = false;
+
+        // STATE LOGIC PARAMETERS
+        let currentPage = 1;
+        const rowsPerPage = 10;
+        let searchFilterString = "";
+        let debounceTimer = null;
+        let globalMetricsTracker = { total: 0, pending: 0, sent: 0, followup: 0 };
+
+        let liveLogPollingInterval = null;
+
+        // Clean, generic step templates without exposing raw company names or specific email strings
+        const genericMockSteps = [
+            "Establishing connection to regional scraping matrix nodes...",
+            "Mapping localized geofence coordinate lattice framework...",
+            "Injecting target query tokens into extraction pipelines...",
+            "🎯 Target Acquired -> Analyzing digital asset footprints...",
+            "🔗 Website Found -> Initiating multi-page contact crawling routines...",
+            "🔥 Contact Extracted -> Sorting metadata vectors...",
+            "🎯 Target Acquired -> Analyzing digital asset footprints...",
+            "🔗 Website Found -> Initiating multi-page contact crawling routines...",
+            "⏭️ Skipped: Active website found with pre-existing contact forms.",
+            "🎯 Target Acquired -> Analyzing digital asset footprints..."
+        ];
+
+        async function startLiveConsoleLogStreamingLoop() {
+            const terminal = document.getElementById('terminal-stream-log');
+            terminal.innerHTML = ''; // Wipe old view cleanly
+
+            const locationText = document.getElementById('modal-location').value.trim() || "Local Area";
+            let mockStepIndex = 0;
+            let realBackendLogsAppeared = false;
+
+            // Render the initial handshake line immediately
+            const handshakeNode = document.createElement('div');
+            handshakeNode.className = "text-emerald-500/70 font-mono text-sm mb-1";
+            handshakeNode.innerText = `> [SYSTEM] Live processing telemetry active for ${locationText}...`;
+            terminal.appendChild(handshakeNode);
+
+            if (liveLogPollingInterval) clearInterval(liveLogPollingInterval);
+
+            // 1. Start the visual loop to simulate continuous activity while the thread runs
+            liveLogPollingInterval = setInterval(async () => {
+
+                // As long as the background thread is working, keep spitting out generic lines organically
+                if (mockStepIndex < genericMockSteps.length) {
+                    const line = genericMockSteps[mockStepIndex];
+                    appendTerminalLine(terminal, line);
+                    mockStepIndex++;
+                } else {
+                    // Once we run out of unique lines, loop generic target checks so it doesn't stay completely frozen
+                    const randomCheckers = [
+                        "🎯 Target Acquired -> Analyzing digital asset footprints...",
+                        "🔗 Website Found -> Scanning domain root structure...",
+                        "⏭️ Skipped: Entry does not clear minimum rating requirements."
+                    ];
+                    const randomLine = randomCheckers[Math.floor(Math.random() * randomCheckers.length)];
+                    appendTerminalLine(terminal, randomLine);
+                }
+
+                // 2. Poll the backend memory array to see if the actual thread finished
+                try {
+                    const res = await fetch('/api/discovery/logs');
+                    const data = await res.json();
+
+                    if (data.status === 'success' && data.logs) {
+                        // Monitor for new logs from the current thread session
+                        if (data.logs.length > 0 && !realBackendLogsAppeared) {
+                            const containsOnlyOldSuccess = data.logs.length === 1 &&
+                                (data.logs[0].toLowerCase().includes("complete") || data.logs[0].toLowerCase().includes("synchronization complete"));
+
+                            if (!containsOnlyOldSuccess) {
+                                realBackendLogsAppeared = true;
+                            }
+                        }
+
+                        // HYBRID MATCH CHECK: Fallback check against the text logs or look directly at database log rows
+                        if (data.logs.length > 0) {
+                            const threadFinished = data.logs.some(line =>
+                                line.toLowerCase().includes("complete process") ||
+                                line.toLowerCase().includes("synchronization complete") ||
+                                line.toLowerCase().includes("cleared background pass")
+                            );
+
+                            if (threadFinished) {
+                                clearInterval(liveLogPollingInterval); // Halt intervals instantly
+
+                                // Output clean final sync completion markers to the terminal view
+                                appendTerminalLine(terminal, "💾 [PostgreSQL] Live Synchronization complete.");
+                                appendTerminalLine(terminal, "🏁 Extraction sequence complete.");
+
+                                // Give the operator 2 seconds to view the success message before closing the overlay
+                                setTimeout(async () => {
+                                    document.getElementById('loading-overlay').classList.add('hidden');
+                                    setGlobalLock(false);
+                                    await loadQueue(); // Refresh master lead grid workspace data view
+                                }, 2000);
+                            }
+                        }
+                    }
+                } catch (err) {
+                    console.error("Background sync validation dropped:", err);
+                }
+
+            }, 750); // Steady execution heartbeat pace
+        }
+
+        // Helper function to handle syntax color adjustments cleanly
+        function appendTerminalLine(terminalElement, line) {
+            const node = document.createElement('div');
+            node.className = "font-mono text-sm leading-relaxed mb-1";
+
+            if (line.includes('🎯') || line.includes('🔥') || line.includes('Target Acquired') || line.includes('Contact Extracted')) {
+                node.className += " text-emerald-400 font-semibold";
+            } else if (line.includes('⏭️') || line.includes('Skipped')) {
+                node.className += " text-amber-500/80";
+            } else if (line.includes('🔗') || line.includes('Website Found')) {
+                node.className += " text-cyan-400";
+            } else if (line.includes('💾') || line.includes('🏁')) {
+                node.className += " text-indigo-400 font-semibold";
+            } else {
+                node.className += " text-slate-300";
+            }
+
+            node.innerText = `> ${line}`;
+            terminalElement.appendChild(node);
+            terminalElement.scrollTop = terminalElement.scrollHeight;
+        }
+
+        async function loadQueue() {
+            try {
+                const endpointUrl = `/api/queue?page=${currentPage}&per_page=${rowsPerPage}&q=${encodeURIComponent(searchFilterString)}`;
+                const res = await fetch(endpointUrl);
+                const data = await res.json();
+
+                if (data.status === 'success') {
+                    currentLeads = data.leads;
+                    globalMetricsTracker.total = data.metrics.global_total;
+                    globalMetricsTracker.pending = data.metrics.global_pending;
+                    globalMetricsTracker.sent = data.metrics.global_sent;
+                    globalMetricsTracker.followup = data.metrics.global_followup;
+
+                    calculateMetrics();
+                    updatePaginationUIControls();
+                    renderTable();
+                }
+            } catch (err) { console.error(err); }
+        }
+
+        function updatePaginationUIControls() {
+            document.getElementById('page-num-indicator').innerText = currentPage;
+            const maxPages = Math.ceil(globalMetricsTracker.total / rowsPerPage) || 1;
+
+            document.getElementById('btn-page-prev').disabled = (currentPage === 1);
+            document.getElementById('btn-page-next').disabled = (currentPage >= maxPages);
+
+            const container = document.getElementById('numeric-pages-container');
+            container.innerHTML = '';
+
+            const range = 1;
+            let pagesArray = [];
+
+            for (let i = 1; i <= maxPages; i++) {
+                if (i === 1 || i === maxPages || (i >= currentPage - range && i <= currentPage + range)) {
+                    pagesArray.push(i);
+                } else if (pagesArray[pagesArray.length - 1] !== '...') {
+                    pagesArray.push('...');
+                }
+            }
+
+            pagesArray.forEach(page => {
+                if (page === '...') {
+                    const span = document.createElement('span');
+                    span.innerText = '...';
+                    span.className = "text-slate-600 px-2 font-mono";
+                    container.appendChild(span);
+                } else {
+                    const btn = document.createElement('button');
+                    btn.innerText = page;
+                    if (page === currentPage) {
+                        btn.className = "bg-slate-100 text-slate-900 font-bold w-7 h-7 rounded text-xs cursor-default";
+                        btn.disabled = true;
+                    } else {
+                        btn.className = "bg-slate-900 border border-slate-800 text-slate-300 w-7 h-7 rounded text-xs transition hover:bg-slate-800 cursor-pointer";
+                        btn.onclick = () => jumpDirectToPage(page);
+                    }
+                    container.appendChild(btn);
+                }
+            });
+        }
+
+        function handleSearchFilteringInput(value) {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                searchFilterString = value.trim();
+                currentPage = 1;
+                loadQueue();
+            }, 350);
+        }
+
+        const statusBadges = {
+            'discovered': '<span class="px-2 py-0.5 text-xs rounded font-medium bg-blue-950 text-blue-400 border border-blue-900">Discovered</span>',
+            'drafted': '<span class="px-2 py-0.5 text-xs rounded font-medium bg-amber-950 text-amber-400 border border-amber-900">Drafted</span>',
+            'sent': '<span class="px-2 py-0.5 text-xs rounded font-medium bg-emerald-950 text-emerald-400 border border-emerald-900">Sent</span>',
+            'followup_1': '<span class="px-2 py-0.5 text-xs rounded font-medium bg-purple-950 text-purple-400 border border-purple-900">Follow-Up 1</span>',
+            'sent_followup_1': '<span class="px-2 py-0.5 text-xs rounded font-medium bg-indigo-950 text-indigo-400 border border-indigo-900">Follow-Up Complete</span>',
+            'rejected': '<span class="px-2 py-0.5 text-xs rounded font-medium bg-slate-900 text-slate-500 border border-slate-800">Archived</span>'
+        };
+
+        function renderSourceBadge(placeId) {
+            const strId = String(placeId || '');
+            if (strId.startsWith('fb_')) {
+                return '<span class="bg-blue-950 border border-blue-800 text-blue-400 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">FB Page</span>';
+            } else if (strId.startsWith('ln_') || strId.startsWith('b2b_')) {
+                return '<span class="bg-indigo-950 border border-indigo-800 text-indigo-400 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">B2B Link</span>';
+            } else {
+                return '<span class="bg-emerald-950 border border-emerald-800 text-emerald-400 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">G Maps</span>';
+            }
+        }
+
+        function calculateMetrics() {
+            document.getElementById('stat-total').innerText = globalMetricsTracker.total;
+            document.getElementById('stat-pending').innerText = globalMetricsTracker.pending;
+            document.getElementById('stat-sent').innerText = globalMetricsTracker.sent;
+            document.getElementById('stat-followup').innerText = globalMetricsTracker.followup;
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('table-body');
+            tbody.innerHTML = '';
+
+            if (currentLeads.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-500">No matching pipeline leads captured inside this view index.</td></tr>`;
+                return;
+            }
+
+            currentLeads.forEach(lead => {
+                const tr = document.createElement('tr');
+                tr.id = `row-lead-${lead.id}`;
+                tr.className = `border-b border-slate-900 hover:bg-slate-900/50 cursor-pointer transition ${selectedLeadId === lead.id ? 'bg-slate-900' : ''}`;
+                tr.onclick = () => { if (!isWorking) selectLead(lead); };
+
+                const ratingDisplay = lead.rating ? parseFloat(lead.rating).toFixed(1) : '0.0';
+
+                tr.innerHTML = `
+                    <td class="p-3 font-medium text-slate-200">${lead.business_name}</td>
+                    <td class="p-3 text-slate-400">${lead.category}</td>
+                    <td class="p-3 text-center">${renderSourceBadge(lead.google_place_id)}</td> 
+                    <td class="p-3 text-center text-amber-400 font-bold font-mono">★ ${ratingDisplay}</td> 
+                    <td class="p-3">${statusBadges[lead.status] || lead.status}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function setGlobalLock(lockState) {
+            isWorking = lockState;
+            document.getElementById('btn-global-discover').disabled = lockState;
+            document.getElementById('btn-individual-ai').disabled = lockState;
+            document.getElementById('btn-view-more').disabled = lockState;
+        }
+
+        function toggleDiscoveryModal(show) { if (isWorking && show) return; document.getElementById('discovery-modal').classList.toggle('hidden', !show); }
+
+        function toggleProfileModal(show) {
+            if (!selectedLeadId) return;
+            const targetLead = currentLeads.find(l => l.id === selectedLeadId);
+            if (!targetLead) return;
+            if (show) {
+                document.getElementById('modal-profile-title').innerText = targetLead.business_name;
+                document.getElementById('profile-category').innerText = targetLead.category;
+                document.getElementById('profile-rating').innerText = `★ ${targetLead.rating || '0.0'}`;
+                document.getElementById('profile-reviews').innerText = `${targetLead.review_count || 0} Total Reviews`;
+                document.getElementById('profile-phone').innerText = targetLead.phone || "No Public Phone Listed";
+                document.getElementById('profile-address').innerText = targetLead.formatted_address || "No Address Synced";
+                document.getElementById('profile-email-input').value = targetLead.email || "";
+                document.getElementById('profile-modal').classList.remove('hidden');
+            } else { document.getElementById('profile-modal').classList.add('hidden'); }
+        }
+
+        async function saveProfileEmailUpdates() {
+            if (!selectedLeadId || isWorking) return;
+            const updatedEmail = document.getElementById('profile-email-input').value.trim();
+            toggleProfileModal(false); setGlobalLock(true);
+            try {
+                const res = await fetch(`/api/prospect/update-email/${selectedLeadId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: updatedEmail })
+                });
+                if ((await res.json()).status === 'success') { await loadQueue(); document.getElementById('test-email-input').value = updatedEmail; }
+            } catch (err) { console.error(err); } finally { setGlobalLock(false); }
+        }
+
+        async function submitDiscoveryRequest() {
+            const locationText = document.getElementById('modal-location').value.trim();
+            const checkedNiches = document.querySelectorAll('input[name="biz-type"]:checked');
+            const industries = Array.from(checkedNiches).map(cb => cb.value);
+            const checkedSources = document.querySelectorAll('input[name="scan-source"]:checked');
+            const platforms = Array.from(checkedSources).map(cb => cb.value);
+            const ratingMin = parseFloat(document.getElementById('modal-rating-min').value);
+            const reviewsMax = parseInt(document.getElementById('modal-reviews-max').value);
+            const scanRadiusKm = parseInt(document.getElementById('modal-radius').value);
+
+            if (!locationText || industries.length === 0 || platforms.length === 0) return;
+
+            toggleDiscoveryModal(false);
+            setGlobalLock(true);
+
+            const overlay = document.getElementById('loading-overlay');
+            overlay.classList.remove('hidden');
+
+            await startLiveConsoleLogStreamingLoop();
+
+            try {
+                const res = await fetch('/api/trigger/discover', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        location: locationText,
+                        categories: industries,
+                        sources: platforms,
+                        rating_min: ratingMin,
+                        max_reviews: reviewsMax,
+                        lat: activeCoordinates.lat,
+                        lng: activeCoordinates.lng,
+                        radius_km: scanRadiusKm
+                    })
+                });
+                await res.json();
+            } catch (err) {
+                console.error("Discovery run dropped exception:", err);
+                clearInterval(liveLogPollingInterval);
+                overlay.classList.add('hidden');
+                setGlobalLock(false);
+            }
+        }
+
+        async function generateSingleLeadPitch() {
+            if (!selectedLeadId || isWorking) return;
+            setGlobalLock(true); const overlay = document.getElementById('loading-overlay'); overlay.classList.remove('hidden');
+            try {
+                const res = await fetch(`/api/trigger/pitch-single/${selectedLeadId}`, { method: 'POST' });
+                if ((await res.json()).status === 'success') { await loadQueue(); const updated = currentLeads.find(l => l.id === selectedLeadId); if (updated) selectLead(updated); }
+            } catch (err) { console.error(err); } finally { overlay.classList.add('hidden'); setGlobalLock(false); }
+        }
+
+        async function jumpDirectToPage(targetPageNumber) { if (isWorking || targetPageNumber === currentPage) return; currentPage = targetPageNumber; resetWorkspace(); const tbody = document.getElementById('table-body'); tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-500 animate-pulse">Shifting data view scope...</td></tr>`; await loadQueue(); }
+        async function changePage(direction) { if (isWorking) return; const maxPages = Math.ceil(globalMetricsTracker.total / rowsPerPage) || 1; const nextTargetPage = currentPage + direction; if (nextTargetPage < 1 || nextTargetPage > maxPages) return; await jumpDirectToPage(nextTargetPage); }
+
+        function selectLead(lead) {
+            selectedLeadId = lead.id; renderTable();
+            document.getElementById('inspector-hint').innerText = `Reviewing System ID: #${lead.id}`;
+            document.getElementById('angle-box').innerText = lead.suggested_angle || "Awaiting AI conversion mapping.";
+            document.getElementById('test-email-input').value = lead.email || ""; document.getElementById('test-email-input').disabled = false;
+
+            const editor = document.getElementById('editor'); editor.value = lead.ai_pitch_draft || ""; editor.disabled = false;
+            const btnSend = document.getElementById('btn-send'); const btnReject = document.getElementById('btn-reject'); const btnAi = document.getElementById('btn-individual-ai'); const btnViewMore = document.getElementById('btn-view-more');
+            const screenshotContainer = document.getElementById('inspector-screenshot-frame');
+            const screenshotImg = document.getElementById('inspector-img-placeholder');
+
+            if (lead.screenshot_path) {
+                screenshotImg.src = lead.screenshot_path;
+                screenshotContainer.classList.remove('hidden'); // Fade into view layout
+            } else {
+                screenshotImg.src = "";
+                screenshotContainer.classList.add('hidden'); // Fold array space clean if missing
+            }
+
+            btnSend.disabled = false; btnViewMore.disabled = false; btnAi.disabled = !['discovered', 'drafted'].includes(lead.status); btnReject.disabled = ['sent', 'followup_1', 'sent_followup_1'].includes(lead.status);
+            if (lead.status === 'sent') { btnSend.innerText = "Queue Follow-Up Draft"; btnSend.className = "col-span-2 bg-purple-600 text-white font-bold text-sm py-2.5 rounded-lg cursor-pointer shadow-lg"; }
+            else if (lead.status === 'followup_1') { btnSend.innerText = "Send Follow-Up Email"; btnSend.className = "col-span-2 bg-fuchsia-600 text-white font-bold text-sm py-2.5 rounded-lg cursor-pointer shadow-lg"; }
+            else if (lead.status === 'sent_followup_1') { btnSend.innerText = "Sequence Completed"; btnSend.disabled = true; btnSend.className = "col-span-2 bg-slate-800 text-slate-500 font-bold text-sm py-2.5 rounded-lg cursor-not-allowed"; }
+            else { btnSend.innerText = "Approve & Send"; btnSend.className = "col-span-2 bg-amber-500 text-slate-950 font-bold text-sm py-2.5 rounded-lg cursor-pointer shadow-lg"; if (!lead.ai_pitch_draft) btnSend.disabled = true; }
+        }
+
+        async function dispatchLead() {
+            if (!selectedLeadId || isWorking) return;
+
+            // 1. Establish the workspace lock state
+            setGlobalLock(true);
+            isWorking = true;
+
+            // 2. Target the dispatch button node elements
+            const btnSend = document.getElementById('btn-send');
+            const originalButtonText = btnSend.innerText;
+
+            // 3. Inject the clean visual loading animation states instantly
+            btnSend.disabled = true;
+            btnSend.style.opacity = "0.7";
+            btnSend.innerHTML = `
+                <span class="inline-flex items-center gap-2">
+                    <svg class="animate-spin h-4 w-4 text-slate-950" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Transmitting Assets...
+                </span>
+            `;
+
+            try {
+                // 4. Trigger the background REST endpoint payload dispatch loop
+                const res = await fetch(`/api/dispatch/${selectedLeadId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        final_pitch: document.getElementById('editor').value,
+                        destination_email: document.getElementById('test-email-input').value
+                    })
+                });
+
+                const data = await res.json();
+                if (data.status === 'success') {
+                    // Success cleanly wipes and updates workspace components
+                    resetWorkspace();
+                    await loadQueue();
+                } else {
+                    alert(`Transmission Error: ${data.message}`);
+                    // Restore original button states if rejected or broken
+                    btnSend.disabled = false;
+                    btnSend.style.opacity = "1";
+                    btnSend.innerText = originalButtonText;
+                }
+            } catch (err) {
+                console.error("Critical routing dropped:", err);
+                btnSend.disabled = false;
+                btnSend.style.opacity = "1";
+                btnSend.innerText = originalButtonText;
+            } finally {
+                // 5. Release master workstation interface lock strings
+                isWorking = false;
+                setGlobalLock(false);
+            }
+        }
+
+        async function archiveLead() {
+            if (!selectedLeadId || isWorking) return;
+            try {
+                const res = await fetch(`/api/reject/${selectedLeadId}`, { method: 'POST' });
+                if ((await res.json()).status === 'success') { resetWorkspace(); await loadQueue(); }
+            } catch (err) { console.error(err); }
+        }
+
+        function resetWorkspace() {
+            selectedLeadId = null;
+            document.getElementById('inspector-hint').innerText = "Select any lead row to engage workstation nodes.";
+            document.getElementById('angle-box').innerText = "Select a business from the queue table to inspect its pitch draft...";
+
+            // Wipe preview layers during clean reset routine passes
+            document.getElementById('inspector-screenshot-frame').classList.add('hidden');
+            document.getElementById('inspector-img-placeholder').src = "";
+
+            document.getElementById('test-email-input').value = ''; document.getElementById('test-email-input').disabled = true; document.getElementById('editor').value = ''; document.getElementById('editor').disabled = true;
+            document.getElementById('btn-reject').disabled = true; document.getElementById('btn-individual-ai').disabled = true; document.getElementById('btn-view-more').disabled = true;
+            document.getElementById('btn-send').disabled = true; document.getElementById('btn-send').innerText = "Approve & Send Test"; document.getElementById('btn-send').className = "col-span-2 bg-slate-800 text-slate-500 font-bold text-sm py-2.5 rounded-lg opacity-50";
+        }
+
+        window.onload = loadQueue;
+
+        // LEAFLET INTERACTIVE MAP GLOBALS
+        let mapInstance = null;
+        let mapMarker = null;
+        let mapCircleRange = null;
+        let activeCoordinates = { lat: 10.6765, lng: 122.9509 }; // Defaults to Bacolod City
+
+        function toggleDiscoveryModal(show) {
+            if (isWorking && show) return;
+            document.getElementById('discovery-modal').classList.toggle('hidden', !show);
+
+            if (show) {
+                setTimeout(() => {
+                    if (!mapInstance) {
+                        mapInstance = L.map('modal-map-canvas', { attributionControl: false }).setView([activeCoordinates.lat, activeCoordinates.lng], 12);
+
+                        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                            maxZoom: 19
+                        }).addTo(mapInstance);
+
+                        mapMarker = L.marker([activeCoordinates.lat, activeCoordinates.lng], { draggable: true }).addTo(mapInstance);
+
+                        mapCircleRange = L.circle([activeCoordinates.lat, activeCoordinates.lng], {
+                            color: '#10b981',
+                            fillColor: '#10b981',
+                            fillOpacity: 0.15,
+                            radius: 10000
+                        }).addTo(mapInstance);
+
+                        mapMarker.on('dragend', function (e) {
+                            const newPos = e.target.getLatLng();
+                            activeCoordinates.lat = newPos.lat;
+                            activeCoordinates.lng = newPos.lng;
+                            mapCircleRange.setLatLng(newPos);
+                            reverseGeocodeCoords(newPos.lat, newPos.lng);
+                        });
+                    } else {
+                        mapInstance.invalidateSize();
+                    }
+                }, 200);
+            }
+        }
+
+        function updateMapProximityRadius(valInKm) {
+            document.getElementById('radius-val-label').innerText = `${valInKm} km`;
+            if (mapCircleRange) {
+                mapCircleRange.setRadius(valInKm * 1000);
+            }
+        }
+
+        async function geocodeAddressTarget() {
+            const queryLocationStr = document.getElementById('modal-location').value.trim();
+            if (!queryLocationStr) return;
+
+            try {
+                const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(queryLocationStr)}&limit=1`);
+                const matches = await res.json();
+                if (matches && matches.length > 0) {
+                    const lat = parseFloat(matches[0].lat);
+                    const lon = parseFloat(matches[0].lon);
+
+                    activeCoordinates.lat = lat;
+                    activeCoordinates.lng = lon;
+
+                    const targetPos = [lat, lon];
+                    mapInstance.setView(targetPos, 12);
+                    mapMarker.setLatLng(targetPos);
+                    mapCircleRange.setLatLng(targetPos);
+                    mapInstance.invalidateSize();
+                }
+            } catch (err) { console.error("Geocoding dropped:", err); }
+        }
+
+        async function reverseGeocodeCoords(lat, lng) {
+            try {
+                const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+                const data = await res.json();
+                if (data && data.display_name) {
+                    const cityComp = data.address.city || data.address.town || data.address.province || data.address.state || "Pinned Location";
+                    const countryCode = data.address.country_code ? data.address.country_code.toUpperCase() : "LOC";
+                    document.getElementById('modal-location').value = `${cityComp}, ${countryCode}`;
+                }
+            } catch (err) { console.error(err); }
+        }
+
+        // Triggers when clicking the inspector thumbnail frame box preview layer
+        function openExpandedScreenshotView() {
+            const activeImgSrc = document.getElementById('inspector-img-placeholder').src;
+            if (!activeImgSrc || activeImgSrc.endsWith('#') || activeImgSrc === window.location.href) return;
+
+            document.getElementById('lightbox-expanded-img').src = activeImgSrc;
+            toggleScreenshotLightbox(true);
+        }
+
+        function toggleScreenshotLightbox(show) {
+            const lightbox = document.getElementById('screenshot-lightbox');
+            lightbox.classList.toggle('hidden', !show);
+        }
+    </script>
+    <div id="screenshot-lightbox"
+        class="hidden fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4"
+        onclick="toggleScreenshotLightbox(false)">
+
+        <button
+            class="absolute top-4 right-4 text-slate-400 hover:text-slate-100 text-xl font-mono cursor-pointer bg-slate-900 border border-slate-800 rounded-full w-10 h-10 flex items-center justify-center shadow-lg transition">✕</button>
+
+        <div class="max-w-5xl max-h-[85vh] w-full rounded-xl overflow-hidden border border-slate-800 bg-slate-950 p-1 shadow-2xl relative"
+            onclick="event.stopPropagation()">
+            <div class="w-full overflow-y-auto max-h-[84vh] scrollbar-thin rounded-lg">
+                <img id="lightbox-expanded-img" src="" class="w-full h-auto object-contain block"
+                    alt="Full Pipeline Lead Capture Surface">
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>

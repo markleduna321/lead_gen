@@ -1,0 +1,16 @@
+{
+  "status": "success",
+  "total_queued": 14,
+  "leads": [
+    {
+      "lead_id": 104,
+      "business_name": "Apex Roofing Specialists",
+      "category": "Roofing Contractor",
+      "rating": 4.8,
+      "review_count": 42,
+      "suggested_angle": "Angle: Focus on trust and capturing emergency high-ticket quote requests...",
+      "ai_pitch_draft": "Hi there,\n\nI noticed your impressive 4.8-star track record...",
+      "recipient_phone": "+1-512-555-0192"
+    }
+  ]
+}
