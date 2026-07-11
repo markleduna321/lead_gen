@@ -84,6 +84,7 @@ def save_job_leads(leads):
                 emit_ui_log(f"💾 [PostgreSQL] Saved {len(data_tuples)} job board prospects to DB.")
     except Exception as e:
         emit_ui_log(f"❌ [DB ERROR] Job leads insertion failure: {e}")
+        emit_ui_log("💡 [HINT] If the error mentions a missing column, restart the app — migrations run automatically on startup.")
 
 
 def run_job_discovery(service_type, country=""):

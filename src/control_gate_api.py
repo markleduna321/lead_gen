@@ -37,6 +37,44 @@ OPENAI_KEY = os.getenv("OPENAI_API_KEY")
 
 app = Flask(__name__, template_folder='templates', static_folder='../static')
 
+
+def run_startup_migrations():
+    """
+    Applies all Phase 2 schema migrations automatically on app startup.
+    Uses IF NOT EXISTS / ADD COLUMN IF NOT EXISTS so it is safe to re-run.
+    """
+    if not DB_DSN:
+        print("[STARTUP] DATABASE_URL not set — skipping migrations.", file=sys.stderr)
+        return
+
+    migrations = [
+        "ALTER TABLE prospects ADD COLUMN IF NOT EXISTS lead_score         INT           DEFAULT 0;",
+        "ALTER TABLE prospects ADD COLUMN IF NOT EXISTS site_quality_score  INT           DEFAULT NULL;",
+        "ALTER TABLE prospects ADD COLUMN IF NOT EXISTS lead_type           VARCHAR(50)   DEFAULT 'web_design';",
+        "ALTER TABLE prospects ADD COLUMN IF NOT EXISTS subject_line        TEXT;",
+        "ALTER TABLE prospects ADD COLUMN IF NOT EXISTS followup_due_at     TIMESTAMP     DEFAULT NULL;",
+        "ALTER TABLE prospects ADD COLUMN IF NOT EXISTS website_url         TEXT;",
+        "ALTER TABLE prospects ADD COLUMN IF NOT EXISTS source_platform     VARCHAR(50)   DEFAULT 'google_maps';",
+        "ALTER TABLE prospects ADD COLUMN IF NOT EXISTS email               TEXT;",
+        "ALTER TABLE prospects ADD COLUMN IF NOT EXISTS screenshot_path     TEXT;",
+        "CREATE INDEX IF NOT EXISTS idx_prospects_lead_score ON prospects (lead_score DESC);",
+        "CREATE INDEX IF NOT EXISTS idx_prospects_lead_type  ON prospects (lead_type);",
+        "CREATE INDEX IF NOT EXISTS idx_prospects_followup   ON prospects (followup_due_at) WHERE followup_due_at IS NOT NULL;",
+    ]
+
+    try:
+        with psycopg2.connect(DB_DSN) as conn:
+            with conn.cursor() as cur:
+                for sql in migrations:
+                    cur.execute(sql)
+            conn.commit()
+        print("[STARTUP] ✅ Schema migrations applied successfully.")
+    except Exception as e:
+        print(f"[STARTUP] ⚠️ Migration warning (non-fatal): {e}", file=sys.stderr)
+
+
+run_startup_migrations()
+
 @app.route('/api/discovery/logs', methods=['GET'])
 def fetch_live_ui_logs():
     """Exposes current status logs to the frontend UI dashboard."""
@@ -270,14 +308,19 @@ def get_review_queue():
     """
 
     data_query = f"""
-        SELECT id, business_name, category, lead_type, source_platform,
-               rating, review_count, lead_score, site_quality_score,
+        SELECT id, business_name, category,
+               COALESCE(lead_type, 'web_design') as lead_type,
+               COALESCE(source_platform, 'google_maps') as source_platform,
+               rating, review_count,
+               COALESCE(lead_score, 0) as lead_score,
+               site_quality_score,
                suggested_angle, subject_line, ai_pitch_draft,
-               phone, email, formatted_address, website_url,
-               google_place_id, screenshot_path, followup_due_at, status
+               phone, email, formatted_address,
+               website_url, google_place_id, screenshot_path,
+               followup_due_at, status
         FROM prospects
         {where_clause}
-        ORDER BY lead_score DESC, id DESC
+        ORDER BY COALESCE(lead_score, 0) DESC, id DESC
         LIMIT %s OFFSET %s;
     """
 
