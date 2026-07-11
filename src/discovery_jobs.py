@@ -64,9 +64,9 @@ def save_job_leads(leads):
     """
     data_tuples = [
         (
-            lead["company_name"],
-            lead["job_title"],
-            lead.get("location", "Remote / International"),
+            lead["company_name"][:254],          # business_name VARCHAR(255)
+            lead["job_title"][:99],              # category VARCHAR(100)
+            lead.get("location", "Remote / International")[:499],
             lead["unique_id"],
             lead["lead_type"],
             "job_board",

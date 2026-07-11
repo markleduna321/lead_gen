@@ -48,6 +48,10 @@ def run_startup_migrations():
         return
 
     migrations = [
+        # Widen narrow columns that can overflow with real-world job/company data
+        "ALTER TABLE prospects ALTER COLUMN category TYPE VARCHAR(255);",
+        "ALTER TABLE prospects ALTER COLUMN business_name TYPE VARCHAR(512);",
+        # Phase 2 new columns
         "ALTER TABLE prospects ADD COLUMN IF NOT EXISTS lead_score         INT           DEFAULT 0;",
         "ALTER TABLE prospects ADD COLUMN IF NOT EXISTS site_quality_score  INT           DEFAULT NULL;",
         "ALTER TABLE prospects ADD COLUMN IF NOT EXISTS lead_type           VARCHAR(50)   DEFAULT 'web_design';",
