@@ -48,6 +48,59 @@ JOB_SIGNAL_MAP = {
 }
 
 
+# Domains to skip when searching for a company's official website
+_SKIP_DOMAINS = [
+    "linkedin.com", "indeed.com", "glassdoor.com", "ziprecruiter.com",
+    "monster.com", "careerbuilder.com", "facebook.com", "twitter.com",
+    "youtube.com", "wikipedia.org", "yelp.com", "instagram.com",
+    "google.com", "crunchbase.com", "bloomberg.com", "wellfound.com",
+    "builtinnyc.com", "built.in", "lever.co", "greenhouse.io",
+    "workday.com", "bamboohr.com", "recruitee.com",
+]
+
+
+def enrich_company_contact(company_name: str, location: str) -> dict:
+    """
+    Finds a company's official website via SerpApi Google Search,
+    then crawls it for a contact email using the existing email_hunter.
+    Returns dict with website_url and email (either or both may be None).
+    """
+    from email_hunter import attempt_domain_email_crawl
+
+    result = {"website_url": None, "email": None}
+    if not SERPAPI_KEY:
+        return result
+
+    params = {
+        "engine": "google",
+        "q": f'"{company_name}" official website contact',
+        "api_key": SERPAPI_KEY,
+        "num": 5,
+    }
+
+    try:
+        resp = requests.get("https://serpapi.com/search", params=params, timeout=12)
+        resp.raise_for_status()
+        for item in resp.json().get("organic_results", []):
+            url = item.get("link", "")
+            if not url.startswith("http"):
+                continue
+            if any(d in url for d in _SKIP_DOMAINS):
+                continue
+            result["website_url"] = url
+            break
+    except Exception as e:
+        print(f"[ENRICHMENT] Website search failed for '{company_name}': {e}")
+
+    if result["website_url"]:
+        try:
+            result["email"] = attempt_domain_email_crawl(result["website_url"])
+        except Exception as e:
+            print(f"[ENRICHMENT] Email crawl failed for '{result['website_url']}': {e}")
+
+    return result
+
+
 def save_job_leads(leads):
     from control_gate_api import emit_ui_log
     if not leads:
@@ -57,20 +110,26 @@ def save_job_leads(leads):
     insert_query = """
         INSERT INTO prospects (
             business_name, category, formatted_address, google_place_id,
-            lead_type, source_platform, website_url, status
+            lead_type, source_platform, website_url, email,
+            suggested_angle, status
         )
         VALUES %s
-        ON CONFLICT (google_place_id) DO NOTHING;
+        ON CONFLICT (google_place_id) DO UPDATE SET
+            website_url    = COALESCE(EXCLUDED.website_url, prospects.website_url),
+            email          = COALESCE(EXCLUDED.email,       prospects.email),
+            suggested_angle = COALESCE(EXCLUDED.suggested_angle, prospects.suggested_angle);
     """
     data_tuples = [
         (
-            lead["company_name"][:254],          # business_name VARCHAR(255)
-            lead["job_title"][:99],              # category VARCHAR(100)
+            lead["company_name"][:254],
+            lead["job_title"][:254],
             lead.get("location", "Remote / International")[:499],
             lead["unique_id"],
             lead["lead_type"],
             "job_board",
-            lead.get("job_url"),
+            lead.get("website_url"),
+            lead.get("email"),
+            f"Hiring '{lead.get('job_role_signal', lead['job_title'])[:80]}' — outsourcing opportunity",
             "discovered",
         )
         for lead in leads
@@ -84,7 +143,7 @@ def save_job_leads(leads):
                 emit_ui_log(f"💾 [PostgreSQL] Saved {len(data_tuples)} job board prospects to DB.")
     except Exception as e:
         emit_ui_log(f"❌ [DB ERROR] Job leads insertion failure: {e}")
-        emit_ui_log("💡 [HINT] If the error mentions a missing column, restart the app — migrations run automatically on startup.")
+        emit_ui_log("💡 [HINT] Restart the app if this mentions a missing column — migrations run on startup.")
 
 
 def run_job_discovery(service_type, country=""):
@@ -138,11 +197,11 @@ def run_job_discovery(service_type, country=""):
                 all_leads.append(
                     {
                         "company_name": company,
-                        "job_title": job.get("title", role),
+                        "job_title": job.get("title", role)[:254],
                         "location": job.get("location", "Remote"),
                         "unique_id": unique_id,
                         "lead_type": service_type,
-                        "job_url": job.get("share_link") or job.get("job_id") or "",
+                        "job_role_signal": role,
                     }
                 )
 
@@ -150,6 +209,31 @@ def run_job_discovery(service_type, country=""):
 
         except Exception as e:
             emit_ui_log(f"❌ [JOB ENGINE ERROR] Query '{role}' failed: {e}")
+
+    if not all_leads:
+        emit_ui_log("⚠️ [JOB ENGINE] No companies found. Check your SERPAPI_API_KEY or try a different country.")
+        return 0
+
+    # --- ENRICHMENT PASS: find each company's website + contact email ---
+    # Cache by company name so the same company isn't searched multiple times
+    enrichment_cache = {}
+    emit_ui_log(f"🔍 [ENRICHMENT] Finding contact details for {len(all_leads)} companies...")
+
+    for lead in all_leads:
+        company = lead["company_name"]
+        if company not in enrichment_cache:
+            emit_ui_log(f"  🌐 Searching: {company}...")
+            enrich = enrich_company_contact(company, lead["location"])
+            enrichment_cache[company] = enrich
+            if enrich["email"]:
+                emit_ui_log(f"  ✉️ Contact found → {enrich['email']}")
+            elif enrich["website_url"]:
+                emit_ui_log(f"  🌐 Website found → {enrich['website_url']}")
+            else:
+                emit_ui_log(f"  ⏭️ No public contact found for {company}")
+
+        lead["website_url"] = enrichment_cache[company]["website_url"]
+        lead["email"] = enrichment_cache[company]["email"]
 
     save_job_leads(all_leads)
     return len(all_leads)
