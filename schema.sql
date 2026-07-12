@@ -31,6 +31,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS update_prospects_modtime ON prospects;
 CREATE TRIGGER update_prospects_modtime
     BEFORE UPDATE ON prospects
     FOR EACH ROW
