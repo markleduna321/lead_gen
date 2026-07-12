@@ -42,6 +42,76 @@
         </div>
     </div>
 
+    <!-- Job Board Prospect Modal -->
+    <div id="job-profile-modal"
+        class="hidden fixed inset-0 z-40 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-purple-900/50 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div>
+                    <h3 id="job-modal-company" class="text-base font-bold text-purple-300">Company</h3>
+                    <p id="job-modal-platform" class="text-[10px] text-slate-500 mt-0.5 font-mono"></p>
+                </div>
+                <button onclick="toggleJobProfileModal(false)"
+                    class="text-slate-500 hover:text-slate-300 text-sm cursor-pointer">✕</button>
+            </div>
+            <div class="space-y-3 text-sm">
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-0.5">Hiring Signal (Role)</label>
+                        <p id="job-modal-title" class="text-purple-400 font-medium"></p>
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-0.5">Our Service Pitch</label>
+                        <p id="job-modal-service" class="text-slate-300 font-medium"></p>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-0.5">Location</label>
+                        <p id="job-modal-location" class="text-slate-300 text-xs"></p>
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-0.5">Schedule Type</label>
+                        <p id="job-modal-schedule" class="text-slate-300 text-xs"></p>
+                    </div>
+                </div>
+                <div>
+                    <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-0.5">Salary Range</label>
+                    <p id="job-modal-salary" class="text-amber-400 font-semibold text-xs"></p>
+                </div>
+                <div>
+                    <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-0.5">Job Description Snippet</label>
+                    <p id="job-modal-description"
+                        class="text-xs text-slate-400 bg-slate-950 p-2.5 rounded border border-slate-800 max-h-28 overflow-y-auto leading-relaxed whitespace-pre-wrap"></p>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-0.5">Company Website</label>
+                        <a id="job-modal-website" href="#" target="_blank" rel="noopener noreferrer"
+                            class="text-xs text-emerald-400 hover:underline truncate block"></a>
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-0.5">Job Apply Link</label>
+                        <a id="job-modal-apply" href="#" target="_blank" rel="noopener noreferrer"
+                            class="text-xs text-blue-400 hover:underline block"></a>
+                    </div>
+                </div>
+                <hr class="border-slate-800">
+                <div>
+                    <label class="text-[10px] font-bold uppercase tracking-wider text-amber-400 block mb-1">Contact Email</label>
+                    <input id="job-modal-email-input" type="email" placeholder="No email found. Paste manually..."
+                        class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-amber-500 font-mono">
+                </div>
+            </div>
+            <div class="flex items-center gap-3 pt-2">
+                <button onclick="toggleJobProfileModal(false)"
+                    class="w-full bg-slate-950 border border-slate-800 text-slate-400 text-xs py-2 rounded-lg cursor-pointer">Close</button>
+                <button onclick="saveJobEmailUpdate()"
+                    class="w-full bg-amber-500 text-slate-950 font-bold text-xs py-2 rounded-lg shadow-md shadow-amber-500/10 cursor-pointer">Update Email</button>
+            </div>
+        </div>
+    </div>
+
     <div id="profile-modal"
         class="hidden fixed inset-0 z-40 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
         <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
@@ -148,6 +218,12 @@
                                     type="checkbox" name="scan-source" value="facebook" class="accent-blue-500">
                                 Facebook</label>
                             <label class="flex items-center gap-1.5 cursor-pointer text-slate-300"><input
+                                    type="checkbox" name="scan-source" value="instagram" class="accent-pink-500">
+                                Instagram</label>
+                            <label class="flex items-center gap-1.5 cursor-pointer text-slate-300"><input
+                                    type="checkbox" name="scan-source" value="yelp" class="accent-red-500">
+                                Yelp</label>
+                            <label class="flex items-center gap-1.5 cursor-pointer text-slate-300"><input
                                     type="checkbox" name="scan-source" value="linkedin" class="accent-indigo-500">
                                 LinkedIn</label>
                         </div>
@@ -187,9 +263,37 @@
                             <label class="flex items-center gap-2 cursor-pointer py-1"><input type="checkbox"
                                     name="biz-type" value="Boutique Hotel" class="accent-emerald-500"> Boutique
                                 Hotels</label>
-                            <label class="flex items-center gap-2 cursor-pointer py-1"><input type="checkbox"
-                                    name="biz-type" value="Fitness Center" class="accent-emerald-500"> Gyms &
-                                Fitness</label>
+                            <label class="flex items-center gap-2 cursor-pointer py-1"><input type="checkbox" name="biz-type" value="Fitness Center" class="accent-emerald-500"> Gyms & Fitness</label>
+                            <label class="flex items-center gap-2 cursor-pointer py-1"><input type="checkbox" name="biz-type" value="Restaurant" class="accent-emerald-500"> Restaurants</label>
+                            <label class="flex items-center gap-2 cursor-pointer py-1"><input type="checkbox" name="biz-type" value="Cafe" class="accent-emerald-500"> Cafes</label>
+                            <label class="flex items-center gap-2 cursor-pointer py-1"><input type="checkbox" name="biz-type" value="Auto Repair Shop" class="accent-emerald-500"> Auto Repair</label>
+                            <label class="flex items-center gap-2 cursor-pointer py-1"><input type="checkbox" name="biz-type" value="Beauty Salon" class="accent-emerald-500"> Beauty Salons</label>
+                            <label class="flex items-center gap-2 cursor-pointer py-1"><input type="checkbox" name="biz-type" value="Barber Shop" class="accent-emerald-500"> Barber Shops</label>
+                            <label class="flex items-center gap-2 cursor-pointer py-1"><input type="checkbox" name="biz-type" value="Landscaping Service" class="accent-emerald-500"> Landscaping</label>
+                            <label class="flex items-center gap-2 cursor-pointer py-1"><input type="checkbox" name="biz-type" value="Photography Studio" class="accent-emerald-500"> Photography</label>
+                            <label class="flex items-center gap-2 cursor-pointer py-1"><input type="checkbox" name="biz-type" value="Veterinary Clinic" class="accent-emerald-500"> Vets & Pet Care</label>
+                            <label class="flex items-center gap-2 cursor-pointer py-1"><input type="checkbox" name="biz-type" value="Electrician" class="accent-emerald-500"> Electricians</label>
+                            <label class="flex items-center gap-2 cursor-pointer py-1"><input type="checkbox" name="biz-type" value="Cleaning Service" class="accent-emerald-500"> Cleaning Services</label>
+                            <label class="flex items-center gap-2 cursor-pointer py-1"><input type="checkbox" name="biz-type" value="Event Planner" class="accent-emerald-500"> Event Planners</label>
+                            <label class="flex items-center gap-2 cursor-pointer py-1"><input type="checkbox" name="biz-type" value="Insurance Agency" class="accent-emerald-500"> Insurance Agencies</label>
+                            <label class="flex items-center gap-2 cursor-pointer py-1"><input type="checkbox" name="biz-type" value="Travel Agency" class="accent-emerald-500"> Travel Agencies</label>
+                            <label class="flex items-center gap-2 cursor-pointer py-1"><input type="checkbox" name="biz-type" value="Pet Grooming" class="accent-emerald-500"> Pet Grooming</label>
+                            <label class="flex items-center gap-2 cursor-pointer py-1"><input type="checkbox" name="biz-type" value="Tutoring Center" class="accent-emerald-500"> Tutoring Centers</label>
+                            <label class="flex items-center gap-2 cursor-pointer py-1"><input type="checkbox" name="biz-type" value="Construction Company" class="accent-emerald-500"> Construction</label>
+                            <label class="flex items-center gap-2 cursor-pointer py-1"><input type="checkbox" name="biz-type" value="Florist" class="accent-emerald-500"> Florists</label>
+                            <label class="flex items-center gap-2 cursor-pointer py-1"><input type="checkbox" name="biz-type" value="Pharmacy" class="accent-emerald-500"> Pharmacies</label>
+                            <label class="flex items-center gap-2 cursor-pointer py-1"><input type="checkbox" name="biz-type" value="Logistics Company" class="accent-emerald-500"> Logistics</label>
+                            <label class="flex items-center gap-2 cursor-pointer py-1"><input type="checkbox" name="biz-type" value="Car Dealership" class="accent-emerald-500"> Car Dealerships</label>
+                            <label class="flex items-center gap-2 cursor-pointer py-1"><input type="checkbox" name="biz-type" value="Spa" class="accent-emerald-500"> Spas & Wellness</label>
+                            <div id="custom-biz-tags" class="contents"></div>
+                        </div>
+                        <!-- Custom business type input -->
+                        <div class="flex gap-2 mt-2">
+                            <input id="custom-biz-input" type="text" placeholder="Any business type... (e.g. Tattoo Shop)"
+                                class="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500"
+                                onkeydown="if(event.key==='Enter'){addCustomBizType();event.preventDefault();}">
+                            <button onclick="addCustomBizType()"
+                                class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg whitespace-nowrap">+ Add</button>
                         </div>
                     </div>
 
@@ -377,6 +481,8 @@
                                 <option value="google_maps">📍 Google Maps</option>
                                 <option value="facebook">📱 Facebook</option>
                                 <option value="job_board">🎯 Job Board</option>
+                                <option value="yelp">⭐ Yelp</option>
+                                <option value="instagram">📸 Instagram</option>
                                 <option value="linkedin">🔗 LinkedIn</option>
                             </select>
 
@@ -795,6 +901,26 @@
             'rejected': '<span class="px-2 py-0.5 text-xs rounded font-medium bg-slate-900 text-slate-500 border border-slate-800">Archived</span>'
         };
 
+        function addCustomBizType() {
+            const input = document.getElementById('custom-biz-input');
+            const val = input.value.trim();
+            if (!val) return;
+
+            // Prevent duplicates
+            const existing = [...document.querySelectorAll('input[name="biz-type"]')].map(cb => cb.value.toLowerCase());
+            if (existing.includes(val.toLowerCase())) {
+                input.value = '';
+                return;
+            }
+
+            const container = document.getElementById('custom-biz-tags');
+            const label = document.createElement('label');
+            label.className = 'flex items-center gap-2 cursor-pointer py-1 col-span-1';
+            label.innerHTML = `<input type="checkbox" name="biz-type" value="${val.replace(/"/g, '')}" checked class="accent-amber-500"> <span class="text-amber-300">${val}</span>`;
+            container.appendChild(label);
+            input.value = '';
+        }
+
         function renderSourceBadge(sourcePlatform, placeId) {
             const platform = String(sourcePlatform || '').toLowerCase();
             const strId = String(placeId || '');
@@ -802,6 +928,10 @@
                 return '<span class="bg-purple-950 border border-purple-800 text-purple-400 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">Job Board</span>';
             } else if (platform === 'facebook' || strId.startsWith('fb_')) {
                 return '<span class="bg-blue-950 border border-blue-800 text-blue-400 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">FB Page</span>';
+            } else if (platform === 'yelp' || strId.startsWith('yelp_')) {
+                return '<span class="bg-red-950 border border-red-800 text-red-400 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">Yelp</span>';
+            } else if (platform === 'instagram' || strId.startsWith('ig_')) {
+                return '<span class="bg-pink-950 border border-pink-800 text-pink-400 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">Instagram</span>';
             } else if (platform === 'linkedin' || strId.startsWith('ln_') || strId.startsWith('b2b_')) {
                 return '<span class="bg-indigo-950 border border-indigo-800 text-indigo-400 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">B2B Link</span>';
             } else {
@@ -861,10 +991,56 @@
 
         function toggleDiscoveryModal(show) { if (isWorking && show) return; document.getElementById('discovery-modal').classList.toggle('hidden', !show); }
 
+        function toggleJobProfileModal(show) {
+            document.getElementById('job-profile-modal').classList.toggle('hidden', !show);
+            if (!show) return;
+            if (!selectedLeadId) return;
+            const lead = currentLeads.find(l => l.id === selectedLeadId);
+            if (!lead) return;
+            document.getElementById('job-modal-company').innerText = lead.business_name;
+            document.getElementById('job-modal-platform').innerText = lead.job_via ? `via ${lead.job_via}` : 'Job Board';
+            document.getElementById('job-modal-title').innerText = lead.category || '—';
+            document.getElementById('job-modal-service').innerText = (lead.lead_type || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+            document.getElementById('job-modal-location').innerText = lead.formatted_address || 'Remote';
+            document.getElementById('job-modal-schedule').innerText = lead.job_schedule || 'Not specified';
+            document.getElementById('job-modal-salary').innerText = lead.job_salary || 'Not disclosed';
+            document.getElementById('job-modal-description').innerText = lead.job_description || 'No description captured.';
+            const webEl = document.getElementById('job-modal-website');
+            webEl.href = lead.website_url || '#';
+            webEl.innerText = lead.website_url ? lead.website_url.replace(/^https?:\/\//, '').split('/')[0] : 'Not found';
+            const applyEl = document.getElementById('job-modal-apply');
+            applyEl.href = lead.job_apply_link || '#';
+            applyEl.innerText = lead.job_apply_link ? 'View Job Posting ↗' : 'Not available';
+            document.getElementById('job-modal-email-input').value = lead.email || '';
+        }
+
+        async function saveJobEmailUpdate() {
+            if (!selectedLeadId || isWorking) return;
+            const updatedEmail = document.getElementById('job-modal-email-input').value.trim();
+            toggleJobProfileModal(false);
+            setGlobalLock(true);
+            try {
+                const res = await fetch(`/api/prospect/update-email/${selectedLeadId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: updatedEmail })
+                });
+                if ((await res.json()).status === 'success') {
+                    await loadQueue();
+                    document.getElementById('test-email-input').value = updatedEmail;
+                }
+            } catch (err) { console.error(err); } finally { setGlobalLock(false); }
+        }
+
         function toggleProfileModal(show) {
             if (!selectedLeadId) return;
             const targetLead = currentLeads.find(l => l.id === selectedLeadId);
             if (!targetLead) return;
+            // Job board leads get their own richer modal
+            if (targetLead.source_platform === 'job_board') {
+                toggleJobProfileModal(show);
+                return;
+            }
             if (show) {
                 document.getElementById('modal-profile-title').innerText = targetLead.business_name;
                 document.getElementById('profile-category').innerText = targetLead.category;

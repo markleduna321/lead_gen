@@ -53,6 +53,62 @@ def save_leads_to_db(leads):
         emit_ui_log(f"❌ [DB CRITICAL ERROR] Pipeline insertion breakdown: {e}")
 
 
+def _find_facebook_email(business_name, address):
+    """
+    Searches for a business's Facebook page via SerpAPI and crawls it for a public email.
+    Returns (email, facebook_url) — either value may be None.
+    """
+    if not SERPAPI_KEY:
+        return None, None
+    try:
+        city = address.split(",")[-1].strip() if "," in address else address
+        params = {
+            "engine": "google",
+            "q": f'site:facebook.com "{business_name}" "{city}"',
+            "api_key": SERPAPI_KEY,
+            "num": 3
+        }
+        response = requests.get("https://serpapi.com/search", params=params, timeout=10)
+        response.raise_for_status()
+        organic = response.json().get("organic_results", [])
+        for result in organic:
+            link = result.get("link", "")
+            # Skip category hubs and sub-pages, target root business pages only
+            if "facebook.com" in link and "/pages/category" not in link and "/groups/" not in link:
+                email = attempt_domain_email_crawl(link)
+                return email, link
+    except Exception:
+        pass
+    return None, None
+
+
+def _search_for_business_website(business_name, address):
+    """
+    Falls back to a SerpAPI Google search when no website is listed on Google Maps.
+    Returns the first organic result URL, or None if nothing is found.
+    """
+    if not SERPAPI_KEY:
+        return None
+    try:
+        params = {
+            "engine": "google",
+            "q": f"{business_name} {address} official website",
+            "api_key": SERPAPI_KEY,
+            "num": 3
+        }
+        response = requests.get("https://serpapi.com/search", params=params, timeout=10)
+        response.raise_for_status()
+        organic = response.json().get("organic_results", [])
+        for result in organic:
+            link = result.get("link", "")
+            # Skip social media and directory aggregators — target the real business site
+            if link and not any(skip in link for skip in ["facebook.com", "yelp.com", "yellowpages.com", "linkedin.com", "instagram.com", "twitter.com"]):
+                return link
+    except Exception:
+        pass
+    return None
+
+
 def run_discovery(city, niche, rating_min=0.0, max_reviews=100, lat=None, lng=None, radius_km=10):
     """
     Queries SerpApi Google Maps framework utilizing precise geolocation coordinate pins 
@@ -124,18 +180,32 @@ def run_discovery(city, niche, rating_min=0.0, max_reviews=100, lat=None, lng=No
 
         # --- WEBSITE EXTRACTION & EMAIL HUNTER FALLBACK PASS ---
         discovered_email = None
-        screenshot_asset_url = None 
-        
+        screenshot_asset_url = None
+
+        if not website_link:
+            emit_ui_log(f"🔍 [No Website] Running Google search fallback for '{business_name}'...")
+            website_link = _search_for_business_website(business_name, address)
+            if website_link:
+                emit_ui_log(f"   ↳ 🌐 Found via search: {website_link}")
+            else:
+                emit_ui_log(f"   ↳ 📘 No website found. Checking Facebook page for contact email...")
+                discovered_email, fb_url = _find_facebook_email(business_name, address)
+                if discovered_email:
+                    emit_ui_log(f"   ↳ 🔥 Email found on Facebook: {discovered_email}")
+                elif fb_url:
+                    emit_ui_log(f"   ↳ ⚠️ Facebook page found but no public email listed. Saving without email.")
+                else:
+                    emit_ui_log(f"   ↳ ⚠️ No website or Facebook email found. Saving without email.")
+
         if website_link:
             emit_ui_log(f"🔗 [Website Found] Scouting '{business_name}' domain...")
             discovered_email = attempt_domain_email_crawl(website_link)
-            
+
             if not discovered_email:
-                emit_ui_log(f"   ↳ ⏭️ Skipped: Site active but zero public email tags found.")
-                continue
+                emit_ui_log(f"   ↳ ⚠️ Site active but zero public email tags found. Saving without email.")
             else:
                 emit_ui_log(f"   ↳ 🔥 Contact Extracted: {discovered_email}")
-                
+
                 # Trigger screenshot extraction immediately via headless selenium browser agent
                 emit_ui_log(f"   ↳ 📸 Capturing live website snapshot profile view...")
                 screenshot_asset_url = capture_business_site_snapshot(website_link, place_token)

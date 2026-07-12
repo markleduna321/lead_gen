@@ -46,6 +46,19 @@ ALTER TABLE prospects ADD COLUMN IF NOT EXISTS subject_line      TEXT;
 ALTER TABLE prospects ADD COLUMN IF NOT EXISTS followup_due_at   TIMESTAMP    DEFAULT NULL;
 ALTER TABLE prospects ADD COLUMN IF NOT EXISTS website_url       TEXT;
 ALTER TABLE prospects ADD COLUMN IF NOT EXISTS source_platform   VARCHAR(50)  DEFAULT 'google_maps';
+ALTER TABLE prospects ADD COLUMN IF NOT EXISTS email             TEXT;
+ALTER TABLE prospects ADD COLUMN IF NOT EXISTS screenshot_path   TEXT;
+
+-- Phase 3: Job Board Enrichment Columns
+ALTER TABLE prospects ADD COLUMN IF NOT EXISTS job_via          TEXT;
+ALTER TABLE prospects ADD COLUMN IF NOT EXISTS job_salary       TEXT;
+ALTER TABLE prospects ADD COLUMN IF NOT EXISTS job_schedule     TEXT;
+ALTER TABLE prospects ADD COLUMN IF NOT EXISTS job_description  TEXT;
+ALTER TABLE prospects ADD COLUMN IF NOT EXISTS job_apply_link   TEXT;
+
+-- Widen columns that overflow with real-world job/company data
+ALTER TABLE prospects ALTER COLUMN category      TYPE VARCHAR(255);
+ALTER TABLE prospects ALTER COLUMN business_name TYPE VARCHAR(512);
 
 -- New indexes for priority sorting and follow-up queue
 CREATE INDEX IF NOT EXISTS idx_prospects_lead_score  ON prospects (lead_score DESC);

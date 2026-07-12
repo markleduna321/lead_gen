@@ -49,6 +49,111 @@ NICHE_STRATEGY_MATRIX = {
         "buzzwords": "recurring membership conversion, high-tier personal training pipelines, corporate wellness packages, member retention workflows",
         "hook_angle": "Design a high-impact membership sign-up pipeline that automatically upsells personal training programs and onboarding packages during registration."
     },
+    "restaurant": {
+        "pain_points": "Losing online orders to Grab/Foodpanda margins; no direct reservation system; weak visual presentation of menu driving low-intent walk-ins.",
+        "buzzwords": "direct online ordering, reservation funnel, menu showcase, loyalty program integration, local SEO footprint",
+        "hook_angle": "Cut third-party delivery commissions by building a branded direct-order page that captures reservations and repeat customers without the middleman."
+    },
+    "cafe": {
+        "pain_points": "Invisible to Google searches beyond walk-in traffic; no loyalty or pre-order system to smooth morning rush bottlenecks.",
+        "buzzwords": "pre-order system, loyalty punch card digital, Google discovery optimization, aesthetic brand showcase",
+        "hook_angle": "Turn their Instagram aesthetic into a searchable, bookmarkable brand page with a pre-order flow that trims peak-hour queues."
+    },
+    "auto repair shop": {
+        "pain_points": "Losing service bookings to dealership service centers; no online appointment system causing phone tag and missed revenue.",
+        "buzzwords": "online service booking, digital vehicle inspection reports, transparent pricing pages, loyalty service reminders",
+        "hook_angle": "Replace phone-tag booking with a digital appointment scheduler that sends automated reminders and captures repeat oil-change and service revenue."
+    },
+    "beauty salon": {
+        "pain_points": "Fully reliant on Facebook/Instagram DMs for bookings; no automated reminder system causing high no-show rates and lost chair time.",
+        "buzzwords": "online booking automation, no-show reduction, stylist portfolio showcase, package upsell funnel",
+        "hook_angle": "Replace chaotic DM bookings with an automated scheduler that showcases stylist portfolios and reduces no-shows with SMS reminders."
+    },
+    "barber shop": {
+        "pain_points": "Walk-in only model losing younger clients who expect online booking; no showcase for barber portfolio or specialty services.",
+        "buzzwords": "online slot booking, barber portfolio gallery, wait-time transparency, loyalty reward system",
+        "hook_angle": "Capture the next generation of clients with a sleek booking page that shows off cuts, manages slots, and builds a loyal repeat client base."
+    },
+    "landscaping service": {
+        "pain_points": "Winning contracts purely by word-of-mouth with no visual proof of work; losing bids to competitors with polished proposal pages.",
+        "buzzwords": "before/after project gallery, instant quote calculator, seasonal service packages, neighborhood targeting",
+        "hook_angle": "Turn past project photos into a high-converting portfolio site with an instant quote form that captures leads while competitors rely on referrals."
+    },
+    "photography studio": {
+        "pain_points": "Portfolio buried in Instagram with no booking flow; losing premium event contracts to studios with professional inquiry pages.",
+        "buzzwords": "portfolio showcase, event package pricing, client inquiry funnel, booking deposit automation",
+        "hook_angle": "Transform their social portfolio into a bookable studio brand that captures event inquiries and secures deposits automatically."
+    },
+    "veterinary clinic": {
+        "pain_points": "High receptionist overhead from phone bookings; missing pet owner retention through post-visit follow-up or reminder systems.",
+        "buzzwords": "online pet appointment booking, vaccination reminder automation, pet owner portal, multi-pet household management",
+        "hook_angle": "Streamline clinic operations with an online booking portal that sends automated vaccination reminders and keeps pet owners coming back."
+    },
+    "electrician": {
+        "pain_points": "Missing emergency service calls to aggregator directories; no professional digital presence to win commercial project bids.",
+        "buzzwords": "24/7 emergency dispatch form, licensed contractor showcase, commercial project portfolio, instant quote request",
+        "hook_angle": "Capture emergency callouts and commercial bid requests with a professional page that positions them above unlicensed competitors."
+    },
+    "cleaning service": {
+        "pain_points": "Competing on price alone with no brand differentiation; no recurring booking system to lock in weekly/monthly contracts.",
+        "buzzwords": "recurring booking subscriptions, property type packages, before/after gallery, instant pricing calculator",
+        "hook_angle": "Shift from one-off jobs to recurring contract revenue with a subscription booking system that locks in weekly and monthly clients automatically."
+    },
+    "event planner": {
+        "pain_points": "Leads slipping away due to slow DM response; no portfolio system that builds enough trust for high-value event contracts.",
+        "buzzwords": "event portfolio showcase, inquiry funnel, package tier pricing, vendor network highlight",
+        "hook_angle": "Convert browsing couples and corporate clients into booked events with a portfolio site that handles inquiries and package selections automatically."
+    },
+    "insurance agency": {
+        "pain_points": "Losing policy shoppers to aggregator comparison sites; no digital trust signals to convert cold visitors into quote requests.",
+        "buzzwords": "instant quote funnel, policy comparison showcase, trust badge integration, referral capture pipeline",
+        "hook_angle": "Compete with comparison aggregators by building a local trust-first quote funnel that captures warm leads before they click away."
+    },
+    "travel agency": {
+        "pain_points": "Losing bookings to OTA giants (Booking.com, Expedia) with no differentiated local expertise showcase.",
+        "buzzwords": "curated itinerary showcase, direct booking engine, destination expertise hub, group tour package pipeline",
+        "hook_angle": "Position local expertise as the differentiator with curated destination pages that capture direct bookings OTAs can't replicate."
+    },
+    "pet grooming": {
+        "pain_points": "Fully walk-in dependent with no appointment system; losing repeat clients who forget to rebook without reminders.",
+        "buzzwords": "pet appointment scheduler, breed-specific service menu, loyalty rebooking automation, before/after grooming gallery",
+        "hook_angle": "Convert one-time grooming visits into loyal recurring clients with an automated rebooking reminder system tied to their pet's breed schedule."
+    },
+    "tutoring center": {
+        "pain_points": "Parent trust hard to build without academic result showcases; losing enrollment inquiries to big tutoring chains with polished sites.",
+        "buzzwords": "student result showcase, subject specialist profiles, trial session funnel, parent testimonial pipeline",
+        "hook_angle": "Build enrollment confidence with a results-first page that showcases student improvements and captures trial session sign-ups automatically."
+    },
+    "construction company": {
+        "pain_points": "Losing project bids to competitors with professional digital portfolios; no streamlined RFQ (request for quote) pipeline.",
+        "buzzwords": "project portfolio showcase, RFQ funnel, licensed contractor credibility, material and timeline transparency",
+        "hook_angle": "Win higher-value contracts by showcasing completed projects and making it effortless for developers and homeowners to submit bid requests."
+    },
+    "florist": {
+        "pain_points": "High dependence on walk-in foot traffic with no advance order system for peak seasons (Valentine's, weddings).",
+        "buzzwords": "advance order booking, wedding floral package showcase, same-day delivery radius, seasonal arrangement gallery",
+        "hook_angle": "Capture peak-season orders weeks in advance with a booking page that showcases arrangements and locks in wedding and event contracts early."
+    },
+    "pharmacy": {
+        "pain_points": "Losing prescription refills and OTC sales to large chains; no digital presence to communicate specialty services or health packages.",
+        "buzzwords": "prescription refill portal, health package showcase, loyalty program, delivery radius highlight",
+        "hook_angle": "Retain customers from big-chain competition with a community pharmacy brand page that highlights personalized service and convenient refill ordering."
+    },
+    "logistics company": {
+        "pain_points": "Winning contracts through cold calls only; no professional digital presence to showcase fleet capacity and service coverage.",
+        "buzzwords": "freight capacity showcase, route coverage map, instant quote calculator, B2B client portal",
+        "hook_angle": "Replace cold outreach with an inbound quote funnel that showcases fleet capacity and lets B2B clients request freight quotes instantly."
+    },
+    "car dealership": {
+        "pain_points": "Inventory buried on generic platforms; no immersive digital showroom to qualify serious buyers before they walk in.",
+        "buzzwords": "digital showroom, vehicle detail pages, trade-in valuation funnel, financing pre-qualification",
+        "hook_angle": "Build a digital showroom that lets serious buyers filter inventory, calculate financing, and book test drives — reducing floor time wasted on tire-kickers."
+    },
+    "spa": {
+        "pain_points": "Appointment slots going unfilled mid-week; no package upsell system to increase average transaction value per visit.",
+        "buzzwords": "treatment menu showcase, package bundle upsell, online slot booking, membership tier pipeline",
+        "hook_angle": "Fill mid-week dead slots with targeted package promotions and convert single-visit clients into recurring membership holders automatically."
+    },
     "default": {
         "pain_points": "Missing localized digital market share; high customer conversion friction due to zero centralized information/authority hub.",
         "buzzwords": "localized search footprint, consumer trust alignment, streamlined digital pipeline, automated conversion workflows",

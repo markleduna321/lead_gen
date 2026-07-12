@@ -111,13 +111,19 @@ def save_job_leads(leads):
         INSERT INTO prospects (
             business_name, category, formatted_address, google_place_id,
             lead_type, source_platform, website_url, email,
-            suggested_angle, status
+            suggested_angle, job_via, job_salary, job_schedule,
+            job_description, job_apply_link, status
         )
         VALUES %s
         ON CONFLICT (google_place_id) DO UPDATE SET
-            website_url    = COALESCE(EXCLUDED.website_url, prospects.website_url),
-            email          = COALESCE(EXCLUDED.email,       prospects.email),
-            suggested_angle = COALESCE(EXCLUDED.suggested_angle, prospects.suggested_angle);
+            website_url     = COALESCE(EXCLUDED.website_url,     prospects.website_url),
+            email           = COALESCE(EXCLUDED.email,           prospects.email),
+            suggested_angle = COALESCE(EXCLUDED.suggested_angle, prospects.suggested_angle),
+            job_via         = COALESCE(EXCLUDED.job_via,         prospects.job_via),
+            job_salary      = COALESCE(EXCLUDED.job_salary,      prospects.job_salary),
+            job_schedule    = COALESCE(EXCLUDED.job_schedule,    prospects.job_schedule),
+            job_description = COALESCE(EXCLUDED.job_description, prospects.job_description),
+            job_apply_link  = COALESCE(EXCLUDED.job_apply_link,  prospects.job_apply_link);
     """
     data_tuples = [
         (
@@ -130,6 +136,11 @@ def save_job_leads(leads):
             lead.get("website_url"),
             lead.get("email"),
             f"Hiring '{lead.get('job_role_signal', lead['job_title'])[:80]}' — outsourcing opportunity",
+            lead.get("job_via", ""),
+            lead.get("job_salary", ""),
+            lead.get("job_schedule", ""),
+            lead.get("job_description", ""),
+            lead.get("job_apply_link", ""),
             "discovered",
         )
         for lead in leads
@@ -194,6 +205,10 @@ def run_job_discovery(service_type, country=""):
                 # Deterministic unique ID from company + role to prevent re-ingesting duplicates
                 unique_id = f"job_{uuid.uuid5(uuid.NAMESPACE_DNS, company.lower() + role).hex[:16]}"
 
+                detected_ext = job.get("detected_extensions") or {}
+                apply_options = job.get("apply_options") or []
+                description = (job.get("description") or "").strip()
+
                 all_leads.append(
                     {
                         "company_name": company,
@@ -202,6 +217,11 @@ def run_job_discovery(service_type, country=""):
                         "unique_id": unique_id,
                         "lead_type": service_type,
                         "job_role_signal": role,
+                        "job_via": (job.get("via") or "").strip()[:100],
+                        "job_description": description[:600],
+                        "job_salary": (detected_ext.get("salary") or detected_ext.get("salary_estimate") or "").strip()[:100],
+                        "job_schedule": (detected_ext.get("schedule_type") or "").strip()[:50],
+                        "job_apply_link": apply_options[0].get("link", "") if apply_options else "",
                     }
                 )
 

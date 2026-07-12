@@ -61,6 +61,12 @@ def run_startup_migrations():
         "ALTER TABLE prospects ADD COLUMN IF NOT EXISTS source_platform     VARCHAR(50)   DEFAULT 'google_maps';",
         "ALTER TABLE prospects ADD COLUMN IF NOT EXISTS email               TEXT;",
         "ALTER TABLE prospects ADD COLUMN IF NOT EXISTS screenshot_path     TEXT;",
+        # Job board enrichment columns
+        "ALTER TABLE prospects ADD COLUMN IF NOT EXISTS job_via         TEXT;",
+        "ALTER TABLE prospects ADD COLUMN IF NOT EXISTS job_salary      TEXT;",
+        "ALTER TABLE prospects ADD COLUMN IF NOT EXISTS job_schedule    TEXT;",
+        "ALTER TABLE prospects ADD COLUMN IF NOT EXISTS job_description TEXT;",
+        "ALTER TABLE prospects ADD COLUMN IF NOT EXISTS job_apply_link  TEXT;",
         "CREATE INDEX IF NOT EXISTS idx_prospects_lead_score ON prospects (lead_score DESC);",
         "CREATE INDEX IF NOT EXISTS idx_prospects_lead_type  ON prospects (lead_type);",
         "CREATE INDEX IF NOT EXISTS idx_prospects_followup   ON prospects (followup_due_at) WHERE followup_due_at IS NOT NULL;",
@@ -134,6 +140,16 @@ def trigger_discovery_engine():
                 for industry in target_categories:
                     run_facebook_discovery(target_location, industry)
                     
+            elif platform == 'yelp':
+                from discovery_yelp import run_yelp_discovery
+                for industry in target_categories:
+                    run_yelp_discovery(target_location, industry)
+
+            elif platform == 'instagram':
+                from discovery_instagram import run_instagram_discovery
+                for industry in target_categories:
+                    run_instagram_discovery(target_location, industry)
+
             elif platform == 'linkedin':
                 print("[PIPELINE NOTICE] LinkedIn channel skipped. Testing Meta focus phase.")
                 continue
@@ -355,7 +371,8 @@ def get_review_queue():
                suggested_angle, subject_line, ai_pitch_draft,
                phone, email, formatted_address,
                website_url, google_place_id, screenshot_path,
-               followup_due_at, status
+               followup_due_at, status,
+               job_via, job_salary, job_schedule, job_description, job_apply_link
         FROM prospects
         {where_clause}
         ORDER BY {order_clause}
