@@ -357,25 +357,83 @@
             <div
                 class="lg:col-span-2 bg-slate-950 border border-slate-800 rounded-xl p-5 shadow-xl flex flex-col justify-between min-h-[680px]">
                 <div>
-                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-                        <h2 class="text-lg font-semibold text-slate-300">Pipeline Master Log</h2>
+                    <div class="space-y-3 mb-4">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <h2 class="text-lg font-semibold text-slate-300">Pipeline Master Log</h2>
+                            <div class="relative max-w-xs w-full">
+                                <input id="table-search-input" type="text" oninput="handleSearchFilteringInput(this.value)"
+                                    placeholder="🔍 Search name, industry, email..."
+                                    class="w-full bg-slate-900 border border-slate-800 rounded-lg pl-3 pr-3 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-emerald-500">
+                            </div>
+                        </div>
 
-                        <div class="relative max-w-xs w-full">
-                            <input id="table-search-input" type="text" oninput="handleSearchFilteringInput(this.value)"
-                                placeholder="🔍 Search name or industry..."
-                                class="w-full bg-slate-900 border border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-emerald-500">
+                        <!-- Filter bar -->
+                        <div class="flex flex-wrap items-center gap-2 p-2.5 bg-slate-900/60 border border-slate-800 rounded-xl">
+                            <span class="text-[10px] font-bold uppercase tracking-widest text-slate-600 mr-1">Filter</span>
+
+                            <select id="filter-source" onchange="handleFilterChange()"
+                                class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-slate-300 focus:outline-none focus:border-emerald-500 cursor-pointer">
+                                <option value="">All Sources</option>
+                                <option value="google_maps">📍 Google Maps</option>
+                                <option value="facebook">📱 Facebook</option>
+                                <option value="job_board">🎯 Job Board</option>
+                                <option value="linkedin">🔗 LinkedIn</option>
+                            </select>
+
+                            <select id="filter-lead-type" onchange="handleFilterChange()"
+                                class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-slate-300 focus:outline-none focus:border-purple-500 cursor-pointer">
+                                <option value="">All Types</option>
+                                <option value="web_design">🌐 Web Design</option>
+                                <option value="video_editing">🎬 Video Editing</option>
+                                <option value="bpo_customer_service">📞 Customer Service</option>
+                                <option value="bpo_data_entry">📋 Data Entry</option>
+                                <option value="social_media_management">📱 Social Media</option>
+                                <option value="virtual_assistant">💼 Virtual Assistant</option>
+                            </select>
+
+                            <select id="filter-status" onchange="handleFilterChange()"
+                                class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-slate-300 focus:outline-none focus:border-amber-500 cursor-pointer">
+                                <option value="">All Statuses</option>
+                                <option value="discovered">Discovered</option>
+                                <option value="drafted">Drafted</option>
+                                <option value="sent">Sent</option>
+                                <option value="followup_1">Follow-Up 1</option>
+                                <option value="followup_2">Follow-Up 2</option>
+                                <option value="cold">Cold</option>
+                                <option value="closed_won">Closed Won</option>
+                                <option value="rejected">Archived</option>
+                            </select>
+
+                            <div class="h-4 w-px bg-slate-800 mx-0.5"></div>
+
+                            <select id="filter-sort" onchange="handleFilterChange()"
+                                class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-slate-300 focus:outline-none focus:border-slate-500 cursor-pointer">
+                                <option value="lead_score">↓ Lead Score</option>
+                                <option value="date_desc">↓ Date Added</option>
+                                <option value="date_asc">↑ Date Added</option>
+                                <option value="rating">↓ Rating</option>
+                                <option value="reviews">↓ Reviews</option>
+                            </select>
+
+                            <button id="btn-clear-filters" onclick="clearFilters()"
+                                class="hidden ml-auto bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-400 text-xs px-2.5 py-1 rounded-lg transition cursor-pointer">
+                                ✕ Clear
+                            </button>
+                            <span id="filter-active-badge" class="hidden text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-900/50 text-emerald-400 border border-emerald-800">
+                                Filtered
+                            </span>
                         </div>
                     </div>
 
                     <div class="overflow-x-auto">
                         <table class="w-full text-left text-sm">
                             <thead>
-                                <tr class="border-b border-slate-800 text-slate-400 font-medium">
-                                    <th class="p-3">Business Name</th>
-                                    <th class="p-3">Industry</th>
+                                <tr class="border-b border-slate-800 text-slate-500 text-[10px] font-bold uppercase tracking-wider">
+                                    <th class="p-3 text-left">Business</th>
+                                    <th class="p-3 text-left">Industry / Role</th>
                                     <th class="p-3 text-center">Source</th>
-                                    <th class="p-3 text-center">Rating</th>
-                                    <th class="p-3">Status</th>
+                                    <th class="p-3 text-center">Score</th>
+                                    <th class="p-3 text-left">Status</th>
                                 </tr>
                             </thead>
                             <tbody id="table-body"></tbody>
@@ -481,6 +539,10 @@
         let currentPage = 1;
         const rowsPerPage = 10;
         let searchFilterString = "";
+        let activeSourceFilter = "";
+        let activeLeadTypeFilter = "";
+        let activeStatusFilter = "";
+        let activeSortBy = "lead_score";
         let debounceTimer = null;
         let globalMetricsTracker = { total: 0, pending: 0, sent: 0, followup: 0 };
 
@@ -609,8 +671,16 @@
 
         async function loadQueue() {
             try {
-                const endpointUrl = `/api/queue?page=${currentPage}&per_page=${rowsPerPage}&q=${encodeURIComponent(searchFilterString)}`;
-                const res = await fetch(endpointUrl);
+                const params = new URLSearchParams({
+                    page: currentPage,
+                    per_page: rowsPerPage,
+                    q: searchFilterString,
+                    source: activeSourceFilter,
+                    lead_type: activeLeadTypeFilter,
+                    status_filter: activeStatusFilter,
+                    sort_by: activeSortBy,
+                });
+                const res = await fetch(`/api/queue?${params}`);
                 const data = await res.json();
 
                 if (data.status === 'success') {
@@ -674,8 +744,43 @@
             debounceTimer = setTimeout(() => {
                 searchFilterString = value.trim();
                 currentPage = 1;
+                updateFilterBadge();
                 loadQueue();
             }, 350);
+        }
+
+        function handleFilterChange() {
+            activeSourceFilter   = document.getElementById('filter-source').value;
+            activeLeadTypeFilter = document.getElementById('filter-lead-type').value;
+            activeStatusFilter   = document.getElementById('filter-status').value;
+            activeSortBy         = document.getElementById('filter-sort').value;
+            currentPage = 1;
+            resetWorkspace();
+            updateFilterBadge();
+            loadQueue();
+        }
+
+        function clearFilters() {
+            document.getElementById('filter-source').value    = '';
+            document.getElementById('filter-lead-type').value = '';
+            document.getElementById('filter-status').value    = '';
+            document.getElementById('filter-sort').value      = 'lead_score';
+            document.getElementById('table-search-input').value = '';
+            activeSourceFilter = ''; activeLeadTypeFilter = '';
+            activeStatusFilter = ''; activeSortBy = 'lead_score';
+            searchFilterString = '';
+            currentPage = 1;
+            resetWorkspace();
+            updateFilterBadge();
+            loadQueue();
+        }
+
+        function updateFilterBadge() {
+            const isFiltered = activeSourceFilter || activeLeadTypeFilter ||
+                               activeStatusFilter || searchFilterString ||
+                               activeSortBy !== 'lead_score';
+            document.getElementById('btn-clear-filters').classList.toggle('hidden', !isFiltered);
+            document.getElementById('filter-active-badge').classList.toggle('hidden', !isFiltered);
         }
 
         const statusBadges = {
@@ -726,13 +831,18 @@
                 tr.className = `border-b border-slate-900 hover:bg-slate-900/50 cursor-pointer transition ${selectedLeadId === lead.id ? 'bg-slate-900' : ''}`;
                 tr.onclick = () => { if (!isWorking) selectLead(lead); };
 
-                const ratingDisplay = lead.rating ? parseFloat(lead.rating).toFixed(1) : '0.0';
+                const score = lead.lead_score || 0;
+                const scoreColor = score >= 70 ? 'text-emerald-400' : (score >= 40 ? 'text-amber-400' : 'text-slate-500');
+                const scoreBg   = score >= 70 ? 'bg-emerald-950/50' : (score >= 40 ? 'bg-amber-950/50' : 'bg-slate-900');
+                const emailDot  = lead.email
+                    ? '<span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 ml-1.5 mb-0.5" title="Email found"></span>'
+                    : '';
 
                 tr.innerHTML = `
-                    <td class="p-3 font-medium text-slate-200">${lead.business_name}</td>
-                    <td class="p-3 text-slate-400">${lead.category}</td>
+                    <td class="p-3 font-medium text-slate-200 max-w-[180px] truncate">${lead.business_name}${emailDot}</td>
+                    <td class="p-3 text-slate-400 text-xs max-w-[160px] truncate">${lead.category}</td>
                     <td class="p-3 text-center">${renderSourceBadge(lead.source_platform, lead.google_place_id)}</td>
-                    <td class="p-3 text-center text-amber-400 font-bold font-mono">★ ${ratingDisplay}</td> 
+                    <td class="p-3 text-center"><span class="inline-block font-bold font-mono text-xs px-2 py-0.5 rounded ${scoreColor} ${scoreBg}">${score}</span></td>
                     <td class="p-3">${statusBadges[lead.status] || lead.status}</td>
                 `;
                 tbody.appendChild(tr);

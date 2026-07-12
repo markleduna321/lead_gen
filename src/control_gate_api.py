@@ -292,14 +292,48 @@ def get_review_queue():
     page = int(request.args.get('page', 1))
     per_page = int(request.args.get('per_page', 10))
     search_query = request.args.get('q', '').strip()
+    source_filter = request.args.get('source', '').strip()
+    lead_type_filter = request.args.get('lead_type', '').strip()
+    status_filter = request.args.get('status_filter', '').strip()
+    sort_by = request.args.get('sort_by', 'lead_score').strip()
     offset = (page - 1) * per_page
 
-    where_clause = "WHERE status != 'rejected'"
+    # Whitelist sort options — never interpolate user input directly into SQL
+    SORT_MAP = {
+        'lead_score': 'COALESCE(lead_score, 0) DESC, id DESC',
+        'date_desc':  'id DESC',
+        'date_asc':   'id ASC',
+        'rating':     'rating DESC NULLS LAST, id DESC',
+        'reviews':    'review_count DESC NULLS LAST, id DESC',
+    }
+    order_clause = SORT_MAP.get(sort_by, SORT_MAP['lead_score'])
+
+    conditions = []
     query_params = []
 
+    # Status — show all except rejected by default; show rejected only when explicitly selected
+    if status_filter:
+        conditions.append("status = %s")
+        query_params.append(status_filter)
+    else:
+        conditions.append("status != 'rejected'")
+
+    # Full-text search across name, category, and email
     if search_query:
-        where_clause += " AND (business_name ILIKE %s OR category ILIKE %s)"
-        query_params.extend([f"%{search_query}%", f"%{search_query}%"])
+        conditions.append("(business_name ILIKE %s OR category ILIKE %s OR COALESCE(email, '') ILIKE %s)")
+        query_params.extend([f"%{search_query}%"] * 3)
+
+    # Source platform filter
+    if source_filter:
+        conditions.append("COALESCE(source_platform, 'google_maps') = %s")
+        query_params.append(source_filter)
+
+    # Lead type filter
+    if lead_type_filter:
+        conditions.append("COALESCE(lead_type, 'web_design') = %s")
+        query_params.append(lead_type_filter)
+
+    where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
 
     metrics_query = f"""
         SELECT
@@ -324,7 +358,7 @@ def get_review_queue():
                followup_due_at, status
         FROM prospects
         {where_clause}
-        ORDER BY COALESCE(lead_score, 0) DESC, id DESC
+        ORDER BY {order_clause}
         LIMIT %s OFFSET %s;
     """
 
