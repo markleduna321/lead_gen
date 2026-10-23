@@ -34,10 +34,18 @@ def canonical_social_profile(source: str, url: str) -> tuple[str, str]:
     return prefix + uuid.uuid5(uuid.NAMESPACE_URL, canonical).hex, canonical
 
 
-def load_existing_social_ids(dsn: str | None, source: str) -> set[str]:
+def load_existing_social_ids(dsn: str | None, source: str, user_id: int | None = None) -> set[str]:
+    """Profiles this account already holds.
+
+    Scoped per account: an unscoped read would let one user's saved profiles
+    silently suppress another user's discovery results.
+    """
     with psycopg2.connect(dsn) as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT google_place_id, profile_url FROM prospects;")
+            cur.execute(
+                "SELECT google_place_id, profile_url FROM prospects WHERE user_id = %s;",
+                (user_id,),
+            )
             rows = cur.fetchall()
     identities = set()
     for place_id, profile_url in rows:

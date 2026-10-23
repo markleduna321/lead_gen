@@ -19,6 +19,7 @@ from hiring_services import (
 )
 from discovery_runs import LocalDiscoveryRuns
 from test_discovery_runs import ImmediateThread
+from support import QA_USER_ID, signed_in_client
 
 
 PAYLOAD = {
@@ -85,7 +86,7 @@ class HiringServiceTests(unittest.TestCase):
         connection = database.__enter__.return_value
         cursor = connection.cursor.return_value.__enter__.return_value
         with patch("psycopg2.connect", return_value=database):
-            created = create_hiring_service("qa-only", PAYLOAD)
+            created = create_hiring_service("qa-only", PAYLOAD, QA_USER_ID)
             statement, args = cursor.execute.call_args.args
             self.assertIn("INSERT INTO hiring_services", statement)
             self.assertEqual(args[:3], (created.id, "Bookkeeping", "bookkeeping"))
@@ -96,10 +97,10 @@ class HiringServiceTests(unittest.TestCase):
                 "service_id": created.id, "name": args[1],
                 "roles": list(args[3].adapted), "title_phrases": list(args[4].adapted),
             }]
-            listed = list_hiring_services("qa-only")
+            listed = list_hiring_services("qa-only", QA_USER_ID)
             self.assertEqual(listed[-1], created)
             cursor.fetchall.return_value = []
-            self.assertEqual(list_hiring_services("qa-only"), list(BUILTIN_SERVICES.values()))
+            self.assertEqual(list_hiring_services("qa-only", QA_USER_ID), list(BUILTIN_SERVICES.values()))
         connection.commit.assert_called_once()
 
     def test_duplicate_database_names_and_failed_writes_propagate(self):
@@ -113,7 +114,7 @@ class HiringServiceTests(unittest.TestCase):
             with self.subTest(error=error), patch("psycopg2.connect", return_value=database):
                 cursor.execute.side_effect = error
                 with self.assertRaises(expected):
-                    create_hiring_service("qa-only", PAYLOAD)
+                    create_hiring_service("qa-only", PAYLOAD, QA_USER_ID)
         connection.commit.assert_not_called()
 
     def test_corrupt_stored_definitions_fail_explicitly_instead_of_empty_success(self):
@@ -127,8 +128,8 @@ class HiringServiceTests(unittest.TestCase):
             cursor.fetchall.return_value = [row]
             with self.subTest(row=row), patch("psycopg2.connect", return_value=database):
                 with self.assertRaises(ValueError):
-                    list_hiring_services("qa-only")
-                response = self.api.app.test_client().get("/api/hiring-services")
+                    list_hiring_services("qa-only", QA_USER_ID)
+                response = signed_in_client(self.api.app).get("/api/hiring-services")
                 self.assertEqual(response.status_code, 500)
                 self.assertEqual(response.json["status"], "error")
                 self.assertNotIn("services", response.json)
@@ -139,13 +140,13 @@ class HiringServiceTests(unittest.TestCase):
         cursor = connection.cursor.return_value.__enter__.return_value
         cursor.execute.side_effect = psycopg2.errors.UniqueViolation("QA duplicate name_key")
         with patch("psycopg2.connect", return_value=database):
-            response = self.api.app.test_client().post("/api/hiring-services", json=PAYLOAD)
+            response = signed_in_client(self.api.app).post("/api/hiring-services", json=PAYLOAD)
         self.assertEqual(response.status_code, 409)
         self.assertIn("already exists", response.json["message"])
         connection.commit.assert_not_called()
 
     def test_service_api_create_list_invalid_and_database_failures(self):
-        client = self.api.app.test_client()
+        client = signed_in_client(self.api.app)
         database = MagicMock()
         cursor = database.__enter__.return_value.cursor.return_value.__enter__.return_value
         with patch("psycopg2.connect", return_value=database):
@@ -171,7 +172,7 @@ class HiringServiceTests(unittest.TestCase):
                 self.assertIn("Restart", response.json["message"])
 
     def test_custom_trigger_budget_snapshot_and_missing_definitions(self):
-        client = self.api.app.test_client()
+        client = signed_in_client(self.api.app)
         runs = Mock()
         runs.start.return_value = "qa-snapshot"
         definitions = [*BUILTIN_SERVICES.values(), SERVICE]
@@ -189,7 +190,7 @@ class HiringServiceTests(unittest.TestCase):
             definitions.clear()
             with patch.object(self.jobs, "run_job_discovery") as worker:
                 tasks[1][2]()
-                worker.assert_called_once_with(SERVICE.id, "", pages_per_role=3, service_definition=SERVICE)
+                worker.assert_called_once_with(SERVICE.id, "", pages_per_role=3, service_definition=SERVICE, user_id=QA_USER_ID)
             load.assert_called_once()
             runs.start.reset_mock()
             response = client.post("/api/trigger/discover-jobs", json={"service_types": [SERVICE.id]})
@@ -221,7 +222,7 @@ class HiringServiceTests(unittest.TestCase):
             patch.object(self.jobs, "save_job_leads") as save,
             patch("discovery_runs.threading.Thread", ImmediateThread),
         ):
-            client = self.api.app.test_client()
+            client = signed_in_client(self.api.app)
             started = client.post("/api/trigger/discover-jobs", json={
                 "service_types": [SERVICE.id], "country": "Canada", "pages_per_role": 2,
             })
@@ -235,7 +236,7 @@ class HiringServiceTests(unittest.TestCase):
         self.assertEqual(leads[0]["lead_type"], SERVICE.id)
         self.assertEqual(leads[0]["company_name"], "Right")
         with self.assertRaisesRegex(ValueError, "Unsupported hiring service"), patch.object(self.jobs, "SERPAPI_KEY", "qa-only"):
-            self.jobs.run_job_discovery(SERVICE.id)
+            self.jobs.run_job_discovery(SERVICE.id, user_id=QA_USER_ID)
 
     def test_migration_adds_only_new_table_and_has_no_historical_mutation(self):
         database = MagicMock()
@@ -250,7 +251,13 @@ class HiringServiceTests(unittest.TestCase):
         create = next(sql for sql in statements if "CREATE TABLE IF NOT EXISTS hiring_services" in sql)
         schema = (Path(__file__).resolve().parents[1] / "schema.sql").read_text()
         self.assertIn(" ".join(create.split()), " ".join(schema.split()))
-        self.assertIn("name_key TEXT NOT NULL UNIQUE", create)
+        self.assertIn("name_key TEXT NOT NULL", create)
+        # Service names are unique per account, not globally.
+        self.assertNotIn("name_key TEXT NOT NULL UNIQUE", create)
+        self.assertIn(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_hiring_services_user_name ON hiring_services (user_id, name_key);",
+            statements,
+        )
         self.assertFalse(any(sql.lstrip().upper().startswith(("INSERT ", "UPDATE ", "DELETE ")) for sql in statements))
 
     def test_custom_services_cannot_silently_use_web_design_pitch(self):

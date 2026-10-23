@@ -9,6 +9,7 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from discovery_job_contacts import find_company_contact, web_url
+from support import QA_USER_ID
 
 
 def html_page(body, status=200, headers=None):

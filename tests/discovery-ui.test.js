@@ -32,6 +32,7 @@ function setup(page = 'prospects') {
                     toggle(value, force) { if (force) classes.add(value); else classes.delete(value); }
                 },
                 setAttribute(name, value) { this.attributes[name] = value; },
+                removeAttribute(name) { delete this.attributes[name]; if (name === 'value') this.value = ''; },
                 replaceChildren(...children) { this.children = children; },
                 appendChild(child) { child.parent = this; this.children.push(child); },
                 querySelectorAll() {
@@ -274,6 +275,87 @@ test('job queue keeps API metadata through table selection, profile and email up
     assert.equal(vm.runInContext('isWorking', context), false);
 });
 
+function queueResponse(requests, filterOptions) {
+    return async (url, options) => {
+        requests.push({ url, options });
+        return { ok: true, json: async () => ({
+            status: 'success', leads: [], filter_options: filterOptions,
+            metrics: { total: 0, pending: 0, sent: 0, with_email: 0,
+                global_total: 0, global_pending: 0, global_sent: 0, global_followup: 0 }
+        }) };
+    };
+}
+
+const optionTexts = select => select.children.map(option => [option.value, option.innerText]);
+
+test('prospect filters send prospect fields and list only sources, industries and statuses in the data', async () => {
+    const { context, element } = setup('prospects');
+    const requests = [];
+    context.fetch = queueResponse(requests, {
+        source: [{ value: 'google_maps', label: 'google_maps', count: 4 }, { value: 'yelp', label: 'yelp', count: 1 }],
+        category: [{ value: 'law firm', label: 'Law firm', count: 3 }],
+        status: [{ value: 'discovered', label: 'discovered', count: 4 },
+                 { value: 'sent_followup_1', label: 'sent_followup_1', count: 1 }]
+    });
+    vm.runInContext(`
+        activeQueueView = 'prospects';
+        activeSourceFilter = 'yelp';
+        activeLeadTypeFilter = 'dentist';
+        activeStatusFilter = 'sent_followup_1';
+    `, context);
+    await context.loadQueue();
+    const url = new URL(requests[0].url, 'http://localhost');
+    assert.equal(url.pathname, '/api/queue');
+    assert.equal(url.searchParams.get('source'), 'yelp');
+    assert.equal(url.searchParams.get('category'), 'dentist');
+    assert.equal(url.searchParams.get('status_filter'), 'sent_followup_1');
+    assert.equal(url.searchParams.has('lead_type'), false);
+    assert.equal(url.searchParams.has('via'), false);
+    assert.deepEqual(optionTexts(element('filter-source')), [
+        ['', 'All Sources'], ['google_maps', 'Google Maps (4)'], ['yelp', 'Yelp (1)']
+    ]);
+    // A selected industry with no remaining rows stays selectable instead of vanishing.
+    assert.deepEqual(optionTexts(element('filter-lead-type')), [
+        ['', 'All Industries'], ['law firm', 'Law firm (3)'], ['dentist', 'dentist (0)']
+    ]);
+    assert.equal(element('filter-lead-type').value, 'dentist');
+    assert.deepEqual(optionTexts(element('filter-status')), [
+        ['', 'All Active'], ['discovered', 'Discovered (4)'], ['sent_followup_1', 'Follow-Up Sent (1)']
+    ]);
+});
+
+test('job lead filters use job boards, saved service names and job statuses', async () => {
+    const { context, element } = setup('jobs');
+    const requests = [];
+    vm.runInContext(`hiringServiceCatalog.set('${customService.id}', ${JSON.stringify(customService)});`, context);
+    context.fetch = queueResponse(requests, {
+        via: [{ value: 'linkedin', label: 'LinkedIn', count: 2 }],
+        service: [{ value: 'video_editing', label: 'video_editing', count: 1 },
+                  { value: customService.id, label: customService.id, count: 1 }],
+        status: [{ value: 'discovered', label: 'discovered', count: 2 }]
+    });
+    vm.runInContext(`
+        activeQueueView = 'jobs';
+        activeSourceFilter = 'linkedin';
+        activeLeadTypeFilter = '${customService.id}';
+        activeStatusFilter = '';
+    `, context);
+    await context.loadQueue();
+    const url = new URL(requests[0].url, 'http://localhost');
+    assert.equal(url.pathname, '/api/job-leads');
+    assert.equal(url.searchParams.get('via'), 'linkedin');
+    assert.equal(url.searchParams.get('lead_type'), customService.id);
+    assert.equal(url.searchParams.get('status'), '');
+    assert.equal(url.searchParams.has('source'), false);
+    assert.equal(url.searchParams.has('category'), false);
+    assert.deepEqual(optionTexts(element('filter-source')), [['', 'All Job Boards'], ['linkedin', 'LinkedIn (2)']]);
+    assert.deepEqual(optionTexts(element('filter-lead-type')), [
+        ['', 'All Services'], ['video_editing', 'Video Editing (1)'], [customService.id, 'Bookkeeping (1)']
+    ]);
+    assert.equal(element('filter-lead-type').value, customService.id);
+    assert.deepEqual(optionTexts(element('filter-status')), [['', 'All Active'], ['discovered', 'Discovered (2)']]);
+});
+
 test('local discovery tracks its own run without clearing shared logs', async () => {
     const { context, requests } = setup();
     await context.submitActiveDiscovery();
@@ -372,9 +454,6 @@ test('saved service is selected immediately and drives exact role budget, filter
     const label = element('custom-hiring-services').children[0];
     assert.equal(label.children[0].value, customService.id);
     assert.equal(label.children[0].checked, true);
-    const option = element('filter-lead-type').children[0];
-    assert.equal(option.value, customService.id);
-    assert.equal(option.innerText, 'Bookkeeping');
     assert.equal(context.hiringServiceLabel(customService.id), 'Bookkeeping');
     context.setDiscoveryMode('jobs');
     assert.match(element('job-search-budget').innerText, /Up to 6 Google Jobs requests/);
@@ -398,11 +477,8 @@ test('service reload restores persisted definitions without duplicate controls o
     assert.equal(element('custom-hiring-services').children.length, 1);
     assert.equal(element('custom-hiring-services').children[0].children[0].checked, false);
     element('custom-hiring-services').children[0].children[0].checked = true;
-    element('filter-lead-type').value = customService.id;
     await context.loadHiringServices();
     assert.equal(element('custom-hiring-services').children.length, 1);
-    assert.equal(element('filter-lead-type').children.length, 1);
-    assert.equal(element('filter-lead-type').value, customService.id);
     assert.equal(element('custom-hiring-services').children[0].children[0].checked, true);
     assert.equal(element('hiring-services-error').classList.contains('hidden'), true);
     const fresh = setup('discovery');
@@ -489,7 +565,13 @@ test('unknown service definitions block estimates and paid discovery, names are 
     element('new-service-phrases').value = 'bookkeeper';
     await context.saveHiringService();
     assert.match(element('custom-hiring-services').children[0].children[1].innerText, /<img src=x/);
-    assert.equal(element('filter-lead-type').children[0].innerText, hostile.name);
+    vm.runInContext(`
+        activeQueueView = 'jobs';
+        queueFilterOptions = { service: [{ value: '${hostile.id}', label: '${hostile.id}', count: 1 }] };
+        renderQueueFilterOptions();
+    `, context);
+    assert.equal(element('filter-lead-type').children[1].innerText, `${hostile.name} (1)`);
+    assert.equal(element('filter-lead-type').children[1].innerHTML, undefined);
 });
 
 test('validation prevents empty searches', async () => {
@@ -767,4 +849,103 @@ test('hiring failures and stop-waiting keep the user on the form with correct re
     assert.equal(context.queueRefreshed, undefined);
     context.stopWaitingForLocalDiscovery();
     assert.match(element('discovery-error').innerText, /Job Leads/);
+});
+
+function sessionStorageStub() {
+    const store = new Map();
+    return {
+        store,
+        getItem: key => (store.has(key) ? store.get(key) : null),
+        setItem: (key, value) => store.set(key, String(value)),
+        removeItem: key => store.delete(key)
+    };
+}
+
+test('a run that saved leads despite warnings is reported as success, not failure', async () => {
+    const { context, element } = pollingSetup({
+        state: 'succeeded', total: 2, completed: 2, saved: 12,
+        errors: [], warnings: ['google_jobs / video_editing: Contact page timed out'], logs: []
+    });
+    context.sessionStorage = sessionStorageStub();
+    await context.pollLocalDiscoveryRun('qa-run');
+    // Leads were saved, so the results must still load.
+    assert.equal(context.queueRefreshed, true);
+    assert.equal(element('discovery-error').innerText, '', 'no failure message should be shown');
+    const notice = element('queue-notice');
+    assert.match(notice.innerText, /12 leads saved/);
+    assert.match(notice.innerText, /1 step had problems/);
+    assert.match(notice.innerText, /Contact page timed out/);
+    assert.equal(notice.classList.contains('queue-notice-warn'), true);
+});
+
+test('a clean run reports the saved count without a warning style', async () => {
+    const { context, element } = pollingSetup({
+        state: 'succeeded', total: 1, completed: 1, saved: 1, errors: [], warnings: [], logs: []
+    });
+    context.sessionStorage = sessionStorageStub();
+    await context.pollLocalDiscoveryRun('qa-run');
+    const notice = element('queue-notice');
+    assert.match(notice.innerText, /1 lead saved/);
+    assert.equal(notice.classList.contains('queue-notice-warn'), false);
+});
+
+test('progress shows how many leads have been saved so far', async () => {
+    const { context, element } = pollingSetup({
+        state: 'running', total: 4, completed: 2, saved: 7, errors: [], warnings: [], logs: []
+    });
+    await context.pollLocalDiscoveryRun('qa-run');
+    assert.match(element('loading-overlay-text').innerText, /2 of 4 .* finished\. 7 leads saved so far\./);
+    assert.equal(element('discovery-progress-scans').innerText, '2 / 4');
+    assert.equal(element('discovery-progress-saved').innerText, 7);
+    assert.equal(element('discovery-progress-bar').max, 4);
+    assert.equal(element('discovery-progress-bar').value, 2);
+    assert.equal(element('discovery-progress-bar').attributes['aria-valuetext'], '2 of 4 searches completed');
+    assert.equal(element('discovery-progress-metrics').classList.contains('hidden'), false);
+});
+
+test('progress resets between operations and does not invent saved counts or percentages', () => {
+    const { context, element } = setup();
+    context.updateDiscoveryProgress({ total: 4, completed: 3, saved: 9 });
+    context.updateDiscoveryProgress();
+    assert.equal(element('discovery-progress-metrics').classList.contains('hidden'), true);
+    assert.equal(element('discovery-progress-bar').value, '');
+    assert.equal(element('discovery-progress-bar').attributes['aria-valuetext'], undefined);
+    context.updateDiscoveryProgress({ total: 0, completed: 0 });
+    assert.equal(element('discovery-progress-scans').innerText, '0 / 0');
+    assert.equal(element('discovery-progress-saved').innerText, '\u2014');
+    assert.equal(element('discovery-progress-bar').value, '');
+});
+
+test('premium activity feed keeps provider content as text', () => {
+    const { context, element } = setup();
+    context.appendTerminalLine(element('terminal-stream-log'), '<img src=x onerror=alert(1)>');
+    const line = element('terminal-stream-log').children[0];
+    assert.equal(line.className, 'discovery-log-line');
+    assert.equal(line.innerText, '<img src=x onerror=alert(1)>');
+    assert.equal(line.innerHTML, undefined);
+    assert.match(html, /aria-labelledby="discovery-progress-title"/);
+    assert.match(html, /id="loading-overlay-text" role="status" aria-live="polite"/);
+});
+
+test('a status payload without the new fields still completes safely', async () => {
+    const { context, element } = pollingSetup({
+        state: 'succeeded', total: 1, completed: 1, errors: [], logs: []
+    });
+    context.sessionStorage = sessionStorageStub();
+    await context.pollLocalDiscoveryRun('qa-run');
+    assert.equal(context.queueRefreshed, true);
+    assert.doesNotMatch(element('loading-overlay-text').innerText, /saved so far/);
+});
+
+test('the discovery summary survives the redirect to the results page', async () => {
+    const { context } = pollingSetup({
+        state: 'succeeded', total: 1, completed: 1, saved: 5, errors: [], warnings: [], logs: []
+    }, 'discovery');
+    const storage = sessionStorageStub();
+    context.sessionStorage = storage;
+    vm.runInContext("window = { location: { assign(target) { globalThis.destination = target; } } };", context);
+    await context.pollLocalDiscoveryRun('qa-run');
+    assert.equal(context.destination, '/prospects');
+    // The summary is handed over rather than flashed and lost.
+    assert.match(storage.getItem('asuratech-discovery-outcome'), /"saved":5/);
 });

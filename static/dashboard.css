@@ -152,8 +152,86 @@ input::placeholder, textarea::placeholder { color: var(--subtle); }
 #queue-title { font-size: 15px; }
 #table-body td { padding: 16px 10px; }
 #filter-sort, #filter-status, #filter-source, #filter-lead-type { max-width: 100%; }
-#loading-overlay, #job-profile-modal, #profile-modal, #bulk-pitch-modal, #screenshot-lightbox { background: #071317b8; }
-#loading-overlay > div, #job-profile-modal > div, #profile-modal > div, #bulk-pitch-modal > div { max-height: 90vh; overflow-y: auto; }
+#job-profile-modal, #profile-modal, #bulk-pitch-modal, #screenshot-lightbox { background: #071317b8; }
+#job-profile-modal > div, #profile-modal > div, #bulk-pitch-modal > div { max-height: 90vh; overflow-y: auto; }
+.discovery-progress-overlay { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 24px; background: #07171991; backdrop-filter: blur(10px); }
+.discovery-progress-overlay.hidden { display: none; }
+.discovery-progress-card { width: 100%; max-width: 620px; max-height: calc(100dvh - 48px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; background: var(--surface); border: 1px solid color-mix(in srgb, var(--border) 80%, transparent); border-radius: 24px; box-shadow: 0 32px 100px #02151240, 0 4px 16px #02151215; animation: discovery-enter .3s ease-out; }
+.discovery-progress-topline { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 22px 28px; border-bottom: 1px solid var(--border); }
+.discovery-progress-brand { display: flex; align-items: center; gap: 8px; font-size: 9px; font-weight: 750; letter-spacing: 1.2px; color: var(--text); }
+.discovery-progress-brand > span:last-child { font-weight: 500; color: var(--subtle); letter-spacing: .8px; }
+.discovery-progress-monogram { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; background: #153e34; color: #a5e9cd; font: 800 15px 'Manrope', sans-serif; letter-spacing: -1px; }
+.discovery-live-badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; border: 1px solid color-mix(in srgb, var(--accent) 16%, var(--border)); border-radius: 20px; color: var(--accent); background: var(--accent-soft); font-size: 10px; font-weight: 600; white-space: nowrap; }
+.discovery-live-badge > span, .discovery-activity-pulse { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+.discovery-progress-intro { text-align: center; padding: 24px 28px 19px; background: radial-gradient(ellipse at 50% 0, var(--accent-soft), transparent 72%); }
+.discovery-orbit { display: grid; place-items: center; position: relative; width: 62px; height: 62px; margin: 0 auto 18px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); box-shadow: 0 0 0 7px color-mix(in srgb, var(--accent-soft) 45%, transparent); }
+.discovery-orbit::before { content: ''; position: absolute; inset: -1px; border-radius: inherit; border: 1.5px solid transparent; border-top-color: var(--accent); border-right-color: color-mix(in srgb, var(--accent) 25%, transparent); animation: discovery-orbit 2s linear infinite; }
+.discovery-orbit svg { width: 30px; height: 30px; }
+.discovery-progress-eyebrow { margin: 0 0 9px; font-size: 9px; font-weight: 700; letter-spacing: 1.8px; color: var(--accent); }
+.discovery-progress-intro h2 { margin: 0; color: var(--text); font-size: clamp(22px, 3.5vw, 28px); line-height: 1.3; letter-spacing: -1px; font-weight: 750; text-wrap: balance; }
+.discovery-progress-intro h2 span { color: var(--accent); }
+#loading-overlay-text { color: var(--muted); font-size: 12px; line-height: 1.8; margin: 10px auto 0; max-width: 430px; min-height: 22px; }
+.discovery-progress-body { padding: 0 28px 24px; }
+.discovery-progress-metrics { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--border); border-radius: 12px; margin-bottom: 18px; background: var(--surface-soft); }
+.discovery-progress-metrics.hidden { display: none; }
+.discovery-progress-metrics > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 15px 18px; }
+.discovery-progress-metrics > div + div { border-left: 1px solid var(--border); }
+.discovery-progress-metrics span { color: var(--muted); font-size: 11px; }
+.discovery-progress-metrics strong { color: var(--text); font: 750 20px 'Manrope', sans-serif; letter-spacing: -.7px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.discovery-progress-metrics > div:last-child strong { color: var(--accent); }
+.discovery-progress-bar { display: block; appearance: none; width: 100%; height: 4px; border: 0; border-radius: 4px; overflow: hidden; background: var(--border); color: var(--accent); }
+.discovery-progress-bar::-webkit-progress-bar { background: var(--border); border-radius: 4px; }
+.discovery-progress-bar::-webkit-progress-value { background: var(--accent); border-radius: 4px; transition: width .4s ease; }
+.discovery-progress-bar::-moz-progress-bar { background: var(--accent); border-radius: 4px; }
+.discovery-progress-bar:indeterminate { background: linear-gradient(90deg, var(--border) 0%, var(--accent) 50%, var(--border) 100%); background-size: 200% 100%; animation: discovery-scanning 2s linear infinite; }
+.discovery-progress-bar:indeterminate::-webkit-progress-bar { background: transparent; }
+.discovery-activity-heading { display: flex; align-items: center; justify-content: space-between; margin: 22px 0 10px; }
+.discovery-activity-heading h3 { margin: 0; color: var(--text); font-size: 12px; font-weight: 650; }
+.discovery-activity-heading > span { display: flex; align-items: center; gap: 6px; color: var(--subtle); font-size: 10px; }
+.discovery-activity-pulse { opacity: .6; animation: discovery-heartbeat 2s ease-in-out infinite; }
+.discovery-activity-feed { height: 144px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--border) transparent; padding: 6px 14px; background: var(--surface-soft); border: 1px solid var(--border); border-radius: 12px; text-align: left; }
+.discovery-log-line { position: relative; padding: 10px 0 10px 14px; color: var(--muted); font: 11px/1.8 ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; border-bottom: 1px solid var(--border); }
+.discovery-log-line::before { content: ''; position: absolute; left: 0; top: 18px; width: 4px; height: 4px; border-radius: 50%; background: var(--subtle); }
+.discovery-log-line:last-child { border-bottom: 0; color: var(--text); }
+.discovery-log-success, .discovery-log-success:last-child { color: var(--accent); }
+.discovery-log-success::before { background: var(--accent); }
+.discovery-log-warning, .discovery-log-warning:last-child { color: var(--warning); }
+.discovery-log-warning::before { background: var(--warning); }
+.discovery-progress-footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 28px; border-top: 1px solid var(--border); background: var(--surface-soft); }
+.discovery-progress-footer p { display: flex; align-items: center; gap: 7px; margin: 0; color: var(--muted); font-size: 10px; }
+.discovery-progress-footer svg { width: 16px; height: 16px; color: var(--accent); flex-shrink: 0; }
+.discovery-progress-dismiss { display: inline-flex; align-items: center; justify-content: center; gap: 12px; min-height: 38px; padding: 8px 13px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font-size: 11px; font-weight: 600; transition: background .15s, border-color .15s; white-space: nowrap; }
+.discovery-progress-dismiss.hidden { display: none; }
+.discovery-progress-dismiss:hover { background: var(--surface-hover); border-color: var(--subtle); }
+@keyframes discovery-enter { from { opacity: 0; transform: translateY(10px) scale(.985); } to { opacity: 1; transform: none; } }
+@keyframes discovery-orbit { to { transform: rotate(360deg); } }
+@keyframes discovery-scanning { to { background-position: -200% 0; } }
+@keyframes discovery-heartbeat { 50% { opacity: 1; } }
+@media (max-height: 700px) {
+    .discovery-progress-intro { padding: 18px 24px; }
+    .discovery-orbit, .discovery-progress-eyebrow { display: none; }
+    .discovery-progress-intro h2 { font-size: 22px; }
+    .discovery-activity-feed { height: 80px; }
+    .discovery-activity-heading { margin-top: 14px; }
+    .discovery-progress-footer { position: sticky; bottom: 0; }
+}
+@media (max-width: 480px) {
+    .discovery-progress-overlay { padding: 14px; }
+    .discovery-progress-card { border-radius: 18px; max-height: calc(100dvh - 28px); }
+    .discovery-progress-topline, .discovery-progress-footer { padding: 16px 18px; }
+    .discovery-progress-brand > span:last-child { display: none; }
+    .discovery-progress-intro { padding: 25px 18px 20px; }
+    .discovery-progress-body { padding: 0 18px 18px; }
+    .discovery-progress-metrics > div { flex-direction: column; align-items: flex-start; gap: 5px; padding: 12px 14px; }
+    .discovery-progress-footer { flex-wrap: wrap; gap: 10px; }
+    .discovery-progress-dismiss { min-height: 44px; }
+    .discovery-activity-feed { height: 135px; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .discovery-progress-card, .discovery-orbit::before, .discovery-progress-bar:indeterminate, .discovery-activity-pulse { animation: none; }
+    .discovery-progress-dismiss { transition: none; }
+    .discovery-progress-bar::-webkit-progress-value { transition: none; }
+}
 body[data-page="discovery"] #discovery-modal { position: static; display: block; padding: 0; background: transparent; backdrop-filter: none; }
 body[data-page="discovery"] #discovery-modal > div { max-width: none; max-height: none; overflow: visible; box-shadow: var(--shadow); }
 body[data-page="discovery"] #discovery-modal [aria-label="Close discovery"], body[data-page="discovery"] #discovery-title { display: none; }
@@ -195,3 +273,59 @@ body[data-page="discovery"] #discovery-panel-local { grid-template-columns: minm
     #inspector-card { height: 650px; min-width: 0; }
     #discovery-tab-local, #discovery-tab-jobs { font-size: 12px; }
 }
+
+/* --- Sign in / Register --------------------------------------------------- */
+.auth-body { display: block; background: var(--canvas); }
+.auth-shell { min-height: 100vh; display: grid; place-items: center; padding: 32px 20px; }
+.auth-card { width: 100%; max-width: 420px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 34px 32px; box-shadow: var(--shadow); }
+.auth-card .brand { margin-bottom: 26px; }
+.auth-card h1 { font: 700 22px 'Manrope', sans-serif; letter-spacing: -.6px; margin: 0 0 6px; }
+.auth-subtitle { color: var(--muted); font-size: 13px; margin: 0 0 22px; }
+.auth-error { background: color-mix(in srgb, var(--danger) 12%, transparent); border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent); color: var(--danger); border-radius: 9px; padding: 11px 13px; font-size: 12px; font-weight: 550; margin: 0 0 18px; }
+.auth-form { display: grid; gap: 7px; }
+.auth-form label { font-size: 12px; font-weight: 600; margin-top: 9px; }
+.auth-optional { color: var(--subtle); font-weight: 400; }
+.auth-form input { background: var(--surface-soft); border: 1px solid var(--border); border-radius: 9px; padding: 11px 13px; color: var(--text); width: 100%; }
+.auth-form input:focus { outline: none; border-color: var(--accent); background: var(--surface); }
+.auth-hint { color: var(--subtle); font-size: 11px; }
+.auth-submit { margin-top: 20px; width: 100%; padding: 12px; font-size: 13px; }
+.auth-switch { text-align: center; color: var(--muted); font-size: 12px; margin: 20px 0 0; }
+.auth-switch a { color: var(--accent); font-weight: 650; }
+.sidebar-account { display: flex; align-items: center; gap: 10px; border: 1px solid var(--border); border-radius: 10px; padding: 10px; margin-top: 12px; }
+.sidebar-account .workspace-avatar { flex-shrink: 0; }
+.sidebar-account-detail { min-width: 0; flex: 1; font-size: 12px; font-weight: 600; }
+.sidebar-account-detail small { display: block; font-weight: 400; color: var(--subtle); font-size: 10px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sign-out-button { border: 1px solid var(--border); background: var(--surface); color: var(--muted); border-radius: 7px; padding: 6px 9px; font-size: 11px; font-weight: 600; cursor: pointer; }
+.sign-out-button:hover { background: var(--surface-hover); color: var(--text); }
+
+/* --- Settings ------------------------------------------------------------- */
+.settings-grid { display: grid; gap: 22px; max-width: 760px; }
+.settings-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 26px 26px 24px; box-shadow: var(--shadow); }
+.settings-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; margin-bottom: 18px; }
+.settings-heading h2 { font: 650 17px 'Manrope', sans-serif; letter-spacing: -.4px; margin: 0 0 4px; }
+.settings-subtitle { color: var(--muted); font-size: 12px; margin: 0 0 4px; }
+.settings-badge { flex-shrink: 0; border-radius: 999px; padding: 5px 11px; font-size: 10px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; white-space: nowrap; }
+.settings-badge-on { background: var(--accent-soft); color: var(--accent); }
+.settings-badge-warn { background: color-mix(in srgb, var(--warning) 15%, transparent); color: var(--warning); }
+.settings-badge-off { background: var(--surface-hover); color: var(--subtle); }
+.settings-error, .settings-notice { border-radius: 9px; padding: 10px 13px; font-size: 12px; font-weight: 550; margin: 0 0 16px; }
+.settings-error { background: color-mix(in srgb, var(--danger) 12%, transparent); border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent); color: var(--danger); }
+.settings-notice { background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); color: var(--accent); }
+.settings-form { display: grid; gap: 14px; }
+.settings-row { display: grid; gap: 6px; }
+.settings-row-split { grid-template-columns: 1fr 1fr; gap: 14px; }
+.settings-row-split > div { display: grid; gap: 6px; }
+.settings-form label { font-size: 12px; font-weight: 600; }
+.settings-optional { color: var(--subtle); font-weight: 400; }
+.settings-form input, .settings-form select { background: var(--surface-soft); border: 1px solid var(--border); border-radius: 9px; padding: 10px 12px; color: var(--text); width: 100%; }
+.settings-form input:focus, .settings-form select:focus { outline: none; border-color: var(--accent); background: var(--surface); }
+.settings-hint { color: var(--subtle); font-size: 11px; line-height: 1.5; }
+.settings-section { font: 650 13px 'Manrope', sans-serif; margin: 12px 0 0; padding-top: 16px; border-top: 1px solid var(--border); }
+.settings-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+.settings-danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 35%, transparent); }
+.settings-form button[disabled] { opacity: .55; cursor: progress; }
+@media (max-width: 640px) { .settings-row-split { grid-template-columns: 1fr; } }
+
+/* --- Discovery outcome banner --------------------------------------------- */
+.queue-notice { border-radius: 10px; padding: 11px 14px; font-size: 12px; font-weight: 550; background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); color: var(--accent); }
+.queue-notice-warn { background: color-mix(in srgb, var(--warning) 13%, transparent); border-color: color-mix(in srgb, var(--warning) 35%, transparent); color: var(--warning); }

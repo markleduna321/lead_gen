@@ -2,6 +2,49 @@ import math
 from collections.abc import Callable, Mapping
 
 
+PLACE_ID_INDEX = 4
+
+
+def attach_owner(rows: list[tuple], user_id: int) -> list[tuple]:
+    """Appends the owning account to each insert row.
+
+    The social and Yelp collectors build positional tuples, so ownership is
+    appended last to match the trailing user_id column in their INSERTs.
+    """
+    if user_id is None:
+        raise ValueError("Prospects must belong to a signed-in account.")
+    return [tuple(row) + (user_id,) for row in rows]
+
+
+def deduplicate_prospect_rows(
+    rows: list[tuple],
+    log: Callable[[str], None] | None = None,
+) -> list[tuple]:
+    """Collapse repeated google_place_id values inside a single insert batch.
+
+    ``ON CONFLICT ... DO UPDATE`` aborts if one statement touches the same
+    conflicting row twice, so each place ID may appear only once per batch.
+    NULL/blank place IDs never conflict in Postgres and are always kept.
+    """
+    unique: list[tuple] = []
+    seen: set = set()
+    for row in rows:
+        if not isinstance(row, (list, tuple)) or len(row) <= PLACE_ID_INDEX:
+            unique.append(row)
+            continue
+        place_id = row[PLACE_ID_INDEX]
+        if place_id is None or place_id == "":
+            unique.append(row)
+            continue
+        if place_id in seen:
+            if log:
+                log(f"[DEDUP] Merged repeated business in this batch: {row[0]}")
+            continue
+        seen.add(place_id)
+        unique.append(row)
+    return unique
+
+
 def within_search_radius(
     business: Mapping[str, object],
     lat: float,

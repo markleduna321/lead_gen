@@ -7,39 +7,53 @@
     {% if page == 'discovery' %}
     <div class="discovery-guidance"><strong>Make your next search count.</strong> Find local businesses for website and digital services, or use hiring signals to find companies that need your expertise. Each search has its own dedicated results page.</div>
     {% endif %}
+    {% if page == 'settings' %}
+    {% include "settings.html" %}
+    {% endif %}
 
     <div class="text-xs text-slate-400">
         <p id="hiring-services-error" role="alert" class="hidden text-red-400"></p>
         <button id="btn-reload-hiring-services" type="button" onclick="loadHiringServices()" class="hidden underline">Reload hiring services</button>
     </div>
 
-    <div id="loading-overlay"
-        class="hidden fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex flex-col items-center justify-center p-4">
-        <div class="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-
-        <div class="text-center mb-4">
-            <h3 class="text-base font-bold tracking-wider text-emerald-400 uppercase">Engine Processing Pipelines</h3>
-            <p id="loading-overlay-text" class="text-xs text-slate-500 mt-0.5 font-mono">Synchronizing telemetry
-                parameters...</p>
-        </div>
-
-        <div
-            class="max-w-xl w-full bg-slate-950 border border-slate-800 rounded-xl p-4 shadow-2xl h-48 flex flex-col justify-between">
-            <div
-                class="flex items-center justify-between border-b border-slate-900 pb-1.5 mb-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest font-sans">
-                <span>AsuraTECH Lead Engine Console Logs</span>
-                <span class="animate-pulse text-emerald-500">● Core Active</span>
+    <div id="loading-overlay" class="hidden discovery-progress-overlay">
+        <section class="discovery-progress-card" role="dialog" aria-modal="true"
+            aria-labelledby="discovery-progress-title" aria-describedby="loading-overlay-text">
+            <header class="discovery-progress-topline">
+                <span class="discovery-progress-brand"><span class="discovery-progress-monogram" aria-hidden="true">A.</span> ASURATECH <span>/ LEAD ENGINE</span></span>
+                <span class="discovery-live-badge"><span aria-hidden="true"></span> Live activity</span>
+            </header>
+            <div class="discovery-progress-intro">
+                <div class="discovery-orbit" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                        <circle cx="10.5" cy="10.5" r="5.5"/><path d="m15 15 4.5 4.5M10.5 8v5m-2.5-2.5h5"/>
+                    </svg>
+                </div>
+                <p class="discovery-progress-eyebrow">A LITTLE DISCOVERY. NEW POSSIBILITIES.</p>
+                <h2 id="discovery-progress-title">Moving your pipeline forward<span>.</span></h2>
+                <p id="loading-overlay-text" role="status" aria-live="polite">Preparing your search...</p>
             </div>
-
-            <div id="terminal-stream-log"
-                class="flex-1 overflow-y-auto font-mono text-[11px] text-slate-400 space-y-1 scrollbar-thin text-left leading-relaxed">
-                <div class="text-slate-600">&gt;_ Initializing localized sequence parameters...</div>
+            <div class="discovery-progress-body">
+                <div id="discovery-progress-metrics" class="hidden discovery-progress-metrics">
+                    <div><span>Searches completed</span><strong id="discovery-progress-scans">0 / 0</strong></div>
+                    <div><span>Leads saved</span><strong id="discovery-progress-saved">0</strong></div>
+                </div>
+                <progress id="discovery-progress-bar" class="discovery-progress-bar" aria-label="Searches completed" max="1"></progress>
+                <div class="discovery-activity-heading"><h3>Activity feed</h3><span><span class="discovery-activity-pulse" aria-hidden="true"></span> Updating live</span></div>
+                <div id="terminal-stream-log" class="discovery-activity-feed" role="region" aria-label="Discovery activity" tabindex="0">
+                    <div class="discovery-log-line">Waiting for worker updates...</div>
+                </div>
             </div>
-            <button id="btn-stop-discovery-wait" onclick="stopWaitingForLocalDiscovery()"
-                class="hidden mt-4 text-xs text-slate-300 underline cursor-pointer">
-                Stop waiting (worker continues)
-            </button>
-        </div>
+            <footer class="discovery-progress-footer">
+                <p><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="m10 2 6 2.5V10c0 4-6 7-6 7s-6-3-6-7V4.5L10 2Z"/><path d="m7 9 2 2 4-4"/></svg> Results are saved as we go.</p>
+                <button id="btn-stop-discovery-wait" type="button" onclick="stopWaitingForLocalDiscovery()"
+                    class="hidden discovery-progress-dismiss" title="Stop monitoring. The search continues in the background."
+                    aria-describedby="discovery-progress-dismiss-hint">
+                    Stop waiting <span aria-hidden="true">&rarr;</span>
+                </button>
+                <span id="discovery-progress-dismiss-hint" class="sr-only">Stops monitoring only. The worker continues in the background.</span>
+            </footer>
+        </section>
     </div>
 
     <!-- Job Board Prospect Modal -->
@@ -500,6 +514,7 @@
 
     <section aria-label="Lead workspace" class="space-y-6 {{ '' if page in ['prospects', 'jobs'] else 'workspace-hidden' }}">
         <div id="queue-error" role="alert" class="data-error hidden"></div>
+        <div id="queue-notice" role="status" class="queue-notice hidden"></div>
 
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div class="bg-slate-950 border border-slate-800 rounded-xl p-4 shadow-sm">
@@ -541,46 +556,28 @@
                         <div class="flex flex-wrap items-center gap-2 p-2.5 bg-slate-900/60 border border-slate-800 rounded-xl">
                             <span class="text-[10px] font-bold uppercase tracking-widest text-slate-600 mr-1">Filter</span>
 
-                            <select id="filter-source" onchange="handleFilterChange()"
+                            <select id="filter-source" onchange="handleFilterChange()" aria-label="Source"
                                 class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-slate-300 focus:outline-none focus:border-emerald-500 cursor-pointer">
                                 <option value="">All Sources</option>
-                                <option value="google_maps">📍 Google Maps</option>
-                                <option value="facebook">📱 Facebook</option>
-                                <option value="job_board">🎯 Job Board</option>
-                                <option value="yelp">⭐ Yelp</option>
-                                <option value="instagram">📸 Instagram</option>
-                                <option value="linkedin">🔗 LinkedIn</option>
                             </select>
 
-                            <select id="filter-lead-type" onchange="handleFilterChange()"
+                            <select id="filter-lead-type" onchange="handleFilterChange()" aria-label="Industry"
                                 class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-slate-300 focus:outline-none focus:border-purple-500 cursor-pointer">
-                                <option value="">All Types</option>
-                                <option value="web_design">🌐 Web Design</option>
-                                {% for service in hiring_builtin_services %}
-                                <option value="{{ service.id }}">{{ service.name }}</option>
-                                {% endfor %}
+                                <option value="">All Industries</option>
                             </select>
 
-                            <select id="filter-status" onchange="handleFilterChange()"
+                            <select id="filter-status" onchange="handleFilterChange()" aria-label="Status"
                                 class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-slate-300 focus:outline-none focus:border-amber-500 cursor-pointer">
-                                <option value="">All Statuses</option>
-                                <option value="discovered">Discovered</option>
-                                <option value="drafted">Drafted</option>
-                                <option value="sent">Sent</option>
-                                <option value="followup_1">Follow-Up 1</option>
-                                <option value="followup_2">Follow-Up 2</option>
-                                <option value="cold">Cold</option>
-                                <option value="closed_won">Closed Won</option>
-                                <option value="rejected">Archived</option>
+                                <option value="">All Active</option>
                             </select>
 
                             <div class="h-4 w-px bg-slate-800 mx-0.5"></div>
 
                             <select id="filter-sort" onchange="handleFilterChange()"
                                 class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-slate-300 focus:outline-none focus:border-slate-500 cursor-pointer">
+                                <option value="date_desc">↓ Newest Discovery</option>
+                                <option value="date_asc">↑ Oldest Discovery</option>
                                 <option value="lead_score">↓ Lead Score</option>
-                                <option value="date_desc">↓ Date Added</option>
-                                <option value="date_asc">↑ Date Added</option>
                                 <option value="rating">↓ Rating</option>
                                 <option value="reviews">↓ Reviews</option>
                                 <option value="company" hidden>Company</option>
@@ -721,9 +718,37 @@
         let activeSourceFilter = "";
         let activeLeadTypeFilter = "";
         let activeStatusFilter = "";
-        let activeSortBy = "lead_score";
+        let activeSortBy = "date_desc";
         let activeQueueView = "prospects";
         let debounceTimer = null;
+        let queueFilterOptions = {};
+
+        const sourceLabels = {
+            google_maps: 'Google Maps', facebook: 'Facebook', yelp: 'Yelp',
+            instagram: 'Instagram', linkedin: 'LinkedIn', job_board: 'Job Board'
+        };
+        const statusLabels = {
+            discovered: 'Discovered', drafted: 'Drafted', sent: 'Sent',
+            followup_1: 'Follow-Up 1', followup_2: 'Follow-Up 2', sent_followup_1: 'Follow-Up Sent',
+            cold: 'Cold', closed_won: 'Closed Won', rejected: 'Archived'
+        };
+        // Each queue filters on its own fields. The three selects are shared, so
+        // this maps every select to the facet and request parameter for the view.
+        const queueFilterConfig = {
+            prospects: {
+                search: '🔍 Search name, industry, email, address...',
+                source: { facet: 'source', param: 'source', all: 'All Sources', label: o => sourceLabels[o.value] || o.label },
+                type: { facet: 'category', param: 'category', all: 'All Industries', label: o => o.label },
+                status: { param: 'status_filter' }
+            },
+            jobs: {
+                search: '🔍 Search company, role, location, email...',
+                source: { facet: 'via', param: 'via', all: 'All Job Boards', label: o => o.label },
+                type: { facet: 'service', param: 'lead_type', all: 'All Services', label: o => hiringServiceLabel(o.value) },
+                status: { param: 'status' }
+            }
+        };
+        const queueFilterSelects = { source: 'filter-source', type: 'filter-lead-type', status: 'filter-status' };
         let globalMetricsTracker = { total: 0, pending: 0, sent: 0, followup: 0 };
 
         let liveLogPollingInterval = null;
@@ -750,6 +775,63 @@
             return pollLocalDiscoveryRun(runId);
         }
 
+        function updateDiscoveryProgress(run = null) {
+            const metrics = document.getElementById('discovery-progress-metrics');
+            const progress = document.getElementById('discovery-progress-bar');
+            metrics.classList.toggle('hidden', !run);
+            if (!run) {
+                progress.removeAttribute('value');
+                progress.removeAttribute('aria-valuetext');
+                return;
+            }
+            document.getElementById('discovery-progress-scans').innerText = `${run.completed} / ${run.total}`;
+            document.getElementById('discovery-progress-saved').innerText = Number.isInteger(run.saved) ? run.saved : '\u2014';
+            if (run.total > 0) {
+                progress.max = run.total;
+                progress.value = run.completed;
+                progress.setAttribute('aria-valuetext', `${run.completed} of ${run.total} searches completed`);
+            } else {
+                progress.removeAttribute('value');
+                progress.removeAttribute('aria-valuetext');
+            }
+        }
+
+        // A successful run often redirects to the results page, so its summary is
+        // handed over rather than flashed and lost.
+        function rememberDiscoveryOutcome(saved, warnings) {
+            if (saved === null && (!warnings || !warnings.length)) return;
+            try {
+                sessionStorage.setItem('asuratech-discovery-outcome',
+                    JSON.stringify({ saved, warnings: warnings || [] }));
+            } catch (error) {
+                console.warn('Discovery summary could not be stored.', error);
+            }
+        }
+
+        function showDiscoveryOutcome() {
+            const banner = document.getElementById('queue-notice');
+            if (!banner) return;
+            let outcome = null;
+            try {
+                const raw = sessionStorage.getItem('asuratech-discovery-outcome');
+                sessionStorage.removeItem('asuratech-discovery-outcome');
+                if (raw) outcome = JSON.parse(raw);
+            } catch (error) {
+                console.warn('Discovery summary could not be read.', error);
+            }
+            if (!outcome) return;
+            const saved = Number.isInteger(outcome.saved) ? outcome.saved : null;
+            const warnings = Array.isArray(outcome.warnings) ? outcome.warnings : [];
+            const counted = saved === null
+                ? 'Search finished.'
+                : `Search finished. ${saved} lead${saved === 1 ? '' : 's'} saved.`;
+            banner.innerText = warnings.length
+                ? `${counted} ${warnings.length} step${warnings.length === 1 ? '' : 's'} had problems, so some details may be missing: ${warnings.join(' | ')}`
+                : counted;
+            banner.classList.toggle('queue-notice-warn', warnings.length > 0);
+            banner.classList.remove('hidden');
+        }
+
         async function pollLocalDiscoveryRun(runId, failures = 0) {
             try {
                 const runPath = discoveryResultsView === 'jobs' ? 'job-runs' : 'runs';
@@ -765,14 +847,20 @@
                     throw new Error(data.message || 'Discovery status could not be loaded.');
                 }
                 const run = data.run;
-                if (!run || !['running', 'succeeded', 'failed'].includes(run.state) || !Array.isArray(run.logs) || !Array.isArray(run.errors)) {
+                if (!run || !['running', 'succeeded', 'failed'].includes(run.state)
+                    || !Array.isArray(run.logs) || !Array.isArray(run.errors)) {
                     throw new Error('Invalid discovery status response.');
                 }
+                const warnings = Array.isArray(run.warnings) ? run.warnings : [];
+                const saved = Number.isInteger(run.saved) ? run.saved : null;
+                updateDiscoveryProgress(run);
                 const terminal = document.getElementById('terminal-stream-log');
                 terminal.innerHTML = '';
                 run.logs.forEach(line => appendTerminalLine(terminal, line));
+                const unit = discoveryResultsView === 'jobs' ? 'service scans' : 'industry/source searches';
+                const savedSoFar = saved === null ? '' : ` ${saved} lead${saved === 1 ? '' : 's'} saved so far.`;
                 document.getElementById('loading-overlay-text').innerText =
-                    `${run.completed} of ${run.total} ${discoveryResultsView === 'jobs' ? 'service scans' : 'industry/source searches'} finished.`;
+                    `${run.completed} of ${run.total} ${unit} finished.${savedSoFar}`;
                 if (run.state === 'failed') {
                     stopWaitingForLocalDiscovery(`Discovery finished with errors. Some leads may have been saved. ${run.errors.join(' | ')}`);
                     return;
@@ -782,8 +870,14 @@
                     document.getElementById('loading-overlay').classList.add('hidden');
                     document.getElementById('btn-stop-discovery-wait').classList.add('hidden');
                     setGlobalLock(false);
+                    // Warnings mean leads were still saved, so the results are
+                    // shown as usual and the detail is carried across the redirect.
+                    rememberDiscoveryOutcome(saved, warnings);
                     if (workspacePage === 'discovery') window.location.assign(discoveryResultsView === 'jobs' ? '/job-leads' : '/prospects');
-                    else await loadQueue();
+                    else {
+                        await loadQueue();
+                        showDiscoveryOutcome();
+                    }
                     return;
                 }
                 localRunTimer = setTimeout(() => pollLocalDiscoveryRun(runId), 1000);
@@ -807,8 +901,8 @@
 
             // Render the initial handshake line immediately
             const handshakeNode = document.createElement('div');
-            handshakeNode.className = "text-emerald-500/70 font-mono text-sm mb-1";
-            handshakeNode.innerText = '> Waiting for worker updates...';
+            handshakeNode.className = 'discovery-log-line';
+            handshakeNode.innerText = 'Waiting for worker updates...';
             terminal.appendChild(handshakeNode);
 
             if (liveLogPollingInterval) clearInterval(liveLogPollingInterval);
@@ -863,21 +957,19 @@
         // Helper function to handle syntax color adjustments cleanly
         function appendTerminalLine(terminalElement, line) {
             const node = document.createElement('div');
-            node.className = "font-mono text-sm leading-relaxed mb-1";
+            node.className = 'discovery-log-line';
 
             if (line.includes('🎯') || line.includes('🔥') || line.includes('Target Acquired') || line.includes('Contact Extracted')) {
-                node.className += " text-emerald-400 font-semibold";
+                node.className += ' discovery-log-success';
             } else if (line.includes('⏭️') || line.includes('Skipped')) {
-                node.className += " text-amber-500/80";
+                node.className += ' discovery-log-warning';
             } else if (line.includes('🔗') || line.includes('Website Found')) {
-                node.className += " text-cyan-400";
+                node.className += ' discovery-log-success';
             } else if (line.includes('💾') || line.includes('🏁')) {
-                node.className += " text-indigo-400 font-semibold";
-            } else {
-                node.className += " text-slate-300";
+                node.className += ' discovery-log-success';
             }
 
-            node.innerText = `> ${line}`;
+            node.innerText = line;
             terminalElement.appendChild(node);
             terminalElement.scrollTop = terminalElement.scrollHeight;
         }
@@ -889,16 +981,13 @@
                     page: currentPage,
                     per_page: rowsPerPage,
                     q: searchFilterString,
-                    lead_type: activeLeadTypeFilter,
                     sort_by: activeSortBy,
                 });
                 const endpoint = activeQueueView === 'jobs' ? '/api/job-leads' : '/api/queue';
-                if (activeQueueView === 'jobs') {
-                    params.set('status', activeStatusFilter);
-                } else {
-                    params.set('source', activeSourceFilter);
-                    params.set('status_filter', activeStatusFilter);
-                }
+                const config = queueFilterConfig[activeQueueView];
+                params.set(config.source.param, activeSourceFilter);
+                params.set(config.type.param, activeLeadTypeFilter);
+                params.set(config.status.param, activeStatusFilter);
                 const res = await fetch(`${endpoint}?${params}`);
                 const data = await res.json();
                 if (requestId !== queueRequestId) return;
@@ -907,6 +996,8 @@
                 if (data.status === 'success') {
                     document.getElementById('queue-error').classList.add('hidden');
                     currentLeads = data.leads;
+                    queueFilterOptions = data.filter_options || {};
+                    renderQueueFilterOptions();
                     if (activeQueueView === 'jobs') {
                         globalMetricsTracker.total = data.metrics.total;
                         globalMetricsTracker.pending = data.metrics.pending;
@@ -940,13 +1031,15 @@
             activeSourceFilter = '';
             activeLeadTypeFilter = '';
             activeStatusFilter = '';
-            activeSortBy = view === 'jobs' ? 'date_desc' : 'lead_score';
+            activeSortBy = 'date_desc';
+            queueFilterOptions = {};
             document.getElementById('table-search-input').value = '';
+            document.getElementById('table-search-input').placeholder = queueFilterConfig[view].search;
             document.getElementById('filter-source').value = '';
             document.getElementById('filter-lead-type').value = '';
             document.getElementById('filter-status').value = '';
             document.getElementById('filter-sort').value = activeSortBy;
-            document.getElementById('filter-source').classList.toggle('hidden', view === 'jobs');
+            renderQueueFilterOptions();
             document.getElementById('filter-sort').querySelector('option[value="lead_score"]').hidden = view === 'jobs';
             document.getElementById('filter-sort').querySelector('option[value="rating"]').hidden = view === 'jobs';
             document.getElementById('filter-sort').querySelector('option[value="reviews"]').hidden = view === 'jobs';
@@ -1026,6 +1119,34 @@
             }, 350);
         }
 
+        function renderFilterSelect(select, allLabel, options, current, label) {
+            const values = new Set(options.map(option => option.value));
+            // Keep the active choice visible even if no rows have it any more.
+            if (current && !values.has(current)) options = [...options, { value: current, label: current, count: 0 }];
+            const all = document.createElement('option');
+            all.value = '';
+            all.innerText = allLabel;
+            select.replaceChildren(all, ...options.map(option => {
+                const node = document.createElement('option');
+                node.value = option.value;
+                node.innerText = `${label(option)} (${option.count})`;
+                return node;
+            }));
+            select.value = current;
+        }
+
+        function renderQueueFilterOptions() {
+            const config = queueFilterConfig[activeQueueView];
+            if (!config) return;
+            const facet = name => Array.isArray(queueFilterOptions[name]) ? queueFilterOptions[name] : [];
+            renderFilterSelect(document.getElementById(queueFilterSelects.source), config.source.all,
+                facet(config.source.facet), activeSourceFilter, config.source.label);
+            renderFilterSelect(document.getElementById(queueFilterSelects.type), config.type.all,
+                facet(config.type.facet), activeLeadTypeFilter, config.type.label);
+            renderFilterSelect(document.getElementById(queueFilterSelects.status), 'All Active',
+                facet('status'), activeStatusFilter, option => statusLabels[option.value] || option.value);
+        }
+
         function handleFilterChange() {
             activeSourceFilter   = document.getElementById('filter-source').value;
             activeLeadTypeFilter = document.getElementById('filter-lead-type').value;
@@ -1041,7 +1162,7 @@
             document.getElementById('filter-source').value    = '';
             document.getElementById('filter-lead-type').value = '';
             document.getElementById('filter-status').value    = '';
-            const defaultSort = activeQueueView === 'jobs' ? 'date_desc' : 'lead_score';
+            const defaultSort = 'date_desc';
             document.getElementById('filter-sort').value      = defaultSort;
             document.getElementById('table-search-input').value = '';
             activeSourceFilter = ''; activeLeadTypeFilter = '';
@@ -1056,7 +1177,7 @@
         function updateFilterBadge() {
             const isFiltered = activeSourceFilter || activeLeadTypeFilter ||
                                activeStatusFilter || searchFilterString ||
-                               activeSortBy !== (activeQueueView === 'jobs' ? 'date_desc' : 'lead_score');
+                               activeSortBy !== 'date_desc';
             document.getElementById('btn-clear-filters').classList.toggle('hidden', !isFiltered);
             document.getElementById('filter-active-badge').classList.toggle('hidden', !isFiltered);
         }
@@ -1244,6 +1365,9 @@
             toggleDiscoveryModal(false);
             setGlobalLock(true);
             const overlay = document.getElementById('loading-overlay');
+            updateDiscoveryProgress();
+            document.getElementById('terminal-stream-log').innerHTML = '';
+            appendTerminalLine(document.getElementById('terminal-stream-log'), 'Preparing your search...');
             document.getElementById('loading-overlay-text').innerText = progressText;
             overlay.classList.remove('hidden');
             try {
@@ -1474,6 +1598,9 @@
 
         async function generateSingleLeadPitch() {
             if (!selectedLeadId || isWorking) return;
+            updateDiscoveryProgress();
+            document.getElementById('terminal-stream-log').innerHTML = '';
+            document.getElementById('loading-overlay-text').innerText = 'Generating your personalized pitch...';
             setGlobalLock(true); const overlay = document.getElementById('loading-overlay'); overlay.classList.remove('hidden');
             try {
                 const res = await fetch(`/api/trigger/pitch-single/${selectedLeadId}`, { method: 'POST' });
@@ -1552,6 +1679,11 @@
                     resetWorkspace();
                     await loadQueue();
                 } else {
+                    if (data.code === 'email_not_configured'
+                        && confirm(`${data.message}\n\nOpen Settings now?`)) {
+                        window.location.assign('/settings');
+                        return;
+                    }
                     alert(`Transmission Error: ${data.message}`);
                     // Restore original button states if rejected or broken
                     btnSend.disabled = false;
@@ -1625,19 +1757,7 @@
                 label.appendChild(text);
                 return label;
             }));
-            const filter = document.getElementById('filter-lead-type');
-            if (filter) {
-                const value = filter.value;
-                filter.querySelectorAll('option[data-custom-service]').forEach(option => option.remove());
-                custom.forEach(service => {
-                    const option = document.createElement('option');
-                    option.value = service.id;
-                    option.innerText = service.name;
-                    option.setAttribute('data-custom-service', 'true');
-                    filter.appendChild(option);
-                });
-                filter.value = value;
-            }
+            if (activeQueueView === 'jobs') renderQueueFilterOptions();
             updateHiringSearchBudget();
             if (activeQueueView === 'jobs') {
                 renderTable();
@@ -1763,6 +1883,7 @@
             await fetch('/api/discovery/logs/clear', { method: 'POST' });
 
             const overlay = document.getElementById('loading-overlay');
+            updateDiscoveryProgress();
             document.getElementById('loading-overlay-text').innerText = 'Generating AI pitches for discovered leads...';
             overlay.classList.remove('hidden');
             await startLiveConsoleLogStreamingLoop();
@@ -1889,11 +2010,119 @@
             });
         }
 
+        // --- EMAIL SETTINGS (per-account sending mailbox) ---------------------
+        const EMAIL_SETTINGS_FIELDS = ['smtp_host', 'smtp_port', 'smtp_security', 'smtp_username',
+            'from_name', 'from_email', 'signature_title', 'signature_company',
+            'signature_phone', 'signature_website'];
+
+        function emailSettingsInput(field) {
+            return document.getElementById(field.replace(/_/g, '-'));
+        }
+
+        function showEmailSettingsMessage(text, isError) {
+            const error = document.getElementById('email-settings-error');
+            const notice = document.getElementById('email-settings-notice');
+            error.classList.toggle('hidden', !isError);
+            notice.classList.toggle('hidden', isError);
+            (isError ? error : notice).innerText = text;
+        }
+
+        function syncDefaultMailPort() {
+            const secure = document.getElementById('smtp-security').value === 'ssl';
+            document.getElementById('smtp-port').value = secure ? 465 : 587;
+        }
+
+        function applyEmailSettings(settings) {
+            const configured = Boolean(settings && settings.configured);
+            EMAIL_SETTINGS_FIELDS.forEach(field => {
+                const input = emailSettingsInput(field);
+                if (input) input.value = configured && settings[field] != null ? settings[field] : input.value;
+            });
+            const badge = document.getElementById('email-settings-state');
+            const verified = configured && settings.verified_at;
+            badge.innerText = !configured ? 'Not configured' : (verified ? 'Verified' : 'Saved - not tested');
+            badge.className = 'settings-badge ' + (!configured ? 'settings-badge-off'
+                : (verified ? 'settings-badge-on' : 'settings-badge-warn'));
+            // The stored password is never returned, so the field stays empty.
+            document.getElementById('smtp-password').value = '';
+            document.getElementById('smtp-password').required = !configured;
+            document.getElementById('smtp-password-hint').innerText =
+                configured ? '(leave blank to keep the saved one)' : '';
+            document.getElementById('btn-clear-email-settings').classList.toggle('hidden', !configured);
+        }
+
+        async function loadEmailSettings() {
+            try {
+                const response = await fetch('/api/email-settings');
+                const data = await response.json();
+                if (!response.ok || data.status !== 'success') {
+                    throw new Error(data.message || 'Mail settings could not be loaded.');
+                }
+                applyEmailSettings(data.settings);
+            } catch (error) {
+                console.error('Mail settings could not be loaded:', error);
+                showEmailSettingsMessage(`${error.message} Reload the page to try again.`, true);
+            }
+        }
+
+        function emailSettingsPayload() {
+            const payload = {};
+            EMAIL_SETTINGS_FIELDS.forEach(field => {
+                const input = emailSettingsInput(field);
+                if (input) payload[field] = input.value.trim();
+            });
+            payload.smtp_port = Number(document.getElementById('smtp-port').value);
+            payload.smtp_password = document.getElementById('smtp-password').value;
+            return payload;
+        }
+
+        async function submitEmailSettings(url, options, pendingText, button) {
+            button.disabled = true;
+            showEmailSettingsMessage(pendingText, false);
+            try {
+                const response = await fetch(url, options);
+                const data = await response.json();
+                if (!response.ok || data.status !== 'success') {
+                    throw new Error(data.message || 'That did not work. Please try again.');
+                }
+                applyEmailSettings(data.settings);
+                showEmailSettingsMessage(data.message, false);
+            } catch (error) {
+                console.error('Mail settings request failed:', error);
+                showEmailSettingsMessage(error.message, true);
+            } finally {
+                button.disabled = false;
+            }
+        }
+
+        function saveEmailSettings(event) {
+            event.preventDefault();
+            return submitEmailSettings('/api/email-settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(emailSettingsPayload()),
+            }, 'Saving...', document.getElementById('btn-save-email-settings'));
+        }
+
+        function sendEmailSettingsTest() {
+            return submitEmailSettings('/api/email-settings/test', { method: 'POST' },
+                'Sending a test message...', document.getElementById('btn-test-email-settings'));
+        }
+
+        function removeEmailSettings() {
+            return submitEmailSettings('/api/email-settings', { method: 'DELETE' },
+                'Removing...', document.getElementById('btn-clear-email-settings'));
+        }
+
         window.onload = () => {
             if (workspacePage === 'discovery' || workspacePage === 'jobs') loadHiringServices();
-            if (workspacePage === 'overview') loadOverview();
+            if (workspacePage === 'settings') loadEmailSettings();
+            else if (workspacePage === 'overview') loadOverview();
             else if (workspacePage === 'discovery') setDiscoveryMode('local');
-            else setQueueView(workspacePage === 'jobs' ? 'jobs' : 'prospects');
+            else {
+                setQueueView(workspacePage === 'jobs' ? 'jobs' : 'prospects');
+                showDiscoveryOutcome();
+            }
         };
 
         // LEAFLET INTERACTIVE MAP GLOBALS

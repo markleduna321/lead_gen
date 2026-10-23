@@ -1,5 +1,88 @@
 # lead_gen
 
+## Accounts and data isolation
+
+Every page and API route requires a signed-in account. Visiting any page while
+signed out redirects to `/login`; API calls return `401` with
+`{"code": "auth_required"}` so the dashboard can send you back to sign in
+instead of failing on an unexpected HTML response.
+
+| Route | Purpose |
+| --- | --- |
+| `/register` | Create an account (open registration) |
+| `/login` | Sign in |
+| `/logout` | Sign out (POST) |
+| `/api/session` | The signed-in account, or `null` |
+
+Prospects, job leads, and custom hiring services all belong to the account that
+discovered them. Two accounts can independently discover the same business or
+job posting: uniqueness is per-user (`(user_id, google_place_id)` and
+`(user_id, job_identity)`), not global. Reads, writes, exports, scoring,
+website checks, follow-up sweeps, and discovery de-duplication are all scoped
+to the signed-in account, and discovery runs and their logs are visible only to
+their owner. One account's search never blocks another's.
+
+### First-time setup
+
+```powershell
+venv\Scripts\python.exe app.py          # start once so migrations create the tables
+venv\Scripts\python.exe scripts\reset_multiuser.py --wipe
+```
+
+Startup migrations are additive and never modify existing rows, so the
+destructive half of the multi-user upgrade lives in `scripts/reset_multiuser.py`
+and must be run explicitly, once. Use `--wipe` to start clean or
+`--assign-to EMAIL` to give pre-existing leads to a registered account. It also
+promotes `user_id` to `NOT NULL`. **Back up first:**
+`pg_dump "$env:DATABASE_URL" -f backup.sql`.
+
+### Environment
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `FLASK_SECRET_KEY` | When `APP_ENV` is not `local` | Signs session cookies. Keep it stable — changing it signs everyone out |
+| `SMTP_ENCRYPTION_KEY` | To send mail | Encrypts each account's stored SMTP password |
+| `APP_ENV` | No (`local`) | `local`/`desktop` keep cookies usable over HTTP; anything else requires HTTPS |
+| `FLASK_DEBUG` | No (off) | Debug is opt-in; the Werkzeug debugger is a remote code execution path |
+| `MAX_DISCOVERY_WORKERS` | No (`4`) | Discovery searches running at once across all accounts (clamped to 1-32) |
+| `APP_HOST` / `APP_PORT` | No | Bind address, default `127.0.0.1:5000` |
+
+```powershell
+python -c "import secrets; print(secrets.token_urlsafe(48))"                      # FLASK_SECRET_KEY
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"   # SMTP_ENCRYPTION_KEY
+```
+
+Passwords are hashed with Werkzeug (scrypt). Sign-in failures return one
+generic message whether or not the email exists, and an account locks for 15
+minutes after 8 failed attempts.
+
+## Sending email
+
+There is **no shared mailbox**. Each account connects its own SMTP server on
+`/settings`, and outreach is sent from — and replies to — that address.
+Sending before setting this up returns `409` with
+`{"code": "email_not_configured"}`, and the dashboard offers to open Settings.
+
+The signature is also per-account (name, job title, company, phone, website).
+Blank fields are omitted, and all values are HTML-escaped.
+
+SMTP passwords are **encrypted, not hashed** — unlike a login password they
+have to be replayed to the mail server, so the transformation must be
+reversible. The key is `SMTP_ENCRYPTION_KEY` and never lives in the database.
+
+> **Back up `SMTP_ENCRYPTION_KEY` separately from the database.** If it is lost
+> or rotated, every stored SMTP password becomes undecryptable and each user
+> must re-enter theirs. The app says so explicitly rather than failing silently.
+
+The stored password is write-only: `GET /api/email-settings` returns a
+`configured` flag and the non-secret fields, never the password. Saving with a
+blank password keeps the stored one, so the form can be edited without the
+browser ever receiving the secret. `POST /api/email-settings/test` mails the
+account itself and records `verified_at` on success.
+
+Providers using two-factor authentication require an **app password**; spaces
+and dashes in pasted app passwords are stripped automatically.
+
 ## Workspace
 
 Run `venv\Scripts\python.exe app.py` to open the desktop application.
@@ -11,11 +94,63 @@ The shared sidebar links to four independently addressable pages:
 | Prospects | `/prospects` | Search/filter prospects, inspect profiles, generate pitches, send outreach, and export CSV |
 | Job Leads | `/job-leads` | Search/filter hiring companies, inspect job details, and update contact emails |
 | Discovery | `/discovery` | Local Businesses and Hiring Companies search forms, map, and worker progress |
+| Settings | `/settings` | Your sending mailbox and email signature |
+
+Filters are built from your own leads, so every option matches something in the
+list, with a count next to it:
+
+- **Prospects:** Source (the same platform as the row badge), Industry (matching
+  ignores letter case and extra spaces, so "Law firm" and "Law Firm" are one
+  option), and Status. Search covers name, industry, email, address, and phone.
+- **Job Leads:** Job board ("via LinkedIn" and "LinkedIn" are one option),
+  Service (built-in and custom), and Status. Search covers company, role,
+  location, email, and job board.
+
+**All Active** hides archived leads. Pick **Archived** in Status to see them.
+Source/industry/service counts follow the selected status.
 
 Discovery keeps each form's values when switching search modes. After a search
 finishes, it opens the corresponding results page. Form values reset on a full
 page navigation. Overview metrics exclude archived leads; no demo numbers are
 used. Database failures appear explicitly instead of showing empty success data.
+
+### Search outcomes and capacity
+
+A search reports three distinct outcomes:
+
+| Outcome | Meaning | What you see |
+| --- | --- | --- |
+| Succeeded | Everything worked | Results page plus "N leads saved" |
+| Succeeded with warnings | Leads were saved, but some steps failed | Results page plus an amber banner naming what failed |
+| Failed | Nothing could be saved | You stay on the form with the error |
+
+A single unreachable contact page no longer reports the whole search as failed
+while quietly having saved dozens of leads. Progress also shows the running
+saved count, and the summary is carried across the redirect to the results page.
+
+### Provider resilience
+
+SerpApi read timeouts and connection resets are common and usually succeed on a
+retry, so every provider call goes through `src/serpapi_client.py`, which
+retries transient faults (timeouts, connection errors, HTTP 429/500/502/503/504)
+up to three times with exponential backoff. Provider-reported problems such as a
+bad key or exhausted quota are **not** retried, since repeating them only wastes
+quota. When every attempt fails, the message names the search and the cause
+("the search provider timed out") rather than dumping a `HTTPSConnectionPool`
+trace.
+
+Per-business enrichment — website lookup, Facebook lookup, email crawl and
+screenshot — is best-effort. A failure there is recorded as a warning and the
+business is still saved without that detail, instead of discarding every lead
+already collected for that industry. If one source fails but another saved
+leads, the run succeeds and the failure is shown alongside the results; a run
+that saved nothing still fails.
+
+Discovery threads are pooled across every account via `MAX_DISCOVERY_WORKERS`
+(default 4), so thread count and SerpApi spend do not grow with the number of
+signed-in users. Hitting the pool limit returns `409` with a message about busy
+workers; a single account starting a second search gets the more specific
+"already running" message instead, and never consumes a slot.
 
 For local-business discovery, type at least three characters for location
 suggestions and select a match to update the map pin. **Pin** or starting a
@@ -179,7 +314,8 @@ not pages. No database-schema change is required for search depth.
 In **Discovery > Hiring Companies**, expand **Add Service**. Enter a service name,
 1-4 job-role search phrases (one per line), and 1-12 title-match phrases (one per
 line), then select **Save Service**. The service is immediately selected for the
-next search and appears in the Job Leads filter, table, and profile labels.
+next search and is used for Job Leads table and profile labels; it appears in the
+Job Leads Service filter once job leads exist for it.
 Saving only registers the definition; it does not launch provider searches.
 
 Names must contain 3-80 characters; search/match phrases must contain 3-100.
@@ -240,6 +376,14 @@ venv\Scripts\python.exe -B -m unittest discover -s tests -p "test_*.py" -v
 Route tests replace environment loading and database access with mocks. Browser
 QA should likewise use an isolated preview: importing the production API module
 normally runs startup schema migrations.
+
+Authenticated suites sign in through `tests/support.py`, which writes the
+session directly so no users table read is needed. `tests/test_auth_isolation.py`
+covers password hashing, non-enumerable sign-in failures, lockout, open-redirect
+rejection, the anonymous 401-JSON/302-page split, per-account query scoping, and
+run ownership. `tests/test_user_email.py` covers SMTP secret encryption, key
+rotation failure, settings validation, signature rendering and escaping,
+STARTTLS/SSL connection choice, and the unconfigured-mailbox paths.
 
 Hiring regression coverage includes the trigger-to-worker-to-save-to-results-API
 pipeline with real parsing, targeting, pagination, deduplication, contact matching,

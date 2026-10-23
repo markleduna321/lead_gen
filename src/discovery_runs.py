@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from copy import deepcopy
+import os
 import threading
 import uuid
 
@@ -8,7 +9,69 @@ class DiscoveryBusyError(RuntimeError):
     pass
 
 
+class DiscoveryPartialSuccess(RuntimeError):
+    """Raised when a search saved results but some sub-steps failed.
+
+    Reporting this as an outright failure would hide work that genuinely
+    succeeded: a single unreachable contact page should not make a run that
+    saved dozens of leads look like it did nothing.
+    """
+
+    def __init__(self, messages, saved: int = 0):
+        self.messages = list(messages)
+        self.saved = saved
+        super().__init__(" | ".join(self.messages))
+
+
+DEFAULT_WORKER_LIMIT = 4
+MAX_WORKER_LIMIT = 32
+_worker_slots = None
+_worker_slots_lock = threading.Lock()
+
+
+def worker_slots():
+    """Caps simultaneous discovery threads across every account.
+
+    Without a cap, each signed-in account could start its own worker, so
+    thread count and third-party API spend would grow with the user count.
+    Resolved lazily because .env is loaded after this module is imported.
+    """
+    global _worker_slots
+    with _worker_slots_lock:
+        if _worker_slots is None:
+            raw = (os.getenv("MAX_DISCOVERY_WORKERS") or "").strip()
+            try:
+                limit = int(raw) if raw else DEFAULT_WORKER_LIMIT
+            except ValueError:
+                limit = DEFAULT_WORKER_LIMIT
+            limit = max(1, min(limit, MAX_WORKER_LIMIT))
+            _worker_slots = threading.BoundedSemaphore(limit)
+            _worker_slots.limit = limit
+        return _worker_slots
+
+
+def reset_worker_slots(limit: int | None = None):
+    """Rebuilds the pool. Intended for tests and for configuration reloads."""
+    global _worker_slots
+    with _worker_slots_lock:
+        if limit is None:
+            _worker_slots = None
+            return None
+        _worker_slots = threading.BoundedSemaphore(limit)
+        _worker_slots.limit = limit
+        return _worker_slots
+
+
 class LocalDiscoveryRuns:
+    """Tracks background discovery runs, isolated per signed-in account.
+
+    Runs are owned: the busy check, status lookups, and logs are all scoped to
+    the owner so one account can neither block nor observe another's search.
+    """
+
+    # Bounded history. Sized for several accounts running searches concurrently.
+    MAX_TRACKED_RUNS = 100
+
     def __init__(self, label: str = "local"):
         self._label = label
         self._runs = {}
@@ -23,48 +86,114 @@ class LocalDiscoveryRuns:
                 logs.append(message)
                 del logs[:-50]
 
-    def snapshot(self, run_id: str) -> dict | None:
+    def snapshot(self, run_id: str, owner: object = None) -> dict | None:
         with self._lock:
             run = self._runs.get(run_id)
-            return deepcopy(run) if run else None
+            if run is None or run["owner"] != owner:
+                return None
+            return deepcopy({key: value for key, value in run.items() if key != "owner"})
 
-    def start(self, tasks: list[tuple[str, str, Callable[[], None]]], log: Callable[[str], None]) -> str:
+    def start(
+        self,
+        tasks: list[tuple[str, str, Callable[[], None]]],
+        log: Callable[[str], None],
+        owner: object = None,
+        on_thread_start: Callable[[], None] | None = None,
+    ) -> str:
         run_id = uuid.uuid4().hex
+        slots = worker_slots()
         with self._lock:
-            if any(run["state"] == "running" for run in self._runs.values()):
-                raise DiscoveryBusyError(f"A {self._label} discovery is already running. Wait for it to finish before starting another.")
-            while len(self._runs) >= 20:
-                del self._runs[next(iter(self._runs))]
+            # The owner check comes first so a user who already has a search
+            # running gets that specific message, and never consumes a slot.
+            if any(
+                run["state"] == "running" and run["owner"] == owner
+                for run in self._runs.values()
+            ):
+                raise DiscoveryBusyError(
+                    f"A {self._label} discovery is already running. "
+                    "Wait for it to finish before starting another."
+                )
+            # Non-blocking, so holding the lock cannot stall other callers.
+            if not slots.acquire(blocking=False):
+                raise DiscoveryBusyError(
+                    f"All {slots.limit} search workers are busy right now. "
+                    "Wait for a running search to finish, then try again."
+                )
+            while len(self._runs) >= self.MAX_TRACKED_RUNS:
+                # Never evict a run that is still working — with several
+                # accounts active, the oldest entry may belong to a live search.
+                stale = next(
+                    (key for key, run in self._runs.items() if run["state"] != "running"),
+                    None,
+                )
+                if stale is None:
+                    break
+                del self._runs[stale]
             self._runs[run_id] = {
                 "id": run_id, "state": "running", "total": len(tasks),
-                "completed": 0, "errors": [], "logs": [],
+                "completed": 0, "errors": [], "warnings": [], "saved": 0,
+                "logs": [], "owner": owner,
             }
+
         try:
-            thread = threading.Thread(target=self._execute, args=(run_id, tasks, log), daemon=True)
+            thread = threading.Thread(
+                target=self._execute, args=(run_id, tasks, log, on_thread_start, slots),
+                daemon=True,
+            )
             thread.start()
         except Exception:
+            slots.release()
             with self._lock:
                 self._runs[run_id]["state"] = "failed"
                 self._runs[run_id]["errors"].append("The discovery worker could not be started.")
             raise
         return run_id
 
-    def _execute(self, run_id: str, tasks: list[tuple[str, str, Callable[[], None]]], log: Callable[[str], None]) -> None:
+    def _execute(
+        self,
+        run_id: str,
+        tasks: list[tuple[str, str, Callable[[], None]]],
+        log: Callable[[str], None],
+        on_thread_start: Callable[[], None] | None = None,
+        slots=None,
+    ) -> None:
         self._context.run_id = run_id
+        if on_thread_start is not None:
+            on_thread_start()
         try:
             for source, industry, task in tasks:
                 try:
-                    task()
+                    result = task()
+                except DiscoveryPartialSuccess as partial:
+                    message = f"{source} / {industry}: {partial}"
+                    with self._lock:
+                        run = self._runs[run_id]
+                        run["warnings"].append(message)
+                        run["saved"] += partial.saved
+                    log(f"[DISCOVERY WARNING] {message}")
                 except Exception as error:
                     message = f"{source} / {industry}: {error}"
                     with self._lock:
                         self._runs[run_id]["errors"].append(message)
                     log(f"[DISCOVERY ERROR] {message}")
+                else:
+                    if isinstance(result, int) and not isinstance(result, bool):
+                        with self._lock:
+                            self._runs[run_id]["saved"] += result
                 finally:
                     with self._lock:
                         self._runs[run_id]["completed"] += 1
         finally:
             with self._lock:
                 run = self._runs[run_id]
+                # Warnings describe partial work that was still saved, so they
+                # must not turn a productive run into a failure. Likewise, if
+                # one source failed but others saved leads, the operator should
+                # get their results with the failures surfaced alongside.
+                if run["errors"] and run["saved"] > 0:
+                    run["warnings"].extend(run["errors"])
+                    run["errors"] = []
                 run["state"] = "failed" if run["errors"] else "succeeded"
             del self._context.run_id
+            if slots is not None:
+                slots.release()

@@ -25,12 +25,13 @@ Strict Copywriting Constraints:
 5. Length must be under 150 words. Focus entirely on a low-friction Call to Action (CTA), such as sending over a 2-minute interactive mockup.
 """
 
-def fetch_discovered_leads(limit=5):
-    query = "SELECT id, business_name, category, review_count, rating FROM prospects WHERE status = 'discovered' LIMIT %s;"
+def fetch_discovered_leads(limit=5, user_id=None):
+    query = ("SELECT id, business_name, category, review_count, rating FROM prospects "
+             "WHERE status = 'discovered' AND user_id = %s LIMIT %s;")
     try:
         with psycopg2.connect(DB_DSN, cursor_factory=RealDictCursor) as conn:
             with conn.cursor() as cur:
-                cur.execute(query, (limit,))
+                cur.execute(query, (user_id, limit))
                 return cur.fetchall()
     except Exception as e:
         print(f"[DATABASE ERROR] Queue read error: {e}", file=sys.stderr)
@@ -58,12 +59,13 @@ def execute_openai_generation(user_context):
         print(f"[OPENAI FAILURE] Could not generate response content: {e}", file=sys.stderr)
         return None
 
-def commit_pitch_to_lead(lead_id, angle, pitch_text):
-    query = "UPDATE prospects SET suggested_angle = %s, ai_pitch_draft = %s, status = 'drafted' WHERE id = %s;"
+def commit_pitch_to_lead(lead_id, angle, pitch_text, user_id=None):
+    query = ("UPDATE prospects SET suggested_angle = %s, ai_pitch_draft = %s, status = 'drafted' "
+             "WHERE id = %s AND user_id = %s;")
     try:
         with psycopg2.connect(DB_DSN) as conn:
             with conn.cursor() as cur:
-                cur.execute(query, (angle, pitch_text, lead_id))
+                cur.execute(query, (angle, pitch_text, lead_id, user_id))
                 conn.commit()
     except Exception as e:
         print(f"[DATABASE ERROR] Pitch sync rollback: {e}", file=sys.stderr)

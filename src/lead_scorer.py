@@ -61,7 +61,7 @@ def calculate_lead_score(lead: dict) -> int:
     return min(score, 100)
 
 
-def run_lead_scoring():
+def run_lead_scoring(user_id=None):
     """
     Calculates and writes lead_score for all prospects currently at 0 or NULL.
     Run this after any discovery pass to auto-rank the pipeline by priority.
@@ -78,8 +78,10 @@ def run_lead_scoring():
                     SELECT id, rating, review_count, email, website_url,
                            screenshot_path, site_quality_score, phone
                     FROM prospects
-                    WHERE lead_score = 0 OR lead_score IS NULL;
-                    """
+                    WHERE (lead_score = 0 OR lead_score IS NULL)
+                      AND user_id = %s;
+                    """,
+                    (user_id,),
                 )
                 leads = cur.fetchall()
 
@@ -88,10 +90,10 @@ def run_lead_scoring():
                     return 0
 
                 updates = [
-                    (calculate_lead_score(dict(lead)), lead["id"]) for lead in leads
+                    (calculate_lead_score(dict(lead)), lead["id"], user_id) for lead in leads
                 ]
                 cur.executemany(
-                    "UPDATE prospects SET lead_score = %s WHERE id = %s;", updates
+                    "UPDATE prospects SET lead_score = %s WHERE id = %s AND user_id = %s;", updates
                 )
                 conn.commit()
                 emit_ui_log(

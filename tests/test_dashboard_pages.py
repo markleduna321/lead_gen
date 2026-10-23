@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, patch
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from discovery_runs import LocalDiscoveryRuns
+from support import QA_USER_ID, signed_in_client
 
 
 class DashboardPagesTests(unittest.TestCase):
@@ -24,7 +25,7 @@ class DashboardPagesTests(unittest.TestCase):
             contextlib.redirect_stderr(io.StringIO()),
         ):
             cls.module = importlib.import_module("control_gate_api")
-        cls.client = cls.module.app.test_client()
+        cls.client = signed_in_client(cls.module.app)
 
     def test_all_pages_render_without_database_access(self):
         cases = [
@@ -75,7 +76,7 @@ class DashboardPagesTests(unittest.TestCase):
             response = self.client.get("/api/queue?source=instagram")
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json["leads"][0]["profile_url"], lead["profile_url"])
-            query, args = cursor.execute.call_args.args
+            query, args = cursor.execute.call_args_list[1].args
             self.assertIn("website_url, profile_url", query)
             self.assertIn("instagram", args)
             exported = self.client.get("/api/export")
@@ -83,6 +84,51 @@ class DashboardPagesTests(unittest.TestCase):
             self.assertEqual(rows[0]["profile_url"], lead["profile_url"])
             self.assertEqual(rows[0]["website_url"], "")
             self.assertEqual(rows[0]["email"], lead["email"])
+
+    def test_queue_filters_match_the_displayed_source_and_normalised_industry(self):
+        database = MagicMock()
+        cursor = database.__enter__.return_value.cursor.return_value.__enter__.return_value
+        cursor.fetchone.return_value = {"total": 0, "pending": 0, "sent": 0, "followup": 0}
+        cursor.fetchall.side_effect = [[], [
+            {"facet": "source", "value": "facebook", "label": "facebook", "count": 2},
+            {"facet": "category", "value": "law firm", "label": "Law firm", "count": 2},
+            {"facet": "status", "value": "sent_followup_1", "label": "sent_followup_1", "count": 1},
+            {"facet": "category", "value": "", "label": "", "count": 9},
+        ]]
+        with patch("psycopg2.connect", return_value=database):
+            response = self.client.get("/api/queue?source=Facebook&category=Law%20Firm%20&q=main")
+        self.assertEqual(response.status_code, 200)
+        query, args = cursor.execute.call_args_list[1].args
+        self.assertIn("LEFT(COALESCE(google_place_id, ''), 3) = 'fb_'", query)
+        self.assertIn("LOWER(BTRIM(COALESCE(category, ''))) = LOWER(%s)", query)
+        self.assertIn("COALESCE(formatted_address, '') ILIKE %s", query)
+        self.assertNotIn("lead_type, 'web_design') = %s", query)
+        self.assertIn("facebook", args)
+        self.assertIn("Law Firm", args)
+        self.assertEqual(response.json["filter_options"], {
+            "source": [{"value": "facebook", "label": "facebook", "count": 2}],
+            "category": [{"value": "law firm", "label": "Law firm", "count": 2}],
+            "status": [{"value": "sent_followup_1", "label": "sent_followup_1", "count": 1}],
+        })
+
+    def test_job_lead_filters_cover_job_board_and_job_search_fields(self):
+        database = MagicMock()
+        cursor = database.__enter__.return_value.cursor.return_value.__enter__.return_value
+        cursor.fetchone.return_value = {"total": 0, "pending": 0, "sent": 0, "with_email": 0}
+        cursor.fetchall.side_effect = [[], [
+            {"facet": "via", "value": "linkedin", "label": "LinkedIn", "count": 3},
+        ]]
+        with patch("psycopg2.connect", return_value=database):
+            response = self.client.get("/api/job-leads?via=LinkedIn&lead_type=video_editing&q=Toronto")
+        self.assertEqual(response.status_code, 200)
+        query, args = cursor.execute.call_args_list[1].args
+        self.assertIn("REGEXP_REPLACE(COALESCE(job_via, ''), '^\\s*via\\s+', '', 'i')", query)
+        self.assertIn("COALESCE(location, '') ILIKE %s", query)
+        self.assertIn("lead_type = %s", query)
+        self.assertIn("LinkedIn", args)
+        self.assertEqual(args.count("%Toronto%"), 5)
+        self.assertEqual(response.json["filter_options"],
+                         {"via": [{"value": "linkedin", "label": "LinkedIn", "count": 3}]})
 
     def test_profile_column_startup_migration_is_idempotent_and_has_no_backfill(self):
         database = MagicMock()
@@ -112,14 +158,22 @@ class DashboardPagesTests(unittest.TestCase):
             second = [call.args[0] for call in cursor.execute.call_args_list]
         self.assertEqual(first, second)
         add = "ALTER TABLE job_leads ADD COLUMN IF NOT EXISTS job_identity TEXT;"
-        index = "CREATE UNIQUE INDEX IF NOT EXISTS idx_job_leads_identity ON job_leads (job_identity);"
+        owner = "ALTER TABLE job_leads        ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users (id) ON DELETE CASCADE;"
+        index = "CREATE UNIQUE INDEX IF NOT EXISTS idx_job_leads_user_identity   ON job_leads (user_id, job_identity);"
         drop = "ALTER TABLE job_leads DROP CONSTRAINT IF EXISTS unique_job_lead;"
-        self.assertLess(first.index(add), first.index(index))
-        self.assertLess(first.index(index), first.index(drop))
+        # Identity and ownership must both exist before the per-user unique index.
+        self.assertLess(first.index(add), first.index(owner))
+        self.assertLess(first.index(owner), first.index(index))
+        self.assertLess(first.index(drop), first.index(index))
         schema = (Path(__file__).resolve().parents[1] / "schema.sql").read_text()
-        for statement in (add, index, drop):
+        for statement in (add, owner, index, drop):
             self.assertIn(statement, first)
             self.assertIn(statement, schema)
+        # The old global unique index must not be recreated on startup.
+        self.assertNotIn(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_job_leads_identity ON job_leads (job_identity);",
+            first,
+        )
         create = next(sql for sql in first if "CREATE TABLE IF NOT EXISTS job_leads" in sql)
         self.assertIn("job_identity    TEXT,", create)
         self.assertNotIn("UNIQUE (company_name, job_role_signal)", create)
@@ -149,12 +203,12 @@ class DashboardPagesTests(unittest.TestCase):
             self.assertEqual(lead["job_details"], details)
             self.assertEqual(lead["contact_evidence"], evidence)
             self.assertGreater(len(lead["job_description"]), 600)
-            select = cursor.execute.call_args.args[0]
+            select = cursor.execute.call_args_list[1].args[0]
             self.assertIn("job_details, contact_evidence", select)
             response = self.client.post("/api/job-leads/7/update-email", json={"email": "manual@example.test"})
             self.assertEqual(response.status_code, 200)
             sql, args = cursor.execute.call_args.args
-            self.assertEqual(args, ("manual@example.test", 7))
+            self.assertEqual(args, ("manual@example.test", 7, QA_USER_ID))
             self.assertIn("'email_status', 'manual'", sql)
             self.assertIn("'email_source_url', NULL", sql)
 

@@ -1,11 +1,11 @@
 import os
 import sys
-import requests
 import psycopg2
 from psycopg2.extras import execute_values
 from dotenv import load_dotenv
 from discovery_profiles import canonical_social_profile, load_existing_social_ids
 from discovery_industries import matching_industry_category
+from serpapi_client import fetch as serpapi_fetch
 
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 load_dotenv(os.path.join(base_dir, ".env"))
@@ -14,22 +14,24 @@ DB_DSN = os.getenv("DATABASE_URL")
 SERPAPI_KEY = os.getenv("SERPAPI_API_KEY")
 
 
-def save_instagram_leads(leads):
+def save_instagram_leads(leads, user_id):
     from control_gate_api import emit_ui_log
+    from discovery_filters import attach_owner, deduplicate_prospect_rows
 
     if not leads:
         emit_ui_log("[DATABASE] No fresh Instagram leads to ingest from this pass.")
         return
 
     insert_query = """
-        INSERT INTO prospects (business_name, category, phone, formatted_address, google_place_id, review_count, rating, email, profile_url, source_platform, status)
+        INSERT INTO prospects (business_name, category, phone, formatted_address, google_place_id, review_count, rating, email, profile_url, source_platform, status, user_id)
         VALUES %s
-        ON CONFLICT (google_place_id) DO NOTHING;
+        ON CONFLICT (user_id, google_place_id) DO UPDATE SET last_discovered_at = NOW();
     """
     try:
         with psycopg2.connect(DB_DSN) as conn:
             with conn.cursor() as cur:
-                execute_values(cur, insert_query, leads)
+                execute_values(cur, insert_query,
+                               attach_owner(deduplicate_prospect_rows(leads, emit_ui_log), user_id))
                 conn.commit()
                 emit_ui_log(f"💾 [PostgreSQL] Ingested {len(leads)} target profiles from Instagram organic sweep.")
     except Exception as e:
@@ -37,7 +39,7 @@ def save_instagram_leads(leads):
         raise
 
 
-def run_instagram_discovery(city, niche):
+def run_instagram_discovery(city, niche, user_id=None):
     """
     Uses SerpAPI Google organic search operators to surface active Instagram business
     profiles matching the target niche and city.
@@ -61,8 +63,8 @@ def run_instagram_discovery(city, niche):
     }
 
     try:
-        response = requests.get("https://serpapi.com/search", params=params, timeout=15)
-        response.raise_for_status()
+        response = serpapi_fetch(params, timeout=30, log=emit_ui_log,
+                                 label=f"Instagram search for '{niche}'")
         search_results = response.json()
         if search_results.get("error"):
             raise RuntimeError(search_results["error"])
@@ -77,7 +79,7 @@ def run_instagram_discovery(city, niche):
 
     valid_leads = []
     try:
-        existing_ids = load_existing_social_ids(DB_DSN, "instagram")
+        existing_ids = load_existing_social_ids(DB_DSN, "instagram", user_id)
     except psycopg2.Error as error:
         emit_ui_log(f"[IG DEDUP ERROR] Cannot check existing profiles; search stopped: {error}")
         raise
@@ -138,4 +140,5 @@ def run_instagram_discovery(city, niche):
         valid_leads.append(lead_tuple)
         emit_ui_log(f"✅ [IG Profile Locked] '{business_name}' → Indexed via Google site operators.")
 
-    save_instagram_leads(valid_leads)
+    save_instagram_leads(valid_leads, user_id)
+    return len(valid_leads)

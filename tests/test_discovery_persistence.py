@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, Mock, patch
 from test_discovery_filters import load_function
 from discovery_filters import filter_business_metrics
 from discovery_profiles import canonical_social_profile
+from support import QA_USER_ID
 
 
 class DiscoveryPersistenceTests(unittest.TestCase):
@@ -50,7 +51,7 @@ class DiscoveryPersistenceTests(unittest.TestCase):
                     load_function(filename, save_name, namespace)
                     worker = load_function(filename, run_name, namespace)
                     with patch.dict(sys.modules, {"control_gate_api": api, "email_hunter": hunter}):
-                        worker("Austin", "Dental Clinic")
+                        worker("Austin", "Dental Clinic", user_id=QA_USER_ID)
                     execute.assert_called_once()
                     sql, rows = execute.call_args.args[1:]
                     columns = [value.strip() for value in re.search(r"INSERT INTO prospects\s*\((.*?)\)", sql, re.S)[1].split(",")]

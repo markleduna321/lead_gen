@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from discovery_job_filters import matches_hiring_country, matches_hiring_role, resolve_hiring_country
 from discovery_job_contacts import find_company_contact, web_url
 from hiring_services import BUILTIN_SERVICES, JOB_SIGNAL_MAP, HiringService, matches_service_title
+from serpapi_client import fetch as serpapi_fetch
 
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 load_dotenv(os.path.join(base_dir, ".env"))
@@ -98,8 +99,10 @@ def deduplicate_job_leads(leads):
     return list(unique.values())
 
 
-def save_job_leads(leads):
+def save_job_leads(leads, user_id):
     from control_gate_api import emit_ui_log
+    if user_id is None:
+        raise ValueError("Job leads must belong to a signed-in account.")
     if not leads:
         emit_ui_log("[DATABASE] No job board leads found in this pass.")
         return
@@ -110,10 +113,10 @@ def save_job_leads(leads):
             company_name, job_title, location, lead_type, job_role_signal,
             job_via, job_salary, job_schedule, job_description, job_apply_link,
             website_url, email, suggested_angle, status, source_platform,
-            job_details, contact_evidence, job_identity
+            job_details, contact_evidence, job_identity, user_id
         )
         VALUES %s
-        ON CONFLICT (job_identity) DO UPDATE SET
+        ON CONFLICT (user_id, job_identity) DO UPDATE SET
             job_title       = EXCLUDED.job_title,
             location        = EXCLUDED.location,
             website_url     = COALESCE(NULLIF(EXCLUDED.website_url, ''),     job_leads.website_url),
@@ -132,6 +135,7 @@ def save_job_leads(leads):
                         THEN jsonb_build_object('email_status', 'manual', 'email_source_url', NULL,
                                                 'email_updated_at', job_leads.contact_evidence->>'email_updated_at')
                         ELSE '{}'::jsonb END,
+            last_discovered_at = NOW(),
             updated_at      = NOW();
     """
     data_tuples = [
@@ -154,6 +158,7 @@ def save_job_leads(leads):
             Json(lead["job_details"]) if lead.get("job_details") else None,
             Json(lead["contact_evidence"]) if lead.get("contact_evidence") else None,
             lead["job_identity"],
+            user_id,
         )
         for lead in leads
     ]
@@ -171,7 +176,7 @@ def save_job_leads(leads):
 
 
 
-def run_job_discovery(service_type, country="", pages_per_role=1, service_definition: HiringService | None = None):
+def run_job_discovery(service_type, country="", pages_per_role=1, service_definition: HiringService | None = None, user_id=None):
     """
     Scans Google Jobs via SerpApi to find companies actively hiring for roles
     that signal they need outsourcing — video editing, BPO, VA, social media, etc.
@@ -219,10 +224,8 @@ def run_job_discovery(service_type, country="", pages_per_role=1, service_defini
             seen_tokens = set()
             for page_number in range(1, pages_per_role + 1):
                 emit_ui_log(f"[JOB PAGE] {role}: page {page_number}/{pages_per_role}")
-                response = requests.get(
-                    "https://serpapi.com/search", params=dict(params), timeout=15
-                )
-                response.raise_for_status()
+                response = serpapi_fetch(dict(params), timeout=30, log=emit_ui_log,
+                                         label=f"Google Jobs '{role}' page {page_number}")
                 data = response.json()
                 if not isinstance(data, dict):
                     raise ValueError("Invalid Google Jobs response")
@@ -318,9 +321,15 @@ def run_job_discovery(service_type, country="", pages_per_role=1, service_defini
         lead["email"] = enrichment_cache[company_location]["email"]
         lead["contact_evidence"] = enrichment_cache[company_location].get("contact_evidence")
 
-    save_job_leads(all_leads)
+    save_job_leads(all_leads, user_id)
     if errors:
-        raise RuntimeError("Some hiring searches failed; valid postings were saved. " + " | ".join(errors))
+        # The postings were saved; a failed contact lookup must not be reported
+        # as if the whole search produced nothing.
+        from discovery_runs import DiscoveryPartialSuccess
+        emit_ui_log(
+            f"⚠️ [JOB ENGINE] Saved {len(all_leads)} lead(s); {len(errors)} step(s) had problems."
+        )
+        raise DiscoveryPartialSuccess(errors, saved=len(all_leads))
     return len(all_leads)
 
 

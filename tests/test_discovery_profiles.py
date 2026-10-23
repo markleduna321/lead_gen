@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 from test_discovery_filters import load_function
 from discovery_profiles import canonical_social_profile, load_existing_social_ids
+from support import QA_USER_ID
 
 
 class DiscoveryProfileTests(unittest.TestCase):
@@ -42,7 +43,7 @@ class DiscoveryProfileTests(unittest.TestCase):
             ("fb_serp_old", "https://facebook.com/qa"), ("legacy-no-url", None),
         ]
         with patch("psycopg2.connect", return_value=database):
-            identities = load_existing_social_ids("qa-only", "instagram")
+            identities = load_existing_social_ids("qa-only", "instagram", QA_USER_ID)
         self.assertIn("ig_serp_oldrandom", identities)
         self.assertIn(canonical_social_profile("instagram", "https://instagram.com/qa")[0], identities)
         self.assertIn("legacy-no-url", identities)
@@ -61,7 +62,7 @@ class DiscoveryProfileTests(unittest.TestCase):
                 response.json.return_value = {"organic_results": records}
                 saved_rows = []
                 known_ids = set()
-                def save(rows):
+                def save(rows, user_id=None):
                     saved_rows.extend(rows)
                     known_ids.update(row[4] for row in rows)
                 crawl = Mock(return_value="qa@example.test")

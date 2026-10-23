@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 from test_discovery_filters import load_function
 from discovery_runs import DiscoveryBusyError, LocalDiscoveryRuns
+from support import QA_USER_ID
 
 
 class ImmediateThread:
@@ -77,7 +78,7 @@ class DiscoveryRunTests(unittest.TestCase):
         with patch("discovery_runs.threading.Thread", ImmediateThread):
             old_id = runs.start([("google", "Cafe", work)], runs.record_log)
             self.assertEqual(len(runs.snapshot(old_id)["logs"]), 50)
-            for _ in range(20):
+            for _ in range(LocalDiscoveryRuns.MAX_TRACKED_RUNS):
                 runs.start([("google", "Cafe", Mock())], runs.record_log)
         self.assertIsNone(runs.snapshot(old_id))
 
@@ -127,7 +128,7 @@ class DiscoveryRunTests(unittest.TestCase):
                        "place_id": "qa", "reviews": 1, "rating": 5}
                 with patch.dict("sys.modules", {"control_gate_api": api}):
                     with self.assertRaisesRegex(RuntimeError, "QA insert failed"):
-                        save([row])
+                        save([row], QA_USER_ID)
 
     def test_google_fallback_provider_errors_are_not_silent_no_email_results(self):
         api = types.ModuleType("control_gate_api")

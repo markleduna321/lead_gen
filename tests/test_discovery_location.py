@@ -12,12 +12,6 @@ from discovery_filters import filter_business_metrics, within_search_radius
 
 class DiscoveryLocationTests(unittest.TestCase):
     def test_google_uses_pinned_coordinates_including_zero(self):
-        source = Path(__file__).resolve().parents[1] / "src" / "discovery_engine.py"
-        tree = ast.parse(source.read_text(encoding="utf-8"))
-        function = next(
-            node for node in tree.body
-            if isinstance(node, ast.FunctionDef) and node.name == "run_discovery"
-        )
         response = Mock()
         response.json.return_value = {"local_results": []}
         get = Mock(return_value=response)
@@ -25,15 +19,15 @@ class DiscoveryLocationTests(unittest.TestCase):
         api = types.ModuleType("control_gate_api")
         api.emit_ui_log = Mock()
         with patch.dict("sys.modules", {"control_gate_api": api}):
-            exec(compile(ast.Module(body=[function], type_ignores=[]), str(source), "exec"), namespace)
+            run_discovery = load_function("discovery_engine.py", "run_discovery", namespace)
             for lat, lng in [(0, 30), (30, 0), (30.2672, -97.7431)]:
                 with self.subTest(lat=lat, lng=lng):
-                    namespace["run_discovery"]("Austin", "Dental Clinic", lat=lat, lng=lng, radius_km=7)
+                    run_discovery("Austin", "Dental Clinic", lat=lat, lng=lng, radius_km=7)
                     params = get.call_args.kwargs["params"]
                     self.assertEqual(params["ll"], f"@{lat},{lng},14000m")
                     self.assertTrue(params["nearby"])
                     self.assertEqual(params["q"], "Dental Clinic")
-            namespace["run_discovery"]("Austin", "Dental Clinic")
+            run_discovery("Austin", "Dental Clinic")
             params = get.call_args.kwargs["params"]
             self.assertNotIn("ll", params)
             self.assertEqual(params["q"], "Dental Clinic Austin")

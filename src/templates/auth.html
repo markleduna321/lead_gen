@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light dark">
+    <title>{{ 'Create your account' if mode == 'register' else 'Sign in' }} | AsuraTECH</title>
+    <script src="{{ url_for('static', filename='workspace.js') }}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+</head>
+<body data-page="auth" class="auth-body">
+    <main class="auth-shell" id="main-content">
+        <section class="auth-card">
+            <a class="brand" href="/login"><span class="brand-mark">A<span>.</span></span><span>AsuraTECH<small>LEAD WORKSPACE</small></span></a>
+
+            {% if mode == 'register' %}
+            <h1>Create your account</h1>
+            <p class="auth-subtitle">Your leads, searches, and outreach stay private to you.</p>
+            {% else %}
+            <h1>Welcome back</h1>
+            <p class="auth-subtitle">Sign in to reach your lead workspace.</p>
+            {% endif %}
+
+            {% if error %}
+            <p class="auth-error" role="alert">{{ error }}</p>
+            {% endif %}
+
+            <form method="post" class="auth-form" autocomplete="on">
+                <input type="hidden" name="next" value="{{ next or '/' }}">
+
+                {% if mode == 'register' %}
+                <label for="display_name">Your name <span class="auth-optional">(optional)</span></label>
+                <input id="display_name" name="display_name" type="text" maxlength="120"
+                       autocomplete="name" value="{{ display_name or '' }}">
+                {% endif %}
+
+                <label for="email">Email address</label>
+                <input id="email" name="email" type="email" required maxlength="255"
+                       autocomplete="email" value="{{ email or '' }}" autofocus>
+
+                <label for="password">Password</label>
+                <input id="password" name="password" type="password" required
+                       autocomplete="{{ 'new-password' if mode == 'register' else 'current-password' }}"
+                       {% if mode == 'register' %}minlength="10" aria-describedby="password-hint"{% endif %}>
+                {% if mode == 'register' %}
+                <small id="password-hint" class="auth-hint">Use at least 10 characters.</small>
+
+                <label for="confirm_password">Confirm password</label>
+                <input id="confirm_password" name="confirm_password" type="password" required
+                       minlength="10" autocomplete="new-password">
+                {% endif %}
+
+                <button type="submit" class="primary-button auth-submit">
+                    {{ 'Create account' if mode == 'register' else 'Sign in' }}
+                </button>
+            </form>
+
+            <p class="auth-switch">
+                {% if mode == 'register' %}
+                Already have an account? <a href="{{ url_for('sign_in') }}">Sign in</a>
+                {% else %}
+                New here? <a href="{{ url_for('register') }}">Create an account</a>
+                {% endif %}
+            </p>
+        </section>
+    </main>
+</body>
+</html>

@@ -1,0 +1,85 @@
+<section class="settings-grid" aria-label="Email settings">
+    <div class="settings-card">
+        <div class="settings-heading">
+            <div>
+                <h2>Sending mailbox</h2>
+                <p class="settings-subtitle">Outreach is sent from your own mail account, so replies come straight back to you.</p>
+            </div>
+            <span id="email-settings-state" class="settings-badge settings-badge-off">Not configured</span>
+        </div>
+
+        <p id="email-settings-error" role="alert" class="settings-error hidden"></p>
+        <p id="email-settings-notice" role="status" class="settings-notice hidden"></p>
+
+        <form id="email-settings-form" class="settings-form" onsubmit="saveEmailSettings(event)">
+            <div class="settings-row">
+                <label for="smtp-host">Mail server</label>
+                <input id="smtp-host" name="smtp_host" type="text" required maxlength="255"
+                       placeholder="smtp.gmail.com" autocomplete="off">
+            </div>
+            <div class="settings-row settings-row-split">
+                <div>
+                    <label for="smtp-security">Security</label>
+                    <select id="smtp-security" name="smtp_security" onchange="syncDefaultMailPort()">
+                        <option value="starttls">STARTTLS (587)</option>
+                        <option value="ssl">SSL/TLS (465)</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="smtp-port">Port</label>
+                    <input id="smtp-port" name="smtp_port" type="number" min="1" max="65535" value="587">
+                </div>
+            </div>
+            <div class="settings-row">
+                <label for="smtp-username">Mail username</label>
+                <input id="smtp-username" name="smtp_username" type="text" required maxlength="255"
+                       placeholder="you@yourcompany.com" autocomplete="username">
+            </div>
+            <div class="settings-row">
+                <label for="smtp-password">Mail password <span id="smtp-password-hint" class="settings-optional"></span></label>
+                <input id="smtp-password" name="smtp_password" type="password" maxlength="512"
+                       autocomplete="new-password" aria-describedby="smtp-password-note">
+                <small id="smtp-password-note" class="settings-hint">Stored encrypted and never shown again. If your provider uses two-factor authentication, use an app password.</small>
+            </div>
+            <div class="settings-row settings-row-split">
+                <div>
+                    <label for="from-name">Sender name</label>
+                    <input id="from-name" name="from_name" type="text" maxlength="120" placeholder="Your name">
+                </div>
+                <div>
+                    <label for="from-email">Sending address</label>
+                    <input id="from-email" name="from_email" type="email" maxlength="255" placeholder="you@yourcompany.com">
+                </div>
+            </div>
+
+            <h3 class="settings-section">Signature</h3>
+            <p class="settings-subtitle">Added to the bottom of every pitch you send. Leave a field blank to omit that line.</p>
+            <div class="settings-row settings-row-split">
+                <div>
+                    <label for="signature-title">Job title</label>
+                    <input id="signature-title" name="signature_title" type="text" maxlength="120" placeholder="Solutions Architect">
+                </div>
+                <div>
+                    <label for="signature-company">Company</label>
+                    <input id="signature-company" name="signature_company" type="text" maxlength="120" placeholder="Your company">
+                </div>
+            </div>
+            <div class="settings-row settings-row-split">
+                <div>
+                    <label for="signature-phone">Phone</label>
+                    <input id="signature-phone" name="signature_phone" type="text" maxlength="60" placeholder="0995 982 2419">
+                </div>
+                <div>
+                    <label for="signature-website">Website</label>
+                    <input id="signature-website" name="signature_website" type="text" maxlength="255" placeholder="yourcompany.com">
+                </div>
+            </div>
+
+            <div class="settings-actions">
+                <button type="submit" id="btn-save-email-settings" class="primary-button">Save settings</button>
+                <button type="button" id="btn-test-email-settings" class="secondary-button" onclick="sendEmailSettingsTest()">Send test message</button>
+                <button type="button" id="btn-clear-email-settings" class="secondary-button settings-danger hidden" onclick="removeEmailSettings()">Remove</button>
+            </div>
+        </form>
+    </div>
+</section>

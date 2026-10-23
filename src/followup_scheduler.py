@@ -44,7 +44,7 @@ FOLLOWUP_SEQUENCE = {
 }
 
 
-def schedule_followup(lead_id: int, current_status: str):
+def schedule_followup(lead_id: int, current_status: str, user_id=None):
     """
     Sets followup_due_at on a lead immediately after it's sent,
     so the sweep engine knows when to stage the next message.
@@ -58,8 +58,8 @@ def schedule_followup(lead_id: int, current_status: str):
         with psycopg2.connect(DB_DSN) as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "UPDATE prospects SET followup_due_at = %s WHERE id = %s;",
-                    (due, lead_id),
+                    "UPDATE prospects SET followup_due_at = %s WHERE id = %s AND user_id = %s;",
+                    (due, lead_id, user_id),
                 )
                 conn.commit()
     except Exception as e:
@@ -68,7 +68,7 @@ def schedule_followup(lead_id: int, current_status: str):
         )
 
 
-def run_followup_sweep():
+def run_followup_sweep(user_id=None):
     """
     Background sweep: finds all leads where followup_due_at has passed
     and auto-stages the next follow-up draft for review and dispatch.
@@ -85,8 +85,10 @@ def run_followup_sweep():
                     SELECT id, business_name, status FROM prospects
                     WHERE followup_due_at <= NOW()
                       AND status IN ('sent', 'followup_1', 'followup_2')
+                      AND user_id = %s
                     ORDER BY followup_due_at ASC;
-                    """
+                    """,
+                    (user_id,),
                 )
                 due_leads = cur.fetchall()
 
@@ -102,8 +104,8 @@ def run_followup_sweep():
                     if not seq or not seq["template"]:
                         # End of sequence — mark as cold, no more follow-ups
                         cur.execute(
-                            "UPDATE prospects SET status = 'cold', followup_due_at = NULL WHERE id = %s;",
-                            (lead["id"],),
+                            "UPDATE prospects SET status = 'cold', followup_due_at = NULL WHERE id = %s AND user_id = %s;",
+                            (lead["id"], user_id),
                         )
                         emit_ui_log(
                             f"🧊 [FOLLOWUP] Sequence ended, marked cold: {lead['business_name']}"
@@ -123,9 +125,9 @@ def run_followup_sweep():
                             """
                             UPDATE prospects
                             SET ai_pitch_draft = %s, status = %s, followup_due_at = %s
-                            WHERE id = %s;
+                            WHERE id = %s AND user_id = %s;
                             """,
-                            (draft, next_status, next_due, lead["id"]),
+                            (draft, next_status, next_due, lead["id"], user_id),
                         )
                         emit_ui_log(
                             f"📩 [FOLLOWUP] Staged '{next_status}' draft for: {lead['business_name']}"

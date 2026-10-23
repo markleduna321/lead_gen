@@ -1,11 +1,11 @@
 import os
 import sys
-import requests
 import psycopg2
 from psycopg2.extras import execute_values
 from dotenv import load_dotenv
 from discovery_profiles import canonical_social_profile, load_existing_social_ids
 from discovery_industries import matching_industry_category
+from serpapi_client import fetch as serpapi_fetch
 
 
 # Initialize path mapping for environment tokens
@@ -15,28 +15,30 @@ load_dotenv(os.path.join(base_dir, ".env"))
 DB_DSN = os.getenv("DATABASE_URL")
 SERPAPI_KEY = os.getenv("SERPAPI_API_KEY")
 
-def save_facebook_leads(leads):
+def save_facebook_leads(leads, user_id):
     from control_gate_api import emit_ui_log
+    from discovery_filters import attach_owner, deduplicate_prospect_rows
     
     if not leads:
         emit_ui_log("[DATABASE] No fresh Facebook leads to ingest from this pass.")
         return
     insert_query = """
-        INSERT INTO prospects (business_name, category, phone, formatted_address, google_place_id, review_count, rating, profile_url, source_platform, status)
+        INSERT INTO prospects (business_name, category, phone, formatted_address, google_place_id, review_count, rating, profile_url, source_platform, status, user_id)
         VALUES %s
-        ON CONFLICT (google_place_id) DO NOTHING;
+        ON CONFLICT (user_id, google_place_id) DO UPDATE SET last_discovered_at = NOW();
     """
     try:
         with psycopg2.connect(DB_DSN) as conn:
             with conn.cursor() as cur:
-                execute_values(cur, insert_query, leads)
+                execute_values(cur, insert_query,
+                               attach_owner(deduplicate_prospect_rows(leads, emit_ui_log), user_id))
                 conn.commit()
                 emit_ui_log(f"💾 [PostgreSQL] Ingested {len(leads)} target profiles from Facebook organic logs.")
     except Exception as e:
         emit_ui_log(f"❌ [DB ERROR] Facebook batch write failure: {e}")
         raise
 
-def run_facebook_discovery(city, niche):
+def run_facebook_discovery(city, niche, user_id=None):
     """
     Leverages SerpApi Google Organic Search operators to bypass Meta Developer platform locks,
     discovering active regional Facebook pages matching high-intent niches.
@@ -60,8 +62,8 @@ def run_facebook_discovery(city, niche):
     }
 
     try:
-        response = requests.get("https://serpapi.com/search", params=params, timeout=15)
-        response.raise_for_status()
+        response = serpapi_fetch(params, timeout=30, log=emit_ui_log,
+                                 label=f"Facebook search for '{niche}'")
         search_results = response.json()
         if search_results.get("error"):
             raise RuntimeError(search_results["error"])
@@ -76,7 +78,7 @@ def run_facebook_discovery(city, niche):
 
     valid_leads = []
     try:
-        existing_ids = load_existing_social_ids(DB_DSN, "facebook")
+        existing_ids = load_existing_social_ids(DB_DSN, "facebook", user_id)
     except psycopg2.Error as error:
         emit_ui_log(f"[FB DEDUP ERROR] Cannot check existing profiles; search stopped: {error}")
         raise
@@ -113,4 +115,5 @@ def run_facebook_discovery(city, niche):
         valid_leads.append(lead_tuple)
         emit_ui_log(f"✅ [FB Page Locked] '{business_name}' -> Indexed via Google site operators.")
 
-    save_facebook_leads(valid_leads)
+    save_facebook_leads(valid_leads, user_id)
+    return len(valid_leads)

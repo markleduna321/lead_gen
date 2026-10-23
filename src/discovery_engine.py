@@ -1,7 +1,6 @@
 import os
 import sys
 import uuid
-import requests
 import psycopg2
 from psycopg2.extras import execute_values
 from dotenv import load_dotenv
@@ -9,6 +8,7 @@ from email_hunter import attempt_domain_email_crawl
 from screenshot_agent import capture_business_site_snapshot
 from discovery_filters import filter_business_metrics, within_search_radius
 from discovery_industries import matching_industry_category
+from serpapi_client import fetch as serpapi_fetch
 
 # Initialize path mapping for environment tokens
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -17,16 +17,19 @@ load_dotenv(os.path.join(base_dir, ".env"))
 DB_DSN = os.getenv("DATABASE_URL")
 SERPAPI_KEY = os.getenv("SERPAPI_API_KEY")
 
-def save_leads_to_db(leads):
+def save_leads_to_db(leads, user_id):
     from control_gate_api import emit_ui_log
+    from discovery_filters import deduplicate_prospect_rows
+    if user_id is None:
+        raise ValueError("Prospects must belong to a signed-in account.")
     if not leads:
         emit_ui_log("[DATABASE] No fresh, unique target segments ingested from this pass.")
         return
 
     insert_query = """
-        INSERT INTO prospects (business_name, category, phone, formatted_address, google_place_id, review_count, rating, email, screenshot_path, website_url, source_platform, status)
+        INSERT INTO prospects (business_name, category, phone, formatted_address, google_place_id, review_count, rating, email, screenshot_path, website_url, source_platform, status, user_id)
         VALUES %s
-        ON CONFLICT (google_place_id) DO NOTHING;
+        ON CONFLICT (user_id, google_place_id) DO UPDATE SET last_discovered_at = NOW();
     """
     
     data_tuples = [
@@ -42,7 +45,8 @@ def save_leads_to_db(leads):
             lead.get('screenshot_path'), # <-- Aligned identically to your lead dictionary read keys
             lead.get('website_url'),
             'google_maps',
-            'discovered'
+            'discovered',
+            user_id
         )
         for lead in leads
     ]
@@ -50,7 +54,7 @@ def save_leads_to_db(leads):
     try:
         with psycopg2.connect(DB_DSN) as conn:
             with conn.cursor() as cur:
-                execute_values(cur, insert_query, data_tuples)
+                execute_values(cur, insert_query, deduplicate_prospect_rows(data_tuples, emit_ui_log))
                 conn.commit()
                 emit_ui_log("💾 [PostgreSQL] Live Synchronization complete. Saved fresh rows to DB.")
     except Exception as e:
@@ -73,8 +77,7 @@ def _find_facebook_email(business_name, address):
             "api_key": SERPAPI_KEY,
             "num": 3
         }
-        response = requests.get("https://serpapi.com/search", params=params, timeout=10)
-        response.raise_for_status()
+        response = serpapi_fetch(params, timeout=20, label=f"Facebook lookup for '{business_name}'")
         data = response.json()
         if data.get("error"):
             raise RuntimeError(data["error"])
@@ -106,8 +109,7 @@ def _search_for_business_website(business_name, address):
             "api_key": SERPAPI_KEY,
             "num": 3
         }
-        response = requests.get("https://serpapi.com/search", params=params, timeout=10)
-        response.raise_for_status()
+        response = serpapi_fetch(params, timeout=20, label=f"Website lookup for '{business_name}'")
         data = response.json()
         if data.get("error"):
             raise RuntimeError(data["error"])
@@ -124,7 +126,7 @@ def _search_for_business_website(business_name, address):
     return None
 
 
-def run_discovery(city, niche, rating_min: float = 0.0, max_reviews: int | None = 100, lat=None, lng=None, radius_km=10):
+def run_discovery(city, niche, rating_min: float = 0.0, max_reviews: int | None = 100, lat=None, lng=None, radius_km=10, user_id=None):
     """
     Queries SerpApi Google Maps framework utilizing precise geolocation coordinate pins 
     and custom radial distance tracking variables.
@@ -152,8 +154,8 @@ def run_discovery(city, niche, rating_min: float = 0.0, max_reviews: int | None 
         params["nearby"] = True
 
     try:
-        response = requests.get("https://serpapi.com/search", params=params, timeout=15)
-        response.raise_for_status()
+        response = serpapi_fetch(params, timeout=30, log=emit_ui_log,
+                                 label=f"Google Maps search for '{niche}'")
         search_results = response.json()
         if search_results.get("error"):
             raise RuntimeError(search_results["error"])
@@ -171,7 +173,11 @@ def run_discovery(city, niche, rating_min: float = 0.0, max_reviews: int | None 
     try:
         with psycopg2.connect(DB_DSN) as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT google_place_id FROM prospects WHERE google_place_id IS NOT NULL;")
+                cur.execute(
+                    "SELECT google_place_id FROM prospects "
+                    "WHERE google_place_id IS NOT NULL AND user_id = %s;",
+                    (user_id,),
+                )
                 # Store as a set for O(1) instantaneous lookup speed
                 existing_place_ids = set(row[0] for row in cur.fetchall())
     except Exception as e:
@@ -179,6 +185,7 @@ def run_discovery(city, niche, rating_min: float = 0.0, max_reviews: int | None 
         raise
 
     valid_leads = []
+    enrichment_errors = []
 
     for business in local_results:
         business_name = business.get("title")
@@ -216,12 +223,22 @@ def run_discovery(city, niche, rating_min: float = 0.0, max_reviews: int | None 
 
         if not website_link:
             emit_ui_log(f"🔍 [No Website] Running Google search fallback for '{business_name}'...")
-            website_link = _search_for_business_website(business_name, address)
+            # Enrichment is best-effort: one unreachable lookup must not discard
+            # every business already collected for this industry.
+            try:
+                website_link = _search_for_business_website(business_name, address)
+            except Exception as error:
+                website_link = None
+                enrichment_errors.append(f"website lookup for '{business_name}': {error}")
             if website_link:
                 emit_ui_log(f"   ↳ 🌐 Found via search: {website_link}")
             else:
                 emit_ui_log(f"   ↳ 📘 No website found. Checking Facebook page for contact email...")
-                discovered_email, fb_url = _find_facebook_email(business_name, address)
+                try:
+                    discovered_email, fb_url = _find_facebook_email(business_name, address)
+                except Exception as error:
+                    discovered_email, fb_url = None, None
+                    enrichment_errors.append(f"Facebook lookup for '{business_name}': {error}")
                 if discovered_email:
                     emit_ui_log(f"   ↳ 🔥 Email found on Facebook: {discovered_email}")
                 elif fb_url:
@@ -231,7 +248,11 @@ def run_discovery(city, niche, rating_min: float = 0.0, max_reviews: int | None 
 
         if website_link:
             emit_ui_log(f"🔗 [Website Found] Scouting '{business_name}' domain...")
-            discovered_email = attempt_domain_email_crawl(website_link)
+            try:
+                discovered_email = attempt_domain_email_crawl(website_link)
+            except Exception as error:
+                discovered_email = None
+                enrichment_errors.append(f"email crawl for '{business_name}': {error}")
 
             if not discovered_email:
                 emit_ui_log(f"   ↳ ⚠️ Site active but zero public email tags found. Saving without email.")
@@ -240,7 +261,11 @@ def run_discovery(city, niche, rating_min: float = 0.0, max_reviews: int | None 
 
                 # Trigger screenshot extraction immediately via headless selenium browser agent
                 emit_ui_log(f"   ↳ 📸 Capturing live website snapshot profile view...")
-                screenshot_asset_url = capture_business_site_snapshot(website_link, place_token)
+                try:
+                    screenshot_asset_url = capture_business_site_snapshot(website_link, place_token)
+                except Exception as error:
+                    screenshot_asset_url = None
+                    enrichment_errors.append(f"screenshot for '{business_name}': {error}")
 
         lead = {
             "name": business_name,
@@ -257,7 +282,17 @@ def run_discovery(city, niche, rating_min: float = 0.0, max_reviews: int | None 
         valid_leads.append(lead)
         emit_ui_log(f"✅ [Target Acquired] '{business_name}' locked to pipeline workspace.")
 
-    save_leads_to_db(valid_leads)
+    save_leads_to_db(valid_leads, user_id)
+    if enrichment_errors:
+        # The businesses were saved, just with thinner contact detail, so this
+        # is reported as a warning rather than losing the whole search.
+        from discovery_runs import DiscoveryPartialSuccess
+        emit_ui_log(
+            f"⚠️ [DISCOVERY] Saved {len(valid_leads)} lead(s); "
+            f"{len(enrichment_errors)} enrichment step(s) had problems."
+        )
+        raise DiscoveryPartialSuccess(enrichment_errors, saved=len(valid_leads))
+    return len(valid_leads)
 
 
 if __name__ == "__main__":

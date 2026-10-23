@@ -15,10 +15,28 @@ sys.path.insert(0, str(SRC))
 from discovery_filters import filter_business_metrics
 from discovery_industries import matching_industry_category
 from discovery_runs import DiscoveryBusyError
+from support import QA_USER_ID, signed_in_client
 
 
 def load_function(filename, name, namespace):
     namespace.setdefault("matching_industry_category", matching_industry_category)
+
+    def serpapi_fetch(params, timeout=None, attempts=None, log=None, label=""):
+        """Stands in for serpapi_client.fetch inside an isolated namespace.
+
+        The call is routed through the namespace's own ``requests`` stub so
+        these suites stay offline; the real client's retry behaviour is
+        covered separately in test_provider_retries.py.
+        """
+        import requests as real_requests
+        http = namespace.get("requests", real_requests)
+        response = http.get("https://serpapi.com/search", params=params, timeout=timeout)
+        checker = getattr(response, "raise_for_status", None)
+        if callable(checker):
+            checker()
+        return response
+
+    namespace.setdefault("serpapi_fetch", serpapi_fetch)
     tree = ast.parse((SRC / filename).read_text(encoding="utf-8"))
     function = next(
         node for node in tree.body
@@ -121,7 +139,7 @@ class DiscoveryFilterRouteTests(unittest.TestCase):
         self.thread.side_effect = lambda target: types.SimpleNamespace(start=target, daemon=False)
         self.workers = {}
         self.runs = Mock()
-        def start(tasks, log):
+        def start(tasks, log, owner=None, on_thread_start=None):
             for _, _, task in tasks:
                 task()
             return "qa-run"
@@ -142,6 +160,7 @@ class DiscoveryFilterRouteTests(unittest.TestCase):
             "app": self.app, "request": request, "jsonify": jsonify,
             "threading": types.SimpleNamespace(Thread=self.thread), "emit_ui_log": Mock(),
             "LOCAL_DISCOVERY_RUNS": self.runs, "DiscoveryBusyError": DiscoveryBusyError,
+            "active_user_id": lambda: QA_USER_ID, "bind_log_user": Mock(),
         }
         load_function("control_gate_api.py", "trigger_discovery_engine", namespace)
         self.payload = {
@@ -157,10 +176,10 @@ class DiscoveryFilterRouteTests(unittest.TestCase):
                 self.payload["max_reviews"] = maximum
                 response = self.app.test_client().post("/api/trigger/discover", json=self.payload)
                 self.assertEqual(response.status_code, 202)
-                self.workers["discovery_engine"].assert_any_call("Austin", "Cafe", 4.5, maximum, 30.0, -97.0, 10)
-                self.workers["discovery_yelp"].assert_any_call("Austin", "Dental Clinic", 4.5, maximum)
-                self.workers["discovery_facebook"].assert_any_call("Austin", "Cafe")
-                self.workers["discovery_instagram"].assert_any_call("Austin", "Cafe")
+                self.workers["discovery_engine"].assert_any_call("Austin", "Cafe", 4.5, maximum, 30.0, -97.0, 10, user_id=QA_USER_ID)
+                self.workers["discovery_yelp"].assert_any_call("Austin", "Dental Clinic", 4.5, maximum, user_id=QA_USER_ID)
+                self.workers["discovery_facebook"].assert_any_call("Austin", "Cafe", user_id=QA_USER_ID)
+                self.workers["discovery_instagram"].assert_any_call("Austin", "Cafe", user_id=QA_USER_ID)
 
     def test_invalid_filters_do_not_start_workers(self):
         for field, value in [

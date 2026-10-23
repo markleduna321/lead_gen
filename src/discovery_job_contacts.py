@@ -7,6 +7,7 @@ from bs4 import BeautifulSoup
 
 from discovery_job_filters import normalize_text
 from email_hunter import extract_emails_from_html
+from serpapi_client import fetch as serpapi_fetch
 
 
 _SKIP_DOMAINS = {
@@ -82,11 +83,10 @@ def find_company_contact(company: str, location: str, api_key: str, log) -> dict
         "emails": [], "phones": [], "pages_checked": [],
     }
     result = {"website_url": None, "email": None, "contact_evidence": evidence, "errors": []}
-    response = requests.get("https://serpapi.com/search", params={
+    response = serpapi_fetch({
         "engine": "google", "q": f'"{company}" official website contact {location}'.strip(),
         "api_key": api_key, "num": 5,
-    }, timeout=12)
-    response.raise_for_status()
+    }, timeout=20, log=log, label=f"Contact search for '{company}'")
     data = response.json()
     if not isinstance(data, dict) or data.get("error"):
         raise RuntimeError(data.get("error") if isinstance(data, dict) else "Invalid company search response")

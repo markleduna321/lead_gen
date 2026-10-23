@@ -11,6 +11,7 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from discovery_runs import DiscoveryBusyError, LocalDiscoveryRuns
 from test_discovery_runs import ImmediateThread
+from support import QA_USER_ID, signed_in_client
 
 
 class HiringDiscoveryTests(unittest.TestCase):
@@ -32,7 +33,7 @@ class HiringDiscoveryTests(unittest.TestCase):
         self.log = patch.object(self.api, "emit_ui_log", Mock()).start()
 
     def test_request_validation_deduplication_and_conflict(self):
-        client = self.api.app.test_client()
+        client = signed_in_client(self.api.app)
         runs = Mock()
         runs.start.return_value = "qa-run"
         with patch.object(self.api, "HIRING_DISCOVERY_RUNS", runs):
@@ -55,7 +56,7 @@ class HiringDiscoveryTests(unittest.TestCase):
             self.assertEqual(len(tasks), 1)
             with patch.object(self.jobs, "run_job_discovery") as worker:
                 tasks[0][2]()
-            worker.assert_called_once_with("video_editing", "Canada", pages_per_role=1)
+            worker.assert_called_once_with("video_editing", "Canada", pages_per_role=1, user_id=QA_USER_ID)
             runs.start.side_effect = DiscoveryBusyError("Hiring already running")
             self.assertEqual(client.post("/api/trigger/discover-jobs", json={
                 "service_types": ["video_editing"]
@@ -63,7 +64,7 @@ class HiringDiscoveryTests(unittest.TestCase):
 
     def test_service_failures_continue_and_status_isolated(self):
         runs = LocalDiscoveryRuns("hiring")
-        def worker(service, country, pages_per_role=1):
+        def worker(service, country, pages_per_role=1, user_id=None):
             runs.record_log(f"Scanning {service}")
             if service == "video_editing":
                 raise RuntimeError("QA provider unavailable")
@@ -72,7 +73,7 @@ class HiringDiscoveryTests(unittest.TestCase):
             patch.object(self.jobs, "run_job_discovery", side_effect=worker) as scan,
             patch("discovery_runs.threading.Thread", ImmediateThread),
         ):
-            client = self.api.app.test_client()
+            client = signed_in_client(self.api.app)
             started = client.post("/api/trigger/discover-jobs", json={
                 "service_types": ["video_editing", "virtual_assistant"], "country": "",
             })
@@ -168,7 +169,7 @@ class HiringDiscoveryTests(unittest.TestCase):
                     patch.object(self.jobs, "execute_values", side_effect=write_rows),
                     patch("discovery_runs.threading.Thread", ImmediateThread),
                 ):
-                    client = self.api.app.test_client()
+                    client = signed_in_client(self.api.app)
                     started = client.post("/api/trigger/discover-jobs", json={
                         "service_types": ["video_editing", "video_editing"],
                         "country": "Canada", "pages_per_role": 2,
@@ -177,7 +178,10 @@ class HiringDiscoveryTests(unittest.TestCase):
                     self.assertEqual(started.json["max_job_requests"], 8)
                     run_id = started.json["run_id"]
                     run = client.get(f"/api/discovery/job-runs/{run_id}").json["run"]
-                    self.assertEqual(run["state"], "succeeded" if failure is None else "failed")
+                    # A page error still saves the postings it collected, so the
+                    # run reports success with a warning rather than failure.
+                    expected_state = "failed" if failure == "database" else "succeeded"
+                    self.assertEqual(run["state"], expected_state)
                     self.assertEqual((run["completed"], run["total"]), (1, 1))
                     self.assertTrue(run["logs"])
                     self.assertEqual(client.get(f"/api/discovery/runs/{run_id}").status_code, 404)
@@ -190,10 +194,13 @@ class HiringDiscoveryTests(unittest.TestCase):
                     else:
                         self.assertEqual(len(saved), 1)
                         connection.commit.assert_called_once()
+                        self.assertEqual(run["errors"], [])
                         if failure == "page":
-                            self.assertIn("QA second-page failure", run["errors"][0])
+                            self.assertIn("QA second-page failure", run["warnings"][0])
+                            self.assertEqual(run["saved"], 1)
                         else:
-                            self.assertEqual(run["errors"], [])
+                            self.assertEqual(run["warnings"], [])
+                            self.assertEqual(run["saved"], 1)
                         cursor.fetchone.return_value = {
                             "total": 1, "pending": 1, "sent": 0, "with_email": 1,
                         }
@@ -224,8 +231,13 @@ class HiringDiscoveryTests(unittest.TestCase):
             patch.object(self.jobs, "enrich_company_contact", return_value={"website_url": None, "email": None}),
             patch.object(self.jobs, "save_job_leads") as save,
         ):
-            with self.assertRaisesRegex(RuntimeError, "valid postings were saved"):
-                self.jobs.run_job_discovery("video_editing", "Canada")
+            from discovery_runs import DiscoveryPartialSuccess
+            # The valid posting was saved, so this is a partial success and must
+            # not be reported as an outright failure.
+            with self.assertRaises(DiscoveryPartialSuccess) as partial:
+                self.jobs.run_job_discovery("video_editing", "Canada", user_id=QA_USER_ID)
+        self.assertEqual(partial.exception.saved, 1)
+        self.assertTrue(any("QA quota error" in message for message in partial.exception.messages))
         self.assertEqual(response.json.call_count, 4)
         self.assertEqual([lead["company_name"] for lead in save.call_args.args[0]], ["Valid"])
 
@@ -233,13 +245,13 @@ class HiringDiscoveryTests(unittest.TestCase):
         response = Mock()
         response.json.return_value = {"jobs_results": []}
         with patch.object(self.jobs, "SERPAPI_KEY", "qa-only"), patch("requests.get", return_value=response):
-            self.assertEqual(self.jobs.run_job_discovery("video_editing"), 0)
+            self.assertEqual(self.jobs.run_job_discovery("video_editing", user_id=QA_USER_ID), 0)
         with patch.object(self.jobs, "SERPAPI_KEY", None):
             with self.assertRaisesRegex(RuntimeError, "requires SERPAPI_API_KEY"):
-                self.jobs.run_job_discovery("video_editing")
+                self.jobs.run_job_discovery("video_editing", user_id=QA_USER_ID)
         row = {"company_name": "QA", "job_title": "Editor", "lead_type": "video_editing"}
         with self.assertRaisesRegex(AssertionError, "Live DB forbidden"):
-            self.jobs.save_job_leads([row])
+            self.jobs.save_job_leads([row], QA_USER_ID)
 
     def test_enrichment_errors_save_posting_but_fail_run(self):
         response = Mock()
@@ -251,7 +263,7 @@ class HiringDiscoveryTests(unittest.TestCase):
             patch.object(self.jobs, "save_job_leads") as save,
         ):
             with self.assertRaisesRegex(RuntimeError, "QA contact failure"):
-                self.jobs.run_job_discovery("video_editing")
+                self.jobs.run_job_discovery("video_editing", user_id=QA_USER_ID)
         self.assertTrue(all(lead["email"] is None for lead in save.call_args.args[0]))
 
     def test_posting_validation(self):
@@ -285,7 +297,7 @@ class HiringDiscoveryTests(unittest.TestCase):
                          return_value={"website_url": None, "email": None}) as enrich,
             patch.object(self.jobs, "save_job_leads") as save,
         ):
-            self.assertEqual(self.jobs.run_job_discovery("video_editing", "Canada"), 1)
+            self.assertEqual(self.jobs.run_job_discovery("video_editing", "Canada", user_id=QA_USER_ID), 1)
         self.assertEqual(search.call_args.kwargs["params"]["gl"], "ca")
         self.assertEqual(search.call_args.kwargs["params"]["location"], "Canada")
         enrich.assert_called_once_with("Valid", "Remote - Canada")
@@ -304,7 +316,7 @@ class HiringDiscoveryTests(unittest.TestCase):
                          return_value={"website_url": None, "email": None}),
             patch.object(self.jobs, "save_job_leads") as save,
         ):
-            self.assertEqual(self.jobs.run_job_discovery("video_editing", ""), 1)
+            self.assertEqual(self.jobs.run_job_discovery("video_editing", "", user_id=QA_USER_ID), 1)
         self.assertNotIn("gl", search.call_args.kwargs["params"])
         self.assertNotIn("location", search.call_args.kwargs["params"])
         self.assertEqual({lead["location"] for lead in save.call_args.args[0]}, {"Remote"})
@@ -320,7 +332,7 @@ class HiringDiscoveryTests(unittest.TestCase):
             patch.object(self.jobs, "enrich_company_contact") as enrich,
             patch.object(self.jobs, "save_job_leads") as save,
         ):
-            self.assertEqual(self.jobs.run_job_discovery("video_editing", "Canada"), 0)
+            self.assertEqual(self.jobs.run_job_discovery("video_editing", "Canada", user_id=QA_USER_ID), 0)
         enrich.assert_not_called()
         save.assert_not_called()
 
@@ -340,7 +352,7 @@ class HiringDiscoveryTests(unittest.TestCase):
             patch.object(self.jobs, "enrich_company_contact", side_effect=enrich) as contacts,
             patch.object(self.jobs, "save_job_leads") as save,
         ):
-            self.assertEqual(self.jobs.run_job_discovery("video_editing", "Canada"), 3)
+            self.assertEqual(self.jobs.run_job_discovery("video_editing", "Canada", user_id=QA_USER_ID), 3)
         self.assertEqual(contacts.call_count, 2)
         leads = save.call_args.args[0]
         self.assertEqual(len(leads), 3)
@@ -364,22 +376,22 @@ class HiringDiscoveryTests(unittest.TestCase):
             patch("psycopg2.connect", return_value=database),
             patch.object(self.jobs, "execute_values") as execute,
         ):
-            self.jobs.save_job_leads([first, repeated, other_location, other_title, other_service])
+            self.jobs.save_job_leads([first, repeated, other_location, other_title, other_service], QA_USER_ID)
             query, rows = execute.call_args.args[1:]
             self.assertEqual(len(rows), 4)
-            self.assertIn("ON CONFLICT (job_identity)", query)
+            self.assertIn("ON CONFLICT (user_id, job_identity)", query)
             self.assertIn("job_identity", query.split("VALUES")[0])
             self.assertNotIn("status =", query)
             self.assertNotIn("ai_pitch_draft =", query)
             self.assertIn("NULLIF(EXCLUDED.email, '')", query)
             self.assertEqual(rows[0][8], "Existing details")
             self.assertEqual(rows[0][9], "https://example.test/apply")
-            self.assertEqual(rows[0][-3].adapted["apply_options"][0]["link"], "https://example.test/apply")
+            self.assertEqual(rows[0][-4].adapted["apply_options"][0]["link"], "https://example.test/apply")
             self.assertIn("WHEN job_leads.contact_evidence->>'email_status' = 'manual'", query)
-            identities = [row[-1] for row in rows]
+            identities = [row[-2] for row in rows]
             self.assertEqual(len(set(identities)), 4)
-            self.jobs.save_job_leads([repeated])
-            self.assertEqual(execute.call_args.args[2][0][-1], identities[0])
+            self.jobs.save_job_leads([repeated], QA_USER_ID)
+            self.assertEqual(execute.call_args.args[2][0][-2], identities[0])
         self.assertEqual(database.__enter__.return_value.commit.call_count, 2)
 
     def test_identity_does_not_collapse_long_titles_or_unicode_names(self):
@@ -457,7 +469,7 @@ class HiringDiscoveryTests(unittest.TestCase):
             patch.object(self.jobs, "save_job_leads") as save,
         ):
             with self.assertRaisesRegex(RuntimeError, "QA contact page failed"):
-                self.jobs.run_job_discovery("video_editing")
+                self.jobs.run_job_discovery("video_editing", user_id=QA_USER_ID)
         self.assertEqual(save.call_args.args[0][0]["contact_evidence"], evidence)
 
     def test_duplicates_combine_metadata_links_and_keep_longest_description(self):
@@ -480,10 +492,10 @@ class HiringDiscoveryTests(unittest.TestCase):
                          {"posted_at": "2 days ago", "health_insurance": True})
         database = MagicMock()
         with patch("psycopg2.connect", return_value=database), patch.object(self.jobs, "execute_values") as execute:
-            self.jobs.save_job_leads(unique)
+            self.jobs.save_job_leads(unique, QA_USER_ID)
         row = execute.call_args.args[2][0]
         self.assertEqual(row[8], second["job_description"])
-        self.assertEqual(len(row[-3].adapted["apply_options"]), 2)
+        self.assertEqual(len(row[-4].adapted["apply_options"]), 2)
 
     def test_save_keeps_contact_values_and_evidence_together(self):
         first = self.jobs.parse_job_posting({
@@ -499,11 +511,11 @@ class HiringDiscoveryTests(unittest.TestCase):
                       email="info@example.test", contact_evidence=evidence)
         database = MagicMock()
         with patch("psycopg2.connect", return_value=database), patch.object(self.jobs, "execute_values") as execute:
-            self.jobs.save_job_leads([first, second])
+            self.jobs.save_job_leads([first, second], QA_USER_ID)
         rows = execute.call_args.args[2]
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0][10:12], ("https://example.test", "info@example.test"))
-        self.assertEqual(rows[0][-2].adapted, evidence)
+        self.assertEqual(rows[0][-3].adapted, evidence)
 
     def test_pages_follow_tokens_preserve_filters_and_deduplicate(self):
         posting = {"company_name": "QA", "title": "Video Editor", "location": "Canada"}
@@ -517,7 +529,7 @@ class HiringDiscoveryTests(unittest.TestCase):
                          return_value={"website_url": None, "email": None}) as enrich,
             patch.object(self.jobs, "save_job_leads") as save,
         ):
-            self.assertEqual(self.jobs.run_job_discovery("video_editing", "Canada", pages_per_role=5), 2)
+            self.assertEqual(self.jobs.run_job_discovery("video_editing", "Canada", pages_per_role=5, user_id=QA_USER_ID), 2)
         self.assertEqual(search.call_count, 8)
         self.assertEqual(enrich.call_count, 2)
         self.assertEqual(len(save.call_args.args[0]), 2)
@@ -536,7 +548,7 @@ class HiringDiscoveryTests(unittest.TestCase):
             "jobs_results": [], "serpapi_pagination": {"next_page_token": "unused"},
         }
         with patch.object(self.jobs, "SERPAPI_KEY", "qa-only"), patch("requests.get", return_value=response) as search:
-            self.assertEqual(self.jobs.run_job_discovery("video_editing"), 0)
+            self.assertEqual(self.jobs.run_job_discovery("video_editing", user_id=QA_USER_ID), 0)
         self.assertEqual(search.call_count, 4)
 
     def test_later_page_failure_retains_postings_and_continues_roles(self):
@@ -551,7 +563,7 @@ class HiringDiscoveryTests(unittest.TestCase):
             patch.object(self.jobs, "save_job_leads") as save,
         ):
             with self.assertRaisesRegex(RuntimeError, "page 2.*QA page failure"):
-                self.jobs.run_job_discovery("video_editing", pages_per_role=3)
+                self.jobs.run_job_discovery("video_editing", pages_per_role=3, user_id=QA_USER_ID)
         self.assertEqual(search.call_count, 8)
         self.assertEqual(len(save.call_args.args[0]), 1)
 
@@ -569,7 +581,7 @@ class HiringDiscoveryTests(unittest.TestCase):
                 patch("requests.get", return_value=response) as search,
             ):
                 with self.assertRaisesRegex(RuntimeError, message):
-                    self.jobs.run_job_discovery("video_editing", pages_per_role=5)
+                    self.jobs.run_job_discovery("video_editing", pages_per_role=5, user_id=QA_USER_ID)
                 self.assertEqual(search.call_count, expected * 4)
         response = Mock()
         response.json.side_effect = [
@@ -577,13 +589,13 @@ class HiringDiscoveryTests(unittest.TestCase):
             for index in range(20)
         ]
         with patch.object(self.jobs, "SERPAPI_KEY", "qa-only"), patch("requests.get", return_value=response) as search:
-            self.assertEqual(self.jobs.run_job_discovery("video_editing", pages_per_role=5), 0)
+            self.assertEqual(self.jobs.run_job_discovery("video_editing", pages_per_role=5, user_id=QA_USER_ID), 0)
         self.assertEqual(search.call_count, 20)
 
     def test_depth_validation_and_request_budget_before_worker_start(self):
         runs = Mock()
         runs.start.return_value = "qa-depth"
-        client = self.api.app.test_client()
+        client = signed_in_client(self.api.app)
         with patch.object(self.api, "HIRING_DISCOVERY_RUNS", runs):
             for value in [None, True, False, 0, -1, 4, 6, 100, 1.0, "2", [], {}]:
                 with self.subTest(value=value):
@@ -605,10 +617,10 @@ class HiringDiscoveryTests(unittest.TestCase):
                     with patch.object(self.jobs, "run_job_discovery") as worker:
                         tasks[0][2]()
                         tasks[1][2]()
-                    self.assertEqual(worker.call_args_list[0].kwargs, {"pages_per_role": pages})
-                    self.assertEqual(worker.call_args_list[1].kwargs, {"pages_per_role": pages})
+                    self.assertEqual(worker.call_args_list[0].kwargs, {"pages_per_role": pages, "user_id": QA_USER_ID})
+                    self.assertEqual(worker.call_args_list[1].kwargs, {"pages_per_role": pages, "user_id": QA_USER_ID})
         for value in [None, True, "2", 4, 6]:
             with self.subTest(direct=value), patch.object(self.jobs, "SERPAPI_KEY", "qa-only"):
                 with self.assertRaisesRegex(ValueError, "Pages per role"):
-                    self.jobs.run_job_discovery("video_editing", pages_per_role=value)
+                    self.jobs.run_job_discovery("video_editing", pages_per_role=value, user_id=QA_USER_ID)
         self.network.assert_not_called()

@@ -45,3 +45,29 @@ document.addEventListener('keydown', event => {
         }
     }
 });
+
+// An expired session returns 401 JSON from every /api route. Without this the
+// dashboard's fetch().json() calls fail with an opaque parse error instead of
+// sending the operator back to sign in.
+(function redirectOnExpiredSession() {
+    if (typeof window === 'undefined' || typeof window.fetch !== 'function') return;
+    const nativeFetch = window.fetch.bind(window);
+    let redirecting = false;
+    window.fetch = async function (...args) {
+        const response = await nativeFetch(...args);
+        if (response.status !== 401 || redirecting) return response;
+        if (document.body && document.body.dataset.page === 'auth') return response;
+        let expired = false;
+        try {
+            expired = (await response.clone().json()).code === 'auth_required';
+        } catch (error) {
+            expired = false; // Not our auth payload; leave it to the caller.
+        }
+        if (expired) {
+            redirecting = true;
+            const back = encodeURIComponent(window.location.pathname + window.location.search);
+            window.location.assign('/login?next=' + back);
+        }
+        return response;
+    };
+})();

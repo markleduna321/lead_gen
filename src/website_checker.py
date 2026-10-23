@@ -45,7 +45,7 @@ def check_website_quality(url: str) -> dict:
         return {"score": None, "error": str(e)}
 
 
-def run_website_quality_check():
+def run_website_quality_check(user_id=None):
     """
     Audits all prospects that have a website_url but have not been scored yet.
     Processes up to 20 at a time to stay within API rate limits.
@@ -64,9 +64,11 @@ def run_website_quality_check():
                     SELECT id, website_url FROM prospects
                     WHERE website_url IS NOT NULL
                       AND site_quality_score IS NULL
+                      AND user_id = %s
                     ORDER BY lead_score DESC
                     LIMIT 20;
-                    """
+                    """,
+                    (user_id,),
                 )
                 leads = cur.fetchall()
 
@@ -79,8 +81,8 @@ def run_website_quality_check():
                     result = check_website_quality(lead["website_url"])
                     if result["score"] is not None:
                         cur.execute(
-                            "UPDATE prospects SET site_quality_score = %s WHERE id = %s;",
-                            (result["score"], lead["id"]),
+                            "UPDATE prospects SET site_quality_score = %s WHERE id = %s AND user_id = %s;",
+                            (result["score"], lead["id"], user_id),
                         )
                         label = (
                             "🔴 Poor"

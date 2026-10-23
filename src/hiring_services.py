@@ -96,10 +96,14 @@ def validate_service_payload(data: object) -> tuple[str, tuple[str, ...], tuple[
     )
 
 
-def list_hiring_services(dsn: str) -> list[HiringService]:
+def list_hiring_services(dsn: str, user_id: int | None = None) -> list[HiringService]:
     with psycopg2.connect(dsn, cursor_factory=RealDictCursor) as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT service_id, name, roles, title_phrases FROM hiring_services ORDER BY created_at, service_id;")
+            cur.execute(
+                """SELECT service_id, name, roles, title_phrases FROM hiring_services
+                   WHERE user_id = %s ORDER BY created_at, service_id;""",
+                (user_id,),
+            )
             rows = cur.fetchall()
     services = list(BUILTIN_SERVICES.values())
     for row in rows:
@@ -111,16 +115,18 @@ def list_hiring_services(dsn: str) -> list[HiringService]:
     return services
 
 
-def create_hiring_service(dsn: str, data: object) -> HiringService:
+def create_hiring_service(dsn: str, data: object, user_id: int | None = None) -> HiringService:
     name, roles, phrases = validate_service_payload(data)
+    if user_id is None:
+        raise ValueError("Hiring services must belong to a signed-in account.")
     service = HiringService("custom_" + uuid.uuid4().hex, name, roles, phrases)
     try:
         with psycopg2.connect(dsn) as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    INSERT INTO hiring_services (service_id, name, name_key, roles, title_phrases)
-                    VALUES (%s, %s, %s, %s, %s);
-                """, (service.id, name, service_name_key(name), Json(roles), Json(phrases)))
+                    INSERT INTO hiring_services (service_id, name, name_key, roles, title_phrases, user_id)
+                    VALUES (%s, %s, %s, %s, %s, %s);
+                """, (service.id, name, service_name_key(name), Json(roles), Json(phrases), user_id))
             conn.commit()
     except psycopg2.errors.UniqueViolation as error:
         raise DuplicateHiringService("A service with that name already exists.") from error

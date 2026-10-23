@@ -1,12 +1,12 @@
 import os
 import sys
 import uuid
-import requests
 import psycopg2
 from psycopg2.extras import execute_values
 from dotenv import load_dotenv
 from discovery_filters import filter_business_metrics
 from discovery_industries import matching_industry_category
+from serpapi_client import fetch as serpapi_fetch
 
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 load_dotenv(os.path.join(base_dir, ".env"))
@@ -15,8 +15,9 @@ DB_DSN = os.getenv("DATABASE_URL")
 SERPAPI_KEY = os.getenv("SERPAPI_API_KEY")
 
 
-def save_yelp_leads(leads):
+def save_yelp_leads(leads, user_id):
     from control_gate_api import emit_ui_log
+    from discovery_filters import attach_owner, deduplicate_prospect_rows
 
     if not leads:
         emit_ui_log("[DATABASE] No fresh Yelp leads to ingest from this pass.")
@@ -27,15 +28,16 @@ def save_yelp_leads(leads):
             business_name, category, phone, formatted_address,
             google_place_id, review_count, rating,
             email, website_url, screenshot_path,
-            source_platform, status
+            source_platform, status, user_id
         )
         VALUES %s
-        ON CONFLICT (google_place_id) DO NOTHING;
+        ON CONFLICT (user_id, google_place_id) DO UPDATE SET last_discovered_at = NOW();
     """
     try:
         with psycopg2.connect(DB_DSN) as conn:
             with conn.cursor() as cur:
-                execute_values(cur, insert_query, leads)
+                execute_values(cur, insert_query,
+                               attach_owner(deduplicate_prospect_rows(leads, emit_ui_log), user_id))
                 conn.commit()
                 emit_ui_log(f"💾 [PostgreSQL] Ingested {len(leads)} Yelp leads into the database.")
     except Exception as e:
@@ -43,7 +45,7 @@ def save_yelp_leads(leads):
         raise
 
 
-def run_yelp_discovery(city, niche, rating_min: float = 0.0, max_reviews: int | None = 100):
+def run_yelp_discovery(city, niche, rating_min: float = 0.0, max_reviews: int | None = 100, user_id=None):
     """
     Uses SerpAPI Yelp engine to discover local businesses matching the niche and city.
     Applies the same email + screenshot enrichment pipeline as Google Maps discovery.
@@ -66,8 +68,8 @@ def run_yelp_discovery(city, niche, rating_min: float = 0.0, max_reviews: int | 
     }
 
     try:
-        response = requests.get("https://serpapi.com/search", params=params, timeout=15)
-        response.raise_for_status()
+        response = serpapi_fetch(params, timeout=30, log=emit_ui_log,
+                                 label=f"Yelp search for '{niche}'")
         results = response.json()
         if results.get("error"):
             raise RuntimeError(results["error"])
@@ -84,7 +86,11 @@ def run_yelp_discovery(city, niche, rating_min: float = 0.0, max_reviews: int | 
     try:
         with psycopg2.connect(DB_DSN) as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT google_place_id FROM prospects WHERE google_place_id IS NOT NULL;")
+                cur.execute(
+                    "SELECT google_place_id FROM prospects "
+                    "WHERE google_place_id IS NOT NULL AND user_id = %s;",
+                    (user_id,),
+                )
                 existing_ids = set(row[0] for row in cur.fetchall())
     except Exception as e:
         emit_ui_log(f"[DEDUP ERROR] Could not prefetch IDs: {e}")
@@ -158,4 +164,5 @@ def run_yelp_discovery(city, niche, rating_min: float = 0.0, max_reviews: int | 
         ))
         emit_ui_log(f"✅ [Yelp Target] '{title}' locked to pipeline.")
 
-    save_yelp_leads(valid_leads)
+    save_yelp_leads(valid_leads, user_id)
+    return len(valid_leads)

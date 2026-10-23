@@ -6,6 +6,7 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from discovery_job_filters import matches_hiring_country, matches_hiring_role, resolve_hiring_country
+from support import QA_USER_ID
 
 
 class HiringFilterTests(unittest.TestCase):

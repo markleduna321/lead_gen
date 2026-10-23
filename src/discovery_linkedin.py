@@ -12,21 +12,22 @@ load_dotenv(os.path.join(base_dir, ".env"))
 DB_DSN = os.getenv("DATABASE_URL")
 PROXYCURL_KEY = os.getenv("PROXYCURL_API_KEY")
 
-def save_linkedin_leads(leads):
+def save_linkedin_leads(leads, user_id):
+    from discovery_filters import attach_owner, deduplicate_prospect_rows
     if not leads:
         return
     insert_query = """
-        INSERT INTO prospects (business_name, category, phone, formatted_address, google_place_id, review_count, rating, status)
+        INSERT INTO prospects (business_name, category, phone, formatted_address, google_place_id, review_count, rating, status, user_id)
         VALUES %s
-        ON CONFLICT (google_place_id) DO NOTHING;
+        ON CONFLICT (user_id, google_place_id) DO UPDATE SET last_discovered_at = NOW();
     """
     with psycopg2.connect(DB_DSN) as conn:
         with conn.cursor() as cur:
-            execute_values(cur, insert_query, leads)
+            execute_values(cur, insert_query, deduplicate_prospect_rows(leads))
             conn.commit()
             print(f"[DATABASE] LinkedIn sync complete. Ingested {len(leads)} high-ticket prospects.")
 
-def run_linkedin_discovery(city, niche):
+def run_linkedin_discovery(city, niche, user_id=None):
     """
     Queries Proxycurl's LinkedIn Company Search Engine to discover regional professional practices.
     """
@@ -76,4 +77,4 @@ def run_linkedin_discovery(city, niche):
             valid_leads.append(lead_tuple)
             print(f" -> [LN TARGET ACQUIRED] '{name}' Corporate entity lacks digital properties.")
 
-    save_linkedin_leads(valid_leads)
+    save_linkedin_leads(valid_leads, user_id)
