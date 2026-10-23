@@ -25,6 +25,7 @@ pyinstaller ^
     --hidden-import jinja2 ^
     --hidden-import werkzeug ^
     --collect-all webview ^
+    --collect-all pycountry ^
     app.py
 
 echo [BUILD] Done. Output is in dist\AsuraTECH_LeadGen\

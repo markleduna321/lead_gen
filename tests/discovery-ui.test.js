@@ -9,7 +9,7 @@ const script = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)]
     .map(match => match[1]).find(source => source.includes('function submitActiveDiscovery'))
     .replace('{{ carto_basemap_api_key | tojson }}', '""');
 
-function setup() {
+function setup(page = 'prospects') {
     const elements = new Map();
     const checked = { 'biz-type': ['Cafe'], 'scan-source': ['google'], 'job-service': ['video_editing'] };
     const requests = [];
@@ -36,15 +36,17 @@ function setup() {
     }
     const context = vm.createContext({
         document: {
-            body: { dataset: { page: 'prospects' } },
+            body: { dataset: { page } },
             getElementById: element,
-            createElement() { return {}; },
+            createElement() {
+                return { children: [], appendChild(child) { this.children.push(child); } };
+            },
             querySelectorAll(selector) {
                 const name = selector.match(/name="([^"]+)"/)[1];
                 return checked[name].map(value => ({ value }));
             }
         },
-        window: { location: { assign() {} } }, URLSearchParams, AbortSignal, console: { error() {} },
+        window: { location: { assign() {} } }, URL, URLSearchParams, AbortSignal, console: { error() {} },
         setTimeout(handler) { const id = ++timerId; timers.set(id, handler); return id; },
         clearTimeout(id) { timers.delete(id); }, clearInterval() {},
         fetch: async (url, options) => {
@@ -63,6 +65,7 @@ function setup() {
     element('modal-rating-min').value = '4';
     element('modal-reviews-max').value = '100';
     element('modal-radius').value = '10';
+    element('job-pages-input').value = '1';
     context.applyLocation({ label: 'Town', lat: 10.6765, lng: 122.9509 });
     return { context, element, checked, requests, timers };
 }
@@ -71,6 +74,13 @@ test('one discovery workspace with two search modes', () => {
     assert.match(html, /id="discovery-modal"/);
     assert.doesNotMatch(html, /id="btn-job-discover"|id="job-discovery-modal"/);
     assert.equal((html.match(/function toggleDiscoveryModal\(/g) || []).length, 1);
+});
+
+test('hiring guidance explains strict targeting without promising global coverage', () => {
+    assert.match(html, /blank means no country filter/);
+    assert.match(html, /Strict matching excludes unknown locations/);
+    assert.match(html, /Actual job titles must match a selected service/);
+    assert.doesNotMatch(html, /leave blank for global/);
 });
 
 test('unavailable LinkedIn discovery cannot be selected', () => {
@@ -117,6 +127,134 @@ test('tabs preserve form values and support keyboard navigation', () => {
     assert.equal(element('job-country-input').value, 'Canada');
 });
 
+test('job profile displays full details, all links and honest contact provenance', () => {
+    const { context, element } = setup('jobs');
+    vm.runInContext(`
+        currentLeads = [{
+            id: 7, company_name: '<b>Example Studios</b>', job_title: 'Senior Video Editor',
+            job_role_signal: 'video content creator', job_description: 'Full description '.repeat(100),
+            website_url: 'https://example.test', email: 'hello@example.test',
+            job_apply_link: 'https://example.test/jobs',
+            job_details: {
+                posted_at: '3 days ago', provider_job_id: 'provider-7', collected_at: '2026-10-23T00:00:00+00:00',
+                detected_extensions: { health_insurance: true, schedule_type: 'Full-time' },
+                job_highlights: [{ title: 'Benefits', items: ['Health insurance'] }],
+                apply_options: [
+                    { title: 'Company', link: 'https://example.test/jobs' },
+                    { title: '<img onerror=alert(1)>', link: 'https://board.test/job/7' },
+                    { title: 'Bad', link: 'javascript:alert(1)' }
+                ]
+            },
+            contact_evidence: {
+                status: 'matched', email_status: 'public_domain_match',
+                website_source_url: 'https://example.test', checked_at: '2026-10-23',
+                email_source_url: 'https://example.test/contact',
+                emails: [{ email: 'hello@example.test', source_url: 'https://example.test/contact' }],
+                phones: [{ phone: '+1-555-0100', source_url: 'https://example.test/contact' }]
+            }
+        }];
+        selectedLeadId = 7;
+    `, context);
+    context.toggleJobProfileModal(true);
+    assert.equal(element('job-modal-title').innerText, 'Senior Video Editor');
+    assert.match(element('job-modal-signal').innerText, /video content creator/);
+    assert.ok(element('job-modal-description').innerText.length > 600);
+    assert.match(element('job-modal-metadata').innerText, /3 days ago/);
+    assert.match(element('job-modal-metadata').innerText, /health insurance: true/);
+    assert.match(element('job-modal-highlights').innerText, /Health insurance/);
+    assert.equal(element('job-modal-applications').children.length, 2);
+    assert.equal(element('job-modal-applications').children[1].innerText, '<img onerror=alert(1)>');
+    assert.match(element('job-modal-contact-status').innerText, /deliverability unverified/);
+    assert.match(element('job-modal-contacts').innerText, /Listed phone \(unverified\)/);
+    assert.equal(element('job-modal-contact-sources').children.length, 2);
+    vm.runInContext(`
+        currentLeads[0].email = 'manual@example.test';
+        currentLeads[0].contact_evidence.email_status = 'manual';
+    `, context);
+    context.toggleJobProfileModal(true);
+    assert.match(element('job-modal-contact-status').innerText, /manually supplied, unverified/);
+});
+
+test('legacy job profiles do not imply verified contacts and clear previous metadata', () => {
+    const { context, element } = setup('jobs');
+    vm.runInContext(`
+        currentLeads = [{ id: 1, job_title: 'Editor', website_url: 'javascript:alert(1)',
+            job_apply_link: 'javascript:alert(1)' }];
+        selectedLeadId = 1;
+    `, context);
+    context.toggleJobProfileModal(true);
+    assert.equal(element('job-modal-website').href, '#');
+    assert.equal(element('job-modal-apply').href, '#');
+    assert.equal(element('job-modal-location').innerText, 'Unknown');
+    assert.equal(element('job-modal-applications').children.length, 0);
+    assert.equal(element('job-modal-contact-sources').children.length, 0);
+    assert.equal(element('job-modal-highlights').innerText, '');
+    assert.match(element('job-modal-contact-status').innerText, /unconfirmed \/ legacy/);
+    assert.match(element('job-modal-metadata').innerText, /Not provided/);
+});
+
+test('job queue keeps API metadata through table selection, profile and email update', async () => {
+    const { context, element } = setup('jobs');
+    const requests = [];
+    const lead = {
+        id: 7, company_name: '<img src=x onerror=alert(1)>', job_title: 'Senior Video Editor',
+        job_role_signal: 'video content creator', location: 'Toronto, Canada', status: 'discovered',
+        lead_type: 'video_editing', email: 'info@example.test', website_url: 'https://example.test',
+        job_description: 'Full description '.repeat(100),
+        job_details: { posted_at: '2 days ago', apply_options: [
+            { title: 'Company', link: 'https://example.test/apply' }
+        ] },
+        contact_evidence: { status: 'matched', website_source_url: 'https://example.test',
+            email_status: 'public_domain_match',
+            emails: [{ email: 'info@example.test', source_url: 'https://example.test/contact' }] }
+    };
+    context.fetch = async (url, options) => {
+        requests.push({ url, options });
+        if (url === '/api/job-leads/7/update-email') {
+            lead.email = JSON.parse(options.body).email;
+            lead.contact_evidence.email_status = 'manual';
+            return { ok: true, json: async () => ({ status: 'success' }) };
+        }
+        return { ok: true, json: async () => ({
+            status: 'success', leads: [lead],
+            metrics: { total: 1, pending: 1, sent: 0, with_email: 1 }
+        }) };
+    };
+    vm.runInContext(`
+        activeQueueView = 'jobs';
+        activeSortBy = 'date_desc';
+        searchFilterString = 'Studios';
+        activeLeadTypeFilter = 'video_editing';
+        activeStatusFilter = 'discovered';
+    `, context);
+    await context.loadQueue();
+    const url = new URL(requests[0].url, 'http://localhost');
+    assert.equal(url.pathname, '/api/job-leads');
+    assert.equal(url.searchParams.get('q'), 'Studios');
+    assert.equal(url.searchParams.get('lead_type'), 'video_editing');
+    assert.equal(url.searchParams.get('status'), 'discovered');
+    assert.equal(url.searchParams.get('sort_by'), 'date_desc');
+    assert.equal(element('stat-total').innerText, 1);
+    assert.equal(element('stat-followup').innerText, 1);
+    assert.equal(element('btn-page-next').disabled, true);
+    const row = element('table-body').children[0];
+    assert.equal(row.children[0].textContent, lead.company_name);
+    assert.equal(row.children[1].textContent, 'Senior Video Editor');
+    row.onclick();
+    assert.equal(element('job-modal-title').innerText, 'Senior Video Editor');
+    assert.equal(element('job-modal-description').innerText, lead.job_description);
+    assert.match(element('job-modal-metadata').innerText, /2 days ago/);
+    assert.equal(element('job-modal-applications').children[0].href, 'https://example.test/apply');
+    element('job-modal-email-input').value = 'manual@example.test';
+    await context.saveJobEmailUpdate();
+    assert.equal(requests[1].url, '/api/job-leads/7/update-email');
+    assert.equal(requests[1].options.method, 'POST');
+    context.toggleJobProfileModal(true);
+    assert.equal(element('job-modal-email-input').value, 'manual@example.test');
+    assert.match(element('job-modal-contact-status').innerText, /manually supplied, unverified/);
+    assert.equal(vm.runInContext('isWorking', context), false);
+});
+
 test('local discovery tracks its own run without clearing shared logs', async () => {
     const { context, requests } = setup();
     await context.submitActiveDiscovery();
@@ -147,11 +285,44 @@ test('hiring discovery uses only job fields and separate results', async () => {
     context.setDiscoveryMode('jobs');
     element('job-country-input').value = 'Canada';
     await context.submitActiveDiscovery();
-    assert.equal(requests[1].url, '/api/trigger/discover-jobs');
-    assert.deepEqual(JSON.parse(requests[1].options.body), {
-        service_types: ['video_editing'], country: 'Canada'
+    assert.equal(requests[0].url, '/api/trigger/discover-jobs');
+    assert.deepEqual(JSON.parse(requests[0].options.body), {
+        service_types: ['video_editing'], country: 'Canada', pages_per_role: 1
     });
+
     assert.equal(context.resultView, 'jobs');
+    assert.equal(context.trackedRunId, 'qa-run');
+    assert.equal(requests.length, 1);
+});
+
+test('hiring depth shows a credit budget, preserves selection and sends explicit opt-in', async () => {
+    const { context, element, checked, requests } = setup();
+    context.setDiscoveryMode('jobs');
+    assert.match(element('job-search-budget').innerText, /Up to 4 Google Jobs requests/);
+    checked['job-service'] = ['video_editing', 'virtual_assistant'];
+    element('job-pages-input').value = '5';
+    context.updateHiringSearchBudget();
+    assert.match(element('job-search-budget').innerText, /Up to 40 Google Jobs requests/);
+    assert.match(element('job-search-budget').innerText, /plus company-contact searches/);
+    context.setDiscoveryMode('local');
+    context.setDiscoveryMode('jobs');
+    assert.equal(element('job-pages-input').value, '5');
+    await context.submitActiveDiscovery();
+    assert.equal(JSON.parse(requests[0].options.body).pages_per_role, 5);
+    assert.match(html, /<option value="1" selected>1 page \(default\)<\/option>/);
+    assert.match(html, /More pages can consume paid API credits/);
+    assert.match(html, /id="discovery-panel-jobs"[^>]*onchange="updateHiringSearchBudget\(\)"/);
+});
+
+test('invalid hiring depth is rejected before any search request', async () => {
+    const { context, element, requests } = setup();
+    context.setDiscoveryMode('jobs');
+    for (const value of ['', '0', '4', '6', '2.5', 'invalid']) {
+        element('job-pages-input').value = value;
+        await context.submitActiveDiscovery();
+        assert.match(element('discovery-error').innerText, /Choose 1, 2, 3, or 5/);
+    }
+    assert.equal(requests.length, 0);
 });
 
 test('validation prevents empty searches', async () => {
@@ -338,8 +509,8 @@ test('network timeouts block discovery and suggestion failures remain visible', 
     assert.equal(vm.runInContext('locationResolving', context), false);
 });
 
-function pollingSetup(run) {
-    const fixture = setup();
+function pollingSetup(run, page = 'prospects') {
+    const fixture = setup(page);
     vm.runInContext("activeLocalRunId = 'qa-run'; isWorking = true; loadQueue = async () => { globalThis.queueRefreshed = true; };", fixture.context);
     fixture.context.fetch = async () => ({ ok: true, json: async () => ({ status: 'success', run }) });
     return fixture;
@@ -404,4 +575,29 @@ test('a missing tracking ID is not treated as a monitorable successful search', 
     assert.match(element('discovery-error').innerText, /without a tracking ID/);
     assert.equal(vm.runInContext('isWorking', context), false);
     assert.equal(context.resultView, undefined);
+});
+
+test('hiring status polls its own endpoint and redirects to Job Leads only on success', async () => {
+    const { context } = pollingSetup({ state: 'succeeded', total: 1, completed: 1, errors: [], logs: [] }, 'discovery');
+    vm.runInContext("discoveryResultsView = 'jobs';", context);
+    let requested;
+    let destination;
+    context.window.location.assign = url => { destination = url; };
+    const original = context.fetch;
+    context.fetch = async url => { requested = url; return original(url); };
+    await context.pollLocalDiscoveryRun('qa-run');
+    assert.equal(requested, '/api/discovery/job-runs/qa-run');
+    assert.equal(destination, '/job-leads');
+});
+
+test('hiring failures and stop-waiting keep the user on the form with correct result guidance', async () => {
+    const { context, element } = pollingSetup({
+        state: 'failed', total: 2, completed: 2, errors: ['video_editing: quota exceeded'], logs: []
+    });
+    vm.runInContext("discoveryResultsView = 'jobs';", context);
+    await context.pollLocalDiscoveryRun('qa-run');
+    assert.match(element('discovery-error').innerText, /quota exceeded/);
+    assert.equal(context.queueRefreshed, undefined);
+    context.stopWaitingForLocalDiscovery();
+    assert.match(element('discovery-error').innerText, /Job Leads/);
 });

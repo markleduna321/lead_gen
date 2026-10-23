@@ -17,6 +17,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 SYSTEM_LOG_BUFFER = []
 LOCAL_DISCOVERY_RUNS = LocalDiscoveryRuns()
+HIRING_DISCOVERY_RUNS = LocalDiscoveryRuns("hiring")
 
 def emit_ui_log(message):
     """Appends an operational milestone directly to the user viewport queue."""
@@ -24,6 +25,7 @@ def emit_ui_log(message):
     print(message) # Keep standard terminal output intact
     SYSTEM_LOG_BUFFER.append(message)
     LOCAL_DISCOVERY_RUNS.record_log(message)
+    HIRING_DISCOVERY_RUNS.record_log(message)
     # Keep the live cache clean (trim past 50 entries)
     if len(SYSTEM_LOG_BUFFER) > 50:
         SYSTEM_LOG_BUFFER.pop(0)
@@ -95,11 +97,18 @@ def run_startup_migrations():
             ai_pitch_draft  TEXT,
             subject_line    TEXT,
             source_platform VARCHAR(50)   DEFAULT 'job_board',
+            job_identity    TEXT,
+            job_details     JSONB,
+            contact_evidence JSONB,
             created_at      TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
-            updated_at      TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
-            CONSTRAINT unique_job_lead UNIQUE (company_name, job_role_signal)
+            updated_at      TIMESTAMP     DEFAULT CURRENT_TIMESTAMP
         );
         """,
+        "ALTER TABLE job_leads ADD COLUMN IF NOT EXISTS job_identity TEXT;",
+        "ALTER TABLE job_leads ADD COLUMN IF NOT EXISTS job_details JSONB;",
+        "ALTER TABLE job_leads ADD COLUMN IF NOT EXISTS contact_evidence JSONB;",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_job_leads_identity ON job_leads (job_identity);",
+        "ALTER TABLE job_leads DROP CONSTRAINT IF EXISTS unique_job_lead;",
         "CREATE INDEX IF NOT EXISTS idx_job_leads_status    ON job_leads (status);",
         "CREATE INDEX IF NOT EXISTS idx_job_leads_lead_type ON job_leads (lead_type);",
         "CREATE INDEX IF NOT EXISTS idx_job_leads_email     ON job_leads (email) WHERE email IS NOT NULL;",
@@ -704,29 +713,61 @@ def trigger_job_discovery():
     service_types: list of any of ['video_editing', 'bpo_customer_service',
                    'bpo_data_entry', 'social_media_management', 'virtual_assistant']
     country: optional country filter string (e.g. 'United States', 'Australia')
+    pages_per_role: optional page budget, one of 1 (default), 2, 3, or 5
     """
-    data = request.get_json() or {}
+    from discovery_jobs import JOB_SIGNAL_MAP, validate_hiring_pages
+    data = request.get_json()
+    if not isinstance(data, dict):
+        return jsonify({"status": "error", "message": "Hiring discovery expects a JSON object."}), 400
     service_types = data.get('service_types', [])
-    country = data.get('country', '').strip()
+    country = data.get('country', '')
+    try:
+        pages_per_role = validate_hiring_pages(data.get("pages_per_role", 1))
+    except ValueError as error:
+        return jsonify({"status": "error", "message": str(error)}), 400
 
-    if not service_types:
-        return jsonify({"status": "error", "message": "Provide at least one service_type to scan."}), 400
+    if (
+        not isinstance(service_types, list) or not service_types
+        or any(not isinstance(service, str) or service not in JOB_SIGNAL_MAP for service in service_types)
+    ):
+        return jsonify({"status": "error", "message": "Select at least one supported service offering."}), 400
+    if not isinstance(country, str):
+        return jsonify({"status": "error", "message": "Country must be text or left blank."}), 400
+    country = country.strip()
+    from discovery_job_filters import resolve_hiring_country
+    try:
+        resolve_hiring_country(country)
+    except ValueError as error:
+        return jsonify({"status": "error", "message": str(error)}), 400
+    service_types = list(dict.fromkeys(service_types))
 
-    def job_discovery_worker():
+    def scan(service):
         from discovery_jobs import run_job_discovery
-        emit_ui_log(f"🚀 [JOB DISCOVERY] Starting scan for {len(service_types)} service type(s)...")
-        for stype in service_types:
-            run_job_discovery(stype, country)
-        emit_ui_log("✅ [JOB DISCOVERY] All service type scans complete.")
+        run_job_discovery(service, country, pages_per_role=pages_per_role)
 
-    thread = threading.Thread(target=job_discovery_worker)
-    thread.daemon = True
-    thread.start()
-
+    tasks = [("google_jobs", service, lambda service=service: scan(service)) for service in service_types]
+    try:
+        run_id = HIRING_DISCOVERY_RUNS.start(tasks, emit_ui_log)
+    except DiscoveryBusyError as error:
+        return jsonify({"status": "error", "message": str(error)}), 409
+    except Exception as error:
+        emit_ui_log(f"[JOB DISCOVERY ERROR] Worker could not start: {error}")
+        return jsonify({"status": "error", "message": "Hiring worker could not start. Please try again."}), 500
     return jsonify({
-        "status": "success",
+        "status": "success", "run_id": run_id,
+        "pages_per_role": pages_per_role,
+        "max_job_requests": sum(len(JOB_SIGNAL_MAP[service]) for service in service_types) * pages_per_role,
         "message": f"Job board discovery started for: {', '.join(service_types)}"
     }), 202
+
+
+@app.route('/api/discovery/job-runs/<run_id>', methods=['GET'])
+def get_hiring_discovery_run(run_id):
+    run = HIRING_DISCOVERY_RUNS.snapshot(run_id)
+    if run is None:
+        return jsonify({"status": "error", "message":
+            "Hiring status is unavailable. The app may have restarted or the run expired; check Job Leads before retrying."}), 404
+    return jsonify({"status": "success", "run": run})
 
 
 @app.route('/api/job-leads', methods=['GET'])
@@ -788,7 +829,7 @@ def get_job_leads():
         SELECT id, company_name, job_title, location, lead_type, job_role_signal,
                job_via, job_salary, job_schedule, job_description, job_apply_link,
                website_url, email, suggested_angle, ai_pitch_draft, subject_line,
-               status, source_platform, created_at, updated_at
+               status, source_platform, created_at, updated_at, job_details, contact_evidence
         FROM job_leads
         {where}
         ORDER BY {order_clause}
@@ -834,7 +875,11 @@ def update_job_lead_email(lead_id):
     with psycopg2.connect(DB_DSN) as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "UPDATE job_leads SET email = %s WHERE id = %s;",
+                """UPDATE job_leads SET email = %s,
+                    contact_evidence = COALESCE(contact_evidence, '{}'::jsonb)
+                        || jsonb_build_object('email_status', 'manual', 'email_source_url', NULL,
+                                              'email_updated_at', CURRENT_TIMESTAMP)
+                    WHERE id = %s;""",
                 (new_email or None, lead_id)
             )
             conn.commit()

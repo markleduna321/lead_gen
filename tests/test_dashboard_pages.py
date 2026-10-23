@@ -97,6 +97,84 @@ class DashboardPagesTests(unittest.TestCase):
         self.assertIn("ALTER TABLE prospects ADD COLUMN IF NOT EXISTS profile_url         TEXT;", queries)
         self.assertFalse(any(query.lstrip().upper().startswith("UPDATE ") for query in queries))
 
+    def test_job_identity_migration_preserves_legacy_rows_and_matches_schema(self):
+        database = MagicMock()
+        cursor = database.__enter__.return_value.cursor.return_value.__enter__.return_value
+        with (
+            patch.object(self.module, "DB_DSN", "qa-only"),
+            patch("psycopg2.connect", return_value=database),
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            self.module.run_startup_migrations()
+            first = [call.args[0] for call in cursor.execute.call_args_list]
+            cursor.execute.reset_mock()
+            self.module.run_startup_migrations()
+            second = [call.args[0] for call in cursor.execute.call_args_list]
+        self.assertEqual(first, second)
+        add = "ALTER TABLE job_leads ADD COLUMN IF NOT EXISTS job_identity TEXT;"
+        index = "CREATE UNIQUE INDEX IF NOT EXISTS idx_job_leads_identity ON job_leads (job_identity);"
+        drop = "ALTER TABLE job_leads DROP CONSTRAINT IF EXISTS unique_job_lead;"
+        self.assertLess(first.index(add), first.index(index))
+        self.assertLess(first.index(index), first.index(drop))
+        schema = (Path(__file__).resolve().parents[1] / "schema.sql").read_text()
+        for statement in (add, index, drop):
+            self.assertIn(statement, first)
+            self.assertIn(statement, schema)
+        create = next(sql for sql in first if "CREATE TABLE IF NOT EXISTS job_leads" in sql)
+        self.assertIn("job_identity    TEXT,", create)
+        self.assertNotIn("UNIQUE (company_name, job_role_signal)", create)
+        self.assertFalse(any(sql.lstrip().upper().startswith(
+            ("UPDATE ", "DELETE ", "TRUNCATE ", "DROP TABLE ")
+        ) for sql in first))
+        self.assertEqual(database.__enter__.return_value.commit.call_count, 2)
+
+    def test_richer_job_fields_reach_api_and_manual_email_does_not_claim_matching(self):
+        database = MagicMock()
+        cursor = database.__enter__.return_value.cursor.return_value.__enter__.return_value
+        cursor.fetchone.return_value = {"total": 1, "pending": 1, "sent": 0, "with_email": 1}
+        details = {"posted_at": "2 days ago", "apply_options": [
+            {"title": "Company", "link": "https://example.test/apply"},
+        ]}
+        evidence = {"status": "matched", "email_status": "public_domain_match",
+                    "email_source_url": "https://example.test/contact"}
+        cursor.fetchall.return_value = [{
+            "id": 7, "company_name": "QA", "job_title": "Video Editor",
+            "job_description": "Full description " * 100, "job_details": details,
+            "contact_evidence": evidence,
+        }]
+        with patch("psycopg2.connect", return_value=database):
+            response = self.client.get("/api/job-leads")
+            self.assertEqual(response.status_code, 200)
+            lead = response.json["leads"][0]
+            self.assertEqual(lead["job_details"], details)
+            self.assertEqual(lead["contact_evidence"], evidence)
+            self.assertGreater(len(lead["job_description"]), 600)
+            select = cursor.execute.call_args.args[0]
+            self.assertIn("job_details, contact_evidence", select)
+            response = self.client.post("/api/job-leads/7/update-email", json={"email": "manual@example.test"})
+            self.assertEqual(response.status_code, 200)
+            sql, args = cursor.execute.call_args.args
+            self.assertEqual(args, ("manual@example.test", 7))
+            self.assertIn("'email_status', 'manual'", sql)
+            self.assertIn("'email_source_url', NULL", sql)
+
+    def test_richer_job_migration_is_additive_without_backfill(self):
+        database = MagicMock()
+        cursor = database.__enter__.return_value.cursor.return_value.__enter__.return_value
+        with (
+            patch.object(self.module, "DB_DSN", "qa-only"),
+            patch("psycopg2.connect", return_value=database),
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            self.module.run_startup_migrations()
+        queries = [call.args[0] for call in cursor.execute.call_args_list]
+        schema = (Path(__file__).resolve().parents[1] / "schema.sql").read_text()
+        for column in ("job_details", "contact_evidence"):
+            statement = f"ALTER TABLE job_leads ADD COLUMN IF NOT EXISTS {column} JSONB;"
+            self.assertIn(statement, queries)
+            self.assertIn(statement, schema)
+        self.assertFalse(any(sql.lstrip().upper().startswith(("UPDATE ", "DELETE ")) for sql in queries))
+
     def test_local_run_endpoint_reports_partial_failure_and_unknown_run(self):
         from unittest.mock import Mock
         runs = LocalDiscoveryRuns()

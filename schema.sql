@@ -70,7 +70,7 @@ CREATE INDEX IF NOT EXISTS idx_prospects_followup    ON prospects (followup_due_
 
 -- Phase 4: Dedicated Job Board Leads Table
 -- Job leads are structurally different from web-design prospects:
--- they are identified by (company_name, job_role_signal), not google_place_id.
+-- New leads use a normalized company/title/location/service identity.
 CREATE TABLE IF NOT EXISTS job_leads (
     id              SERIAL PRIMARY KEY,
     company_name    VARCHAR(512)  NOT NULL,
@@ -90,12 +90,18 @@ CREATE TABLE IF NOT EXISTS job_leads (
     ai_pitch_draft  TEXT,
     subject_line    TEXT,
     source_platform VARCHAR(50)   DEFAULT 'job_board',
+    job_identity    TEXT,                        -- NULL for preserved legacy rows
+    job_details     JSONB,
+    contact_evidence JSONB,
     created_at      TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
-    updated_at      TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
-
-    -- Correct dedup key: same company hiring for the same role = same lead
-    CONSTRAINT unique_job_lead UNIQUE (company_name, job_role_signal)
+    updated_at      TIMESTAMP     DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE job_leads ADD COLUMN IF NOT EXISTS job_identity TEXT;
+ALTER TABLE job_leads ADD COLUMN IF NOT EXISTS job_details JSONB;
+ALTER TABLE job_leads ADD COLUMN IF NOT EXISTS contact_evidence JSONB;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_job_leads_identity ON job_leads (job_identity);
+ALTER TABLE job_leads DROP CONSTRAINT IF EXISTS unique_job_lead;
 
 CREATE INDEX IF NOT EXISTS idx_job_leads_status    ON job_leads (status);
 CREATE INDEX IF NOT EXISTS idx_job_leads_lead_type ON job_leads (lead_type);

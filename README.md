@@ -75,8 +75,104 @@ an explicit error. Leads saved before a failure remain available. Only one local
 run can execute at a time. **Stop waiting** stops browser monitoring, not the
 worker. After repeated status-network failures the UI unlocks with a warning.
 Status is in memory (last 20 runs, 50 log lines per run), so an app restart loses
-tracking; check Prospects before retrying. Job-board and bulk-pitch monitoring
-retain their existing behavior.
+tracking; check Prospects before retrying.
+
+Hiring Companies also uses structured status at
+`/api/discovery/job-runs/<run_id>`, with separate logs and a single active hiring
+run. Supported service lists and country text are validated, and repeated
+service selections scan only once. Search, contact-enrichment, and save failures
+are reported as failed/partial runs, not empty successes. Remaining role/service
+searches continue when safe; valid postings can be saved before an error is
+shown. Malformed postings are individually logged and skipped without discarding
+later valid postings. Successful empty searches are distinct from provider
+failures. Stop waiting does not cancel a worker; check Job Leads before retrying
+after a lost connection or app restart. Bulk-pitch monitoring is unchanged.
+Hiring targeting resolves country names/ISO codes using `pycountry`, then sends
+both `gl` and `location` to Google Jobs. Unknown countries are rejected before
+starting a run. Selected-country searches require explicit country evidence in
+the returned posting location: unknown locations, city-only locations, and remote
+jobs without that evidence are excluded before contact enrichment. Description
+mentions of headquarters do not establish eligibility. Missing locations are
+stored as Unknown, not assumed Remote. Blank means no country filter; provider
+defaults may bias results and this does not guarantee worldwide coverage.
+Actual job titles must match conservative service-specific role patterns,
+including common aliases; unrelated titles are logged and skipped. These checks
+can exclude legitimate postings with incomplete or unrecognized wording and
+do not independently verify employer claims or work authorization.
+
+Hiring deduplication uses a SHA-256 identity of company + actual job title +
+returned location + selected service, normalized for Unicode compatibility,
+letter case, and whitespace (not punctuation or geographic aliases). The search
+role and provider posting ID are not part of this identity. Repeated postings
+within a run are merged before enrichment and again at the save boundary:
+the first nonempty value wins, with missing details filled by later duplicates,
+the longest returned description retained, and metadata lists combined.
+Different titles, locations, or selected services remain separate leads.
+Identical-looking vacancies with different provider IDs are intentionally merged.
+Contact results are cached by normalized company + location, never company alone.
+This prevents reuse across different returned locations; public-evidence matching
+is described below and does not establish branch ownership.
+
+On the next normal app startup, the migration adds nullable `job_identity`, creates
+a unique index for keyed rows, and removes the old company/search-role constraint.
+Re-searches update the same keyed lead without resetting its ID, status, draft,
+subject, or creation date; empty incoming details do not erase saved details.
+**Existing rows are preserved without backfill or historical deduplication.**
+Their identity remains NULL; the first re-search may create a new keyed row beside
+an old legacy row. Previously overwritten locations cannot be recovered by this
+migration. Restart the app before using the updated hiring worker. QA uses mocked
+database access and does not apply this migration to the configured database.
+
+Hiring records now retain the full provider-returned description, salary and
+schedule text, provider posting ID, reported posting-date text, collection time
+in UTC, employment/benefit extensions, highlights, all valid HTTP(S) application
+options, and the provider share link. Relative dates such as "3 days ago" remain
+provider text rather than invented exact dates. Missing fields remain unavailable.
+Duplicate results fill missing details and combine application/highlight lists.
+The Job Leads profile shows actual title separately from its searched role signal,
+provider-reported metadata, links, and contact provenance. It renders provider
+text as text, not HTML.
+
+Company contact lookup requires company-name evidence in both the search-result
+title and the candidate website's title or main heading. Known job boards/social
+directories are excluded. Up to three candidate hosts are checked; the first
+matched site and its `/contact`, `/about`, and `/contact-us` pages are inspected.
+Redirects stay on the same host (allowing www/non-www and HTTP-to-HTTPS changes).
+Only emails found in visible text/mailto links with the matched website's domain
+are retained; off-domain/free-mail addresses and common no-reply/placeholders
+are excluded. Publicly listed telephone links, page titles, source URLs, matching
+basis, and lookup timestamps are recorded as evidence, not verified identities.
+This conservative policy can miss legitimate brands with different legal names,
+sites on other domains, JS-only pages, and contacts on other company subdomains.
+It cannot disambiguate every same-name business, prove branch ownership or hiring
+eligibility, or establish mailbox existence/deliverability. Ambiguous candidates
+remain unconfirmed; network/provider failures are logged and mark a partial run.
+
+The next normal startup adds nullable JSONB `job_details` and `contact_evidence`
+columns without backfilling existing records. Restart before searching. Existing
+contacts without evidence are shown as unconfirmed/legacy, not verified.
+Manual email edits are marked unverified and preserved during re-search.
+A newly matched website does not inherit an older unconfirmed email when no
+current domain-matched email is found. No live migration is applied during QA.
+Hiring searches default to **one page per role**. The Pages per Role selector
+allows **1, 2, 3, or 5** pages (maximum 5), preserved when switching discovery modes.
+Each service has four role queries, so its Google Jobs budget is at most
+`4 × pages per role` requests; the form displays the total for selected services.
+Five pages for one service means up to 20 Google Jobs requests, plus separate
+company-contact searches. These may consume paid SerpAPI credits. A page contains
+up to 10 raw postings before filtering/deduplication; more pages do not guarantee
+more matching leads. No automatic retries add to this page budget.
+
+The trigger accepts integer `pages_per_role` (default 1) and returns the accepted
+depth and `max_job_requests` along with its run ID. Invalid/unbounded depths are
+rejected before starting. Pagination follows only `serpapi_pagination.next_page_token`
+at the fixed provider endpoint, keeps country/role parameters, and resets tokens
+for each role. It stops at the page budget or when no token remains. Repeated or
+malformed tokens and later-page failures produce explicit partial-run errors;
+remaining roles/services continue and valid postings can still be saved.
+Deduplication covers all fetched pages before contact enrichment. Progress logs
+identify the role and page; the run progress counter continues to count services,
+not pages. No database-schema change is required for search depth.
 
 Use **Appearance** in the sidebar to choose System, Light, or Dark. The preference
 is saved in the browser. System mode follows the operating system's color theme.
@@ -98,3 +194,12 @@ venv\Scripts\python.exe -B -m unittest discover -s tests -p "test_*.py" -v
 Route tests replace environment loading and database access with mocks. Browser
 QA should likewise use an isolated preview: importing the production API module
 normally runs startup schema migrations.
+
+Hiring regression coverage includes the trigger-to-worker-to-save-to-results-API
+pipeline with real parsing, targeting, pagination, deduplication, contact matching,
+and run tracking while provider/SQL I/O is mocked. Success, later-page partial
+failure, and database-save failure are checked separately. JavaScript tests also
+exercise queue loading, actual-title table selection, full profile metadata,
+application links, and the manual-email update flow. These checks do not certify
+live credentials, real PostgreSQL migration/upsert execution, contact
+deliverability, or visual browser layout.

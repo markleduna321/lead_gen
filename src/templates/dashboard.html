@@ -40,7 +40,7 @@
     <!-- Job Board Prospect Modal -->
     <div id="job-profile-modal"
         class="hidden fixed inset-0 z-40 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
-        <div class="bg-slate-900 border border-purple-900/50 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+        <div class="bg-slate-900 border border-purple-900/50 rounded-2xl max-w-2xl max-h-[90vh] overflow-y-auto w-full p-6 shadow-2xl space-y-4">
             <div class="flex items-center justify-between border-b border-slate-800 pb-3">
                 <div>
                     <h3 id="job-modal-company" class="text-base font-bold text-purple-300">Company</h3>
@@ -52,8 +52,9 @@
             <div class="space-y-3 text-sm">
                 <div class="grid grid-cols-2 gap-3">
                     <div>
-                        <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-0.5">Hiring Signal (Role)</label>
+                        <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-0.5">Actual Job Title</label>
                         <p id="job-modal-title" class="text-purple-400 font-medium"></p>
+                        <p id="job-modal-signal" class="text-xs text-slate-500"></p>
                     </div>
                     <div>
                         <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-0.5">Our Service Pitch</label>
@@ -75,9 +76,14 @@
                     <p id="job-modal-salary" class="text-amber-400 font-semibold text-xs"></p>
                 </div>
                 <div>
-                    <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-0.5">Job Description Snippet</label>
+                    <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-0.5">Full Captured Description</label>
                     <p id="job-modal-description"
                         class="text-xs text-slate-400 bg-slate-950 p-2.5 rounded border border-slate-800 max-h-28 overflow-y-auto leading-relaxed whitespace-pre-wrap"></p>
+                </div>
+                <div>
+                    <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-0.5">Posting Details (Provider Reported)</label>
+                    <p id="job-modal-metadata" class="text-xs text-slate-400 whitespace-pre-wrap break-words"></p>
+                    <p id="job-modal-highlights" class="text-xs text-slate-400 whitespace-pre-wrap mt-2"></p>
                 </div>
                 <div class="grid grid-cols-2 gap-3">
                     <div>
@@ -90,6 +96,13 @@
                         <a id="job-modal-apply" href="#" target="_blank" rel="noopener noreferrer"
                             class="text-xs text-blue-400 hover:underline block"></a>
                     </div>
+                </div>
+                <div id="job-modal-applications" class="flex flex-col gap-1 text-xs text-blue-400"></div>
+                <div class="text-xs text-slate-400 space-y-1">
+                    <p id="job-modal-contact-status"></p>
+                    <p id="job-modal-contacts" class="whitespace-pre-wrap break-words"></p>
+                    <div id="job-modal-contact-sources" class="flex flex-col gap-1 text-emerald-400"></div>
+                    <p>Public-evidence matching does not verify legal identity, branch ownership, hiring eligibility, or mailbox deliverability.</p>
                 </div>
                 <hr class="border-slate-800">
                 <div>
@@ -378,7 +391,7 @@
 
             </div>
 
-            <div id="discovery-panel-jobs" role="tabpanel" aria-labelledby="discovery-tab-jobs" class="hidden space-y-4">
+            <div id="discovery-panel-jobs" role="tabpanel" aria-labelledby="discovery-tab-jobs" onchange="updateHiringSearchBudget()" class="hidden space-y-4">
             <div>
                 <label class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-2">Service Offerings to Scan</label>
                 <div class="space-y-2 bg-slate-950 p-3 border border-slate-800 rounded-lg text-xs text-slate-300">
@@ -390,9 +403,22 @@
                 </div>
             </div>
             <div>
-                <label class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">Target Country <span class="text-slate-600 normal-case font-normal">(optional — leave blank for global)</span></label>
+                <label class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">Target Country <span class="text-slate-600 normal-case font-normal">(optional — blank means no country filter)</span></label>
                 <input id="job-country-input" type="text" placeholder="e.g., United States, Australia, United Kingdom..."
                     class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-purple-500">
+                <p class="text-[11px] text-slate-400 mt-2">Country names or ISO codes are accepted. Strict matching excludes unknown locations and remote jobs without explicit country evidence in their location. City-only results may be excluded. Blank does not guarantee worldwide coverage. Actual job titles must match a selected service.</p>
+            </div>
+            <div>
+                <label for="job-pages-input" class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">Pages per Role</label>
+                <select id="job-pages-input"
+                    class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200">
+                    <option value="1" selected>1 page (default)</option>
+                    <option value="2">2 pages</option>
+                    <option value="3">3 pages</option>
+                    <option value="5">5 pages (maximum)</option>
+                </select>
+                <p id="job-search-budget" aria-live="polite" class="text-[11px] text-amber-400 mt-2"></p>
+                <p class="text-[11px] text-slate-400 mt-1">Up to 10 postings per page before filtering. More pages can consume paid API credits and do not guarantee more matching leads. Company-contact searches use additional credits. Stops early when no next page is available.</p>
             </div>
             </div>
             <p id="discovery-error" role="alert" class="hidden text-sm text-red-400"></p>
@@ -681,7 +707,11 @@
         let activeLocalRunId = null;
         let localRunTimer = null;
 
-        function stopWaitingForLocalDiscovery(message = 'Stopped monitoring. The worker may still be running; check Prospects before starting another search.') {
+        function discoveryResultsLabel() {
+            return discoveryResultsView === 'jobs' ? 'Job Leads' : 'Prospects';
+        }
+
+        function stopWaitingForLocalDiscovery(message = `Stopped monitoring. The worker may still be running; check ${discoveryResultsLabel()} before starting another search.`) {
             activeLocalRunId = null;
             clearTimeout(localRunTimer);
             document.getElementById('loading-overlay').classList.add('hidden');
@@ -699,7 +729,8 @@
 
         async function pollLocalDiscoveryRun(runId, failures = 0) {
             try {
-                const response = await fetch(`/api/discovery/runs/${encodeURIComponent(runId)}`,
+                const runPath = discoveryResultsView === 'jobs' ? 'job-runs' : 'runs';
+                const response = await fetch(`/api/discovery/${runPath}/${encodeURIComponent(runId)}`,
                     { signal: AbortSignal.timeout(10000) });
                 const data = await response.json();
                 if (activeLocalRunId !== runId) return;
@@ -718,7 +749,7 @@
                 terminal.innerHTML = '';
                 run.logs.forEach(line => appendTerminalLine(terminal, line));
                 document.getElementById('loading-overlay-text').innerText =
-                    `${run.completed} of ${run.total} industry/source searches finished.`;
+                    `${run.completed} of ${run.total} ${discoveryResultsView === 'jobs' ? 'service scans' : 'industry/source searches'} finished.`;
                 if (run.state === 'failed') {
                     stopWaitingForLocalDiscovery(`Discovery finished with errors. Some leads may have been saved. ${run.errors.join(' | ')}`);
                     return;
@@ -728,7 +759,7 @@
                     document.getElementById('loading-overlay').classList.add('hidden');
                     document.getElementById('btn-stop-discovery-wait').classList.add('hidden');
                     setGlobalLock(false);
-                    if (workspacePage === 'discovery') window.location.assign('/prospects');
+                    if (workspacePage === 'discovery') window.location.assign(discoveryResultsView === 'jobs' ? '/job-leads' : '/prospects');
                     else await loadQueue();
                     return;
                 }
@@ -737,7 +768,7 @@
                 console.error('Local discovery monitoring failed:', error);
                 if (activeLocalRunId !== runId) return;
                 if (failures >= 2) {
-                    stopWaitingForLocalDiscovery(`Unable to monitor discovery: ${error.message} The worker may still be running; check Prospects before retrying.`);
+                    stopWaitingForLocalDiscovery(`Unable to monitor discovery: ${error.message} The worker may still be running; check ${discoveryResultsLabel()} before retrying.`);
                     return;
                 }
                 document.getElementById('loading-overlay-text').innerText = 'Status connection interrupted. Retrying...';
@@ -1159,6 +1190,7 @@
                 : 'Find local businesses that may need a website or digital services. Results appear in Prospects.';
             document.getElementById('btn-discovery-submit').innerText = jobs ? 'Find Hiring Companies' : 'Find Businesses';
             document.getElementById('discovery-error').classList.add('hidden');
+            if (jobs) updateHiringSearchBudget();
             if (!jobs) refreshDiscoveryMap();
         }
 
@@ -1184,7 +1216,7 @@
         }
 
         async function startDiscoveryRequest(endpoint, payload, resultsView, progressText) {
-            const localDiscovery = endpoint === '/api/trigger/discover';
+            const trackedDiscovery = ['/api/trigger/discover', '/api/trigger/discover-jobs'].includes(endpoint);
             let responseReceived = false;
             toggleDiscoveryModal(false);
             setGlobalLock(true);
@@ -1192,14 +1224,14 @@
             document.getElementById('loading-overlay-text').innerText = progressText;
             overlay.classList.remove('hidden');
             try {
-                if (!localDiscovery) {
+                if (!trackedDiscovery) {
                     const cleared = await fetch('/api/discovery/logs/clear', { method: 'POST' });
                     if (!cleared.ok) throw new Error('Could not prepare discovery logs. Please try again.');
                 }
                 const response = await fetch(endpoint, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    signal: localDiscovery ? AbortSignal.timeout(15000) : undefined,
+                    signal: trackedDiscovery ? AbortSignal.timeout(15000) : undefined,
                     body: JSON.stringify(payload)
                 });
                 const data = await response.json();
@@ -1207,12 +1239,12 @@
                 if (!response.ok || data.status !== 'success') {
                     throw new Error(data.message || 'Could not start discovery. Please try again.');
                 }
-                if (localDiscovery && (typeof data.run_id !== 'string' || !data.run_id)) {
-                    throw new Error('Discovery started without a tracking ID. Check Prospects before retrying; the worker may still be running.');
+                if (trackedDiscovery && (typeof data.run_id !== 'string' || !data.run_id)) {
+                    throw new Error(`Discovery started without a tracking ID. Check ${resultsView === 'jobs' ? 'Job Leads' : 'Prospects'} before retrying; the worker may still be running.`);
                 }
                 discoveryResultsView = resultsView;
                 if (workspacePage !== 'discovery') setQueueView(resultsView);
-                if (localDiscovery) {
+                if (trackedDiscovery) {
                     await startLocalDiscoveryPolling(data.run_id);
                 } else {
                     await startLiveConsoleLogStreamingLoop();
@@ -1223,10 +1255,24 @@
                 overlay.classList.add('hidden');
                 setGlobalLock(false);
                 toggleDiscoveryModal(true);
-                showDiscoveryError(localDiscovery && !responseReceived
-                    ? `${err.message} The request may have reached the server; check Prospects before retrying.`
+                showDiscoveryError(trackedDiscovery && !responseReceived
+                    ? `${err.message} The request may have reached the server; check ${resultsView === 'jobs' ? 'Job Leads' : 'Prospects'} before retrying.`
                     : err.message);
             }
+        }
+
+        function setJobLink(link, value, label, missing = 'Not available') {
+            let valid = false;
+            try {
+                const url = new URL(value);
+                valid = ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password;
+            } catch {}
+            link.href = valid ? value : '#';
+            link.innerText = valid ? label : missing;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.tabIndex = valid ? 0 : -1;
+            return valid;
         }
 
         function toggleJobProfileModal(show) {
@@ -1237,18 +1283,62 @@
             if (!lead) return;
             document.getElementById('job-modal-company').innerText = lead.company_name || lead.business_name;
             document.getElementById('job-modal-platform').innerText = lead.job_via ? `via ${lead.job_via}` : 'Job Board';
-            document.getElementById('job-modal-title').innerText = lead.job_role_signal || lead.job_title || lead.category || '—';
+            document.getElementById('job-modal-title').innerText = lead.job_title || lead.category || '—';
+            document.getElementById('job-modal-signal').innerText = lead.job_role_signal ? `Search signal: ${lead.job_role_signal}` : '';
             document.getElementById('job-modal-service').innerText = (lead.lead_type || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-            document.getElementById('job-modal-location').innerText = lead.location || lead.formatted_address || 'Remote';
+            document.getElementById('job-modal-location').innerText = lead.location || lead.formatted_address || 'Unknown';
             document.getElementById('job-modal-schedule').innerText = lead.job_schedule || 'Not specified';
             document.getElementById('job-modal-salary').innerText = lead.job_salary || 'Not disclosed';
             document.getElementById('job-modal-description').innerText = lead.job_description || 'No description captured.';
             const webEl = document.getElementById('job-modal-website');
-            webEl.href = lead.website_url || '#';
-            webEl.innerText = lead.website_url ? lead.website_url.replace(/^https?:\/\//, '').split('/')[0] : 'Not found';
+            setJobLink(webEl, lead.website_url, lead.website_url, 'Not found');
             const applyEl = document.getElementById('job-modal-apply');
-            applyEl.href = lead.job_apply_link || '#';
-            applyEl.innerText = lead.job_apply_link ? 'View Job Posting ↗' : 'Not available';
+            setJobLink(applyEl, lead.job_apply_link, 'View Job Posting ↗');
+            const details = lead.job_details || {};
+            const metadata = [
+                `Posted: ${details.posted_at || 'Not provided'} (provider text, not an exact date)`,
+                `Collected (UTC): ${details.collected_at || 'Not recorded'}`,
+                `Posting ID: ${details.provider_job_id || 'Not provided'}`,
+            ];
+            Object.entries(details.detected_extensions || {}).forEach(([key, value]) => {
+                metadata.push(`${key.replace(/_/g, ' ')}: ${String(value)}`);
+            });
+            if (Array.isArray(details.extensions) && details.extensions.length) {
+                metadata.push(`Other details: ${details.extensions.join(' / ')}`);
+            }
+            document.getElementById('job-modal-metadata').innerText = metadata.join('\n');
+            document.getElementById('job-modal-highlights').innerText = (details.job_highlights || [])
+                .map(section => `${section.title || 'Highlights'}\n${(section.items || []).join('\n')}`).join('\n\n');
+            const applications = (details.apply_options || []).slice();
+            if (details.share_link) applications.push({ title: 'Provider posting', link: details.share_link });
+            document.getElementById('job-modal-applications').replaceChildren(...applications.flatMap(option => {
+                const link = document.createElement('a');
+                return setJobLink(link, option.link, option.title || 'Apply') ? [link] : [];
+            }));
+            const evidence = lead.contact_evidence || {};
+            const matched = evidence.status === 'matched' && evidence.website_source_url === lead.website_url;
+            const emailMatched = matched && evidence.email_status === 'public_domain_match'
+                && (evidence.emails || []).some(entry => entry.email === lead.email);
+            document.getElementById('job-modal-contact-status').innerText =
+                `Website: ${matched ? 'public-evidence match' : 'unconfirmed / legacy'}. Email: ${
+                    evidence.email_status === 'manual' ? 'manually supplied, unverified'
+                    : emailMatched ? 'found publicly on matching domain, deliverability unverified'
+                    : 'unconfirmed / not found'}. Checked: ${evidence.checked_at || 'not recorded'}.`;
+            document.getElementById('job-modal-contacts').innerText = [
+                evidence.matching_basis || '',
+                ...(evidence.emails || []).map(entry => `Public email: ${entry.email}`),
+                ...(evidence.phones || []).map(entry => `Listed phone (unverified): ${entry.phone}`),
+            ].filter(Boolean).join('\n');
+            const sourceUrls = [...new Set([
+                ...(evidence.pages_checked || []), evidence.search_result_url,
+                evidence.website_source_url, evidence.email_source_url,
+                ...(evidence.emails || []).map(entry => entry.source_url),
+                ...(evidence.phones || []).map(entry => entry.source_url),
+            ].filter(Boolean))];
+            document.getElementById('job-modal-contact-sources').replaceChildren(...sourceUrls.flatMap(url => {
+                const link = document.createElement('a');
+                return setJobLink(link, url, `Source: ${url}`) ? [link] : [];
+            }));
             document.getElementById('job-modal-email-input').value = lead.email || '';
         }
 
@@ -1479,15 +1569,30 @@
             document.getElementById('btn-send').disabled = true; document.getElementById('btn-send').innerText = "Approve & Send Test"; document.getElementById('btn-send').className = "col-span-2 bg-slate-800 text-slate-500 font-bold text-sm py-2.5 rounded-lg opacity-50";
         }
 
+        function updateHiringSearchBudget() {
+            const services = document.querySelectorAll('input[name="job-service"]:checked').length;
+            const pages = Number(document.getElementById('job-pages-input').value);
+            document.getElementById('job-search-budget').innerText = [1, 2, 3, 5].includes(pages)
+                ? `Up to ${services * 4 * pages} Google Jobs requests (${services} service(s) × 4 roles × ${pages} page(s)), plus company-contact searches.`
+                : 'Choose 1, 2, 3, or 5 pages per role.';
+        }
+
         async function submitJobDiscoveryRequest() {
             const checkedServices = document.querySelectorAll('input[name="job-service"]:checked');
             const serviceTypes = Array.from(checkedServices).map(cb => cb.value);
             const country = document.getElementById('job-country-input').value.trim();
+            const pagesPerRole = Number(document.getElementById('job-pages-input').value);
             if (serviceTypes.length === 0) {
                 showDiscoveryError('Select at least one service offering.');
                 return;
             }
-            return startDiscoveryRequest('/api/trigger/discover-jobs', { service_types: serviceTypes, country },
+            if (![1, 2, 3, 5].includes(pagesPerRole)) {
+                showDiscoveryError('Choose 1, 2, 3, or 5 pages per role.');
+                return;
+            }
+            return startDiscoveryRequest('/api/trigger/discover-jobs', {
+                service_types: serviceTypes, country, pages_per_role: pagesPerRole
+            },
                 'jobs', 'Finding hiring companies...');
         }
 
