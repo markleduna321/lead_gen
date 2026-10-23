@@ -9,7 +9,8 @@ class DiscoveryBusyError(RuntimeError):
 
 
 class LocalDiscoveryRuns:
-    def __init__(self):
+    def __init__(self, label: str = "local"):
+        self._label = label
         self._runs = {}
         self._lock = threading.Lock()
         self._context = threading.local()
@@ -31,7 +32,7 @@ class LocalDiscoveryRuns:
         run_id = uuid.uuid4().hex
         with self._lock:
             if any(run["state"] == "running" for run in self._runs.values()):
-                raise DiscoveryBusyError("A local discovery is already running. Wait for it to finish before starting another.")
+                raise DiscoveryBusyError(f"A {self._label} discovery is already running. Wait for it to finish before starting another.")
             while len(self._runs) >= 20:
                 del self._runs[next(iter(self._runs))]
             self._runs[run_id] = {
