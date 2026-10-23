@@ -71,9 +71,10 @@ def enrich_company_contact(company_name: str, location: str) -> dict:
     if not SERPAPI_KEY:
         return result
 
+    location_query = f" {location.strip()}" if location and location.strip() else ""
     params = {
         "engine": "google",
-        "q": f'"{company_name}" official website contact',
+        "q": f'"{company_name}" official website contact{location_query}',
         "api_key": SERPAPI_KEY,
         "num": 5,
     }
@@ -108,40 +109,40 @@ def save_job_leads(leads):
         return
 
     insert_query = """
-        INSERT INTO prospects (
-            business_name, category, formatted_address, google_place_id,
-            lead_type, source_platform, website_url, email,
-            suggested_angle, job_via, job_salary, job_schedule,
-            job_description, job_apply_link, status
+        INSERT INTO job_leads (
+            company_name, job_title, location, lead_type, job_role_signal,
+            job_via, job_salary, job_schedule, job_description, job_apply_link,
+            website_url, email, suggested_angle, status, source_platform
         )
         VALUES %s
-        ON CONFLICT (google_place_id) DO UPDATE SET
-            website_url     = COALESCE(EXCLUDED.website_url,     prospects.website_url),
-            email           = COALESCE(EXCLUDED.email,           prospects.email),
-            suggested_angle = COALESCE(EXCLUDED.suggested_angle, prospects.suggested_angle),
-            job_via         = COALESCE(EXCLUDED.job_via,         prospects.job_via),
-            job_salary      = COALESCE(EXCLUDED.job_salary,      prospects.job_salary),
-            job_schedule    = COALESCE(EXCLUDED.job_schedule,    prospects.job_schedule),
-            job_description = COALESCE(EXCLUDED.job_description, prospects.job_description),
-            job_apply_link  = COALESCE(EXCLUDED.job_apply_link,  prospects.job_apply_link);
+        ON CONFLICT (company_name, job_role_signal) DO UPDATE SET
+            job_title       = COALESCE(EXCLUDED.job_title,       job_leads.job_title),
+            website_url     = COALESCE(EXCLUDED.website_url,     job_leads.website_url),
+            email           = COALESCE(EXCLUDED.email,           job_leads.email),
+            job_via         = COALESCE(EXCLUDED.job_via,         job_leads.job_via),
+            job_salary      = COALESCE(EXCLUDED.job_salary,      job_leads.job_salary),
+            job_schedule    = COALESCE(EXCLUDED.job_schedule,    job_leads.job_schedule),
+            job_description = COALESCE(EXCLUDED.job_description, job_leads.job_description),
+            job_apply_link  = COALESCE(EXCLUDED.job_apply_link,  job_leads.job_apply_link),
+            updated_at      = NOW();
     """
     data_tuples = [
         (
-            lead["company_name"][:254],
-            lead["job_title"][:254],
-            lead.get("location", "Remote / International")[:499],
-            lead["unique_id"],
+            lead["company_name"][:511],
+            lead["job_title"][:511],
+            lead.get("location", "Remote / International"),
             lead["lead_type"],
-            "job_board",
+            lead.get("job_role_signal", lead["job_title"])[:254],
+            lead.get("job_via", "") or "",
+            lead.get("job_salary", "") or "",
+            lead.get("job_schedule", "") or "",
+            lead.get("job_description", "") or "",
+            lead.get("job_apply_link", "") or "",
             lead.get("website_url"),
             lead.get("email"),
             f"Hiring '{lead.get('job_role_signal', lead['job_title'])[:80]}' — outsourcing opportunity",
-            lead.get("job_via", ""),
-            lead.get("job_salary", ""),
-            lead.get("job_schedule", ""),
-            lead.get("job_description", ""),
-            lead.get("job_apply_link", ""),
             "discovered",
+            "job_board",
         )
         for lead in leads
     ]
@@ -151,10 +152,12 @@ def save_job_leads(leads):
             with conn.cursor() as cur:
                 execute_values(cur, insert_query, data_tuples)
                 conn.commit()
-                emit_ui_log(f"💾 [PostgreSQL] Saved {len(data_tuples)} job board prospects to DB.")
+                emit_ui_log(f"💾 [PostgreSQL] Saved {len(data_tuples)} job board leads to job_leads table.")
     except Exception as e:
         emit_ui_log(f"❌ [DB ERROR] Job leads insertion failure: {e}")
-        emit_ui_log("💡 [HINT] Restart the app if this mentions a missing column — migrations run on startup.")
+        emit_ui_log("💡 [HINT] Restart Flask so startup migrations create the job_leads table first.")
+
+
 
 
 def run_job_discovery(service_type, country=""):

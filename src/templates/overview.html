@@ -1,0 +1,37 @@
+<section aria-label="Workspace overview">
+    <div id="overview-error" class="data-error hidden" role="alert">
+        <span id="overview-error-message"></span><button onclick="loadOverview()">Try again</button>
+    </div>
+    <div class="overview-hero">
+        <div><p class="eyebrow">LESS SEARCHING. MORE CONNECTING.</p><h2>Turn opportunities into conversations.</h2><p>Build a focused pipeline of local businesses and hiring companies. Start with discovery, then make every introduction count.</p></div>
+        <a class="primary-button" href="/discovery">Start a new search <span aria-hidden="true">&rarr;</span></a>
+    </div>
+    <div class="metric-grid" aria-label="Pipeline metrics" aria-live="polite">
+        {% for key, label, note in [('leads', 'Total leads', 'Prospects + job leads'), ('review', 'Ready for review', 'Discovered and drafted leads'), ('sent', 'Outreach sent', 'Initial and follow-up sends'), ('followup', 'Follow-up queue', 'Prospects awaiting follow-up')] %}
+        <article class="metric-card"><p class="metric-label">{{ label }}</p><strong class="metric-value" id="overview-{{ key }}">—</strong><p class="metric-note"><span class="metric-dot"></span>{{ note }}</p></article>
+        {% endfor %}
+    </div>
+    <div class="overview-grid">
+        <section class="panel" aria-labelledby="pipeline-title">
+            <div class="panel-heading"><div><h2 id="pipeline-title">Pipeline snapshot</h2><p class="panel-subtitle">Current workload across your workspace</p></div><a href="/prospects">Open prospects &rarr;</a></div>
+            {% for key, label in [('prospects', 'Prospects'), ('jobs', 'Job leads'), ('review', 'To review'), ('sent', 'Outreach sent')] %}
+            <div class="pipeline-row"><span>{{ label }}</span><div class="pipeline-track"><div id="pipeline-{{ key }}-bar" class="pipeline-fill" style="width: 0%"></div></div><span id="pipeline-{{ key }}-count" class="pipeline-count">—</span></div>
+            {% endfor %}
+            <p class="panel-subtitle">Counts exclude archived leads. Review and outreach are subsets of the total pipeline, not additional leads.</p>
+        </section>
+        <section class="panel" aria-labelledby="next-title">
+            <div class="panel-heading"><div><h2 id="next-title">Your next move</h2><p class="panel-subtitle">Keep your pipeline moving forward</p></div></div>
+            <a class="quick-action" href="/discovery"><span class="action-icon">{{ icon('discovery') }}</span><span><strong>Find new opportunities</strong><small>Search businesses or hiring companies</small></span><span aria-hidden="true">&rarr;</span></a>
+            <a class="quick-action" href="/prospects"><span class="action-icon">{{ icon('prospects') }}</span><span><strong>Personalize your outreach</strong><small>Review prospects and draft your pitch</small></span><span aria-hidden="true">&rarr;</span></a>
+            <a class="quick-action" href="/job-leads"><span class="action-icon">{{ icon('jobs') }}</span><span><strong>Explore hiring signals</strong><small>Review companies looking for your skills</small></span><span aria-hidden="true">&rarr;</span></a>
+        </section>
+        <section class="panel" aria-labelledby="recent-prospects-title">
+            <div class="panel-heading"><div><h2 id="recent-prospects-title">Recently added prospects</h2><p class="panel-subtitle">Your five newest business opportunities</p></div><a href="/prospects">View all &rarr;</a></div>
+            <div class="overflow-x-auto"><table class="overview-table"><thead><tr><th scope="col">Business</th><th scope="col">Stage</th></tr></thead><tbody id="overview-recent-prospects"><tr><td colspan="2">Loading prospects...</td></tr></tbody></table></div>
+        </section>
+        <section class="panel" aria-labelledby="recent-jobs-title">
+            <div class="panel-heading"><div><h2 id="recent-jobs-title">Latest hiring companies</h2><p class="panel-subtitle">New signals from your job-board searches</p></div><a href="/job-leads">View all &rarr;</a></div>
+            <div class="overflow-x-auto"><table class="overview-table"><thead><tr><th scope="col">Company</th><th scope="col">Stage</th></tr></thead><tbody id="overview-recent-jobs"><tr><td colspan="2">Loading job leads...</td></tr></tbody></table></div>
+        </section>
+    </div>
+</section>

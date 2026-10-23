@@ -5,6 +5,8 @@ import requests
 import psycopg2
 from psycopg2.extras import execute_values
 from dotenv import load_dotenv
+from discovery_filters import filter_business_metrics
+from discovery_industries import matching_industry_category
 
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 load_dotenv(os.path.join(base_dir, ".env"))
@@ -38,9 +40,10 @@ def save_yelp_leads(leads):
                 emit_ui_log(f"💾 [PostgreSQL] Ingested {len(leads)} Yelp leads into the database.")
     except Exception as e:
         emit_ui_log(f"❌ [DB ERROR] Yelp batch write failure: {e}")
+        raise
 
 
-def run_yelp_discovery(city, niche):
+def run_yelp_discovery(city, niche, rating_min: float = 0.0, max_reviews: int | None = 100):
     """
     Uses SerpAPI Yelp engine to discover local businesses matching the niche and city.
     Applies the same email + screenshot enrichment pipeline as Google Maps discovery.
@@ -51,7 +54,7 @@ def run_yelp_discovery(city, niche):
 
     if not SERPAPI_KEY:
         emit_ui_log("❌ [YELP ENGINE ERROR] Missing SERPAPI_API_KEY in your .env configuration.")
-        return
+        raise RuntimeError("Yelp discovery requires SERPAPI_API_KEY.")
 
     emit_ui_log(f"⭐ Launching Yelp discovery for [{niche}] in '{city}'...")
 
@@ -66,9 +69,11 @@ def run_yelp_discovery(city, niche):
         response = requests.get("https://serpapi.com/search", params=params, timeout=15)
         response.raise_for_status()
         results = response.json()
+        if results.get("error"):
+            raise RuntimeError(results["error"])
     except Exception as e:
         emit_ui_log(f"❌ [YELP ENGINE FAILURE] API request failed: {e}")
-        return
+        raise
 
     organic = results.get("organic_results", [])
     if not organic:
@@ -82,8 +87,8 @@ def run_yelp_discovery(city, niche):
                 cur.execute("SELECT google_place_id FROM prospects WHERE google_place_id IS NOT NULL;")
                 existing_ids = set(row[0] for row in cur.fetchall())
     except Exception as e:
-        emit_ui_log(f"[DEDUP WARNING] Could not prefetch IDs: {e}")
-        existing_ids = set()
+        emit_ui_log(f"[DEDUP ERROR] Could not prefetch IDs: {e}")
+        raise
 
     valid_leads = []
 
@@ -100,8 +105,10 @@ def run_yelp_discovery(city, niche):
             continue
 
         # Extract fields from SerpAPI Yelp result
-        rating     = float(biz.get("rating") or 0.0)
-        reviews    = int(biz.get("reviews") or 0)
+        metrics = filter_business_metrics(biz, rating_min, max_reviews, emit_ui_log)
+        if metrics is None:
+            continue
+        rating, reviews = metrics
         phone      = (biz.get("phone") or "No Public Number Listed").strip()
 
         # Address: some results have 'address', others 'neighborhoods'
@@ -115,9 +122,9 @@ def run_yelp_discovery(city, niche):
         links = biz.get("links") or {}
         website_link = links.get("website") or biz.get("website") or ""
 
-        # Category label
-        categories = biz.get("categories") or []
-        category_label = categories[0].get("title", niche) if categories else niche
+        category_label = matching_industry_category(biz, niche, "yelp", emit_ui_log)
+        if category_label is None:
+            continue
 
         # --- EMAIL + SCREENSHOT ENRICHMENT ---
         discovered_email = None

@@ -7,6 +7,8 @@ from psycopg2.extras import execute_values
 from dotenv import load_dotenv
 from email_hunter import attempt_domain_email_crawl
 from screenshot_agent import capture_business_site_snapshot
+from discovery_filters import filter_business_metrics, within_search_radius
+from discovery_industries import matching_industry_category
 
 # Initialize path mapping for environment tokens
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -22,7 +24,7 @@ def save_leads_to_db(leads):
         return
 
     insert_query = """
-        INSERT INTO prospects (business_name, category, phone, formatted_address, google_place_id, review_count, rating, email, screenshot_path, status)
+        INSERT INTO prospects (business_name, category, phone, formatted_address, google_place_id, review_count, rating, email, screenshot_path, website_url, source_platform, status)
         VALUES %s
         ON CONFLICT (google_place_id) DO NOTHING;
     """
@@ -38,6 +40,8 @@ def save_leads_to_db(leads):
             lead['rating'], 
             lead.get('email'),
             lead.get('screenshot_path'), # <-- Aligned identically to your lead dictionary read keys
+            lead.get('website_url'),
+            'google_maps',
             'discovered'
         )
         for lead in leads
@@ -51,6 +55,7 @@ def save_leads_to_db(leads):
                 emit_ui_log("💾 [PostgreSQL] Live Synchronization complete. Saved fresh rows to DB.")
     except Exception as e:
         emit_ui_log(f"❌ [DB CRITICAL ERROR] Pipeline insertion breakdown: {e}")
+        raise
 
 
 def _find_facebook_email(business_name, address):
@@ -70,15 +75,20 @@ def _find_facebook_email(business_name, address):
         }
         response = requests.get("https://serpapi.com/search", params=params, timeout=10)
         response.raise_for_status()
-        organic = response.json().get("organic_results", [])
+        data = response.json()
+        if data.get("error"):
+            raise RuntimeError(data["error"])
+        organic = data.get("organic_results", [])
         for result in organic:
             link = result.get("link", "")
             # Skip category hubs and sub-pages, target root business pages only
             if "facebook.com" in link and "/pages/category" not in link and "/groups/" not in link:
                 email = attempt_domain_email_crawl(link)
                 return email, link
-    except Exception:
-        pass
+    except Exception as error:
+        from control_gate_api import emit_ui_log
+        emit_ui_log(f"[ENRICHMENT ERROR] Facebook contact search failed for '{business_name}': {error}")
+        raise
     return None, None
 
 
@@ -98,18 +108,23 @@ def _search_for_business_website(business_name, address):
         }
         response = requests.get("https://serpapi.com/search", params=params, timeout=10)
         response.raise_for_status()
-        organic = response.json().get("organic_results", [])
+        data = response.json()
+        if data.get("error"):
+            raise RuntimeError(data["error"])
+        organic = data.get("organic_results", [])
         for result in organic:
             link = result.get("link", "")
             # Skip social media and directory aggregators — target the real business site
             if link and not any(skip in link for skip in ["facebook.com", "yelp.com", "yellowpages.com", "linkedin.com", "instagram.com", "twitter.com"]):
                 return link
-    except Exception:
-        pass
+    except Exception as error:
+        from control_gate_api import emit_ui_log
+        emit_ui_log(f"[ENRICHMENT ERROR] Website search failed for '{business_name}': {error}")
+        raise
     return None
 
 
-def run_discovery(city, niche, rating_min=0.0, max_reviews=100, lat=None, lng=None, radius_km=10):
+def run_discovery(city, niche, rating_min: float = 0.0, max_reviews: int | None = 100, lat=None, lng=None, radius_km=10):
     """
     Queries SerpApi Google Maps framework utilizing precise geolocation coordinate pins 
     and custom radial distance tracking variables.
@@ -117,12 +132,13 @@ def run_discovery(city, niche, rating_min=0.0, max_reviews=100, lat=None, lng=No
     from control_gate_api import emit_ui_log
     if not SERPAPI_KEY:
         emit_ui_log("❌ [SERPAPI ERROR] Missing SERPAPI_API_KEY inside your .env configuration file.")
-        return
+        raise RuntimeError("Google Maps discovery requires SERPAPI_API_KEY.")
 
     emit_ui_log(f"🛰️ Launching Google Maps scan for [{niche}] within {radius_km}km of pin ({lat or '0'}, {lng or '0'})...")
 
     # If coordinate mapping is hot, drop text parameters to keep radial sweep strict
-    search_query = f"{niche}" if (lat and lng) else f"{niche} {city}"
+    has_coordinates = lat is not None and lng is not None
+    search_query = f"{niche}" if has_coordinates else f"{niche} {city}"
 
     params = {
         "engine": "google_maps",
@@ -131,16 +147,19 @@ def run_discovery(city, niche, rating_min=0.0, max_reviews=100, lat=None, lng=No
         "api_key": SERPAPI_KEY
     }
 
-    if lat and lng:
-        params["ll"] = f"@{lat},{lng},12z"
+    if has_coordinates:
+        params["ll"] = f"@{lat},{lng},{radius_km * 2000}m"
+        params["nearby"] = True
 
     try:
         response = requests.get("https://serpapi.com/search", params=params, timeout=15)
         response.raise_for_status()
-        search_results = response.json()    
+        search_results = response.json()
+        if search_results.get("error"):
+            raise RuntimeError(search_results["error"])
     except Exception as e:
         emit_ui_log(f"❌ [SERPAPI FAILURE] Handshake network drop: {e}")
-        return
+        raise
 
     local_results = search_results.get("local_results", [])
     if not local_results:
@@ -156,13 +175,21 @@ def run_discovery(city, niche, rating_min=0.0, max_reviews=100, lat=None, lng=No
                 # Store as a set for O(1) instantaneous lookup speed
                 existing_place_ids = set(row[0] for row in cur.fetchall())
     except Exception as e:
-        print(f"[DEDUPLICATION WARNING] Failed to cache existing keys: {e}")
-        existing_place_ids = set()
+        emit_ui_log(f"[DEDUPLICATION ERROR] Failed to cache existing keys: {e}")
+        raise
 
     valid_leads = []
 
     for business in local_results:
-        place_token = business.get("data_id") or f"serp_{uuid.uuid4().hex[:10]}"
+        business_name = business.get("title")
+        address = business.get("address") or business.get("formatted_address") or f"Discovered region near pin ({lat or '0'}, {lng or '0'})"
+        place_token = business.get("data_id")
+        if not place_token:
+            fallback_identity = "\x1f".join(
+                " ".join(str(value or "").casefold().split())
+                for value in (business_name, address)
+            )
+            place_token = f"serp_{uuid.uuid5(uuid.NAMESPACE_URL, fallback_identity).hex}"
 
         # --- CORE DATABASE DEDUPLICATION CHECK ---
         if place_token in existing_place_ids:
@@ -170,12 +197,17 @@ def run_discovery(city, niche, rating_min=0.0, max_reviews=100, lat=None, lng=No
             print(f"[DEDUPLICATION] Skipping '{business.get('title')}' -> Already processed in active database.")
             continue
         
-        business_name = business.get("title")
         website_link = business.get("website")
         phone_number = business.get("phone", "No Public Number Listed")
-        address = business.get("address") or business.get("formatted_address") or f"Discovered region near pin ({lat or '0'}, {lng or '0'})"
-        rating = float(business.get("rating", 0.0))
-        reviews = int(business.get("reviews", 0))
+        if has_coordinates and not within_search_radius(business, lat, lng, radius_km, emit_ui_log):
+            continue
+        metrics = filter_business_metrics(business, rating_min, max_reviews, emit_ui_log)
+        if metrics is None:
+            continue
+        rating, reviews = metrics
+        category = matching_industry_category(business, niche, "google_maps", emit_ui_log)
+        if category is None:
+            continue
         
 
         # --- WEBSITE EXTRACTION & EMAIL HUNTER FALLBACK PASS ---
@@ -210,15 +242,6 @@ def run_discovery(city, niche, rating_min=0.0, max_reviews=100, lat=None, lng=No
                 emit_ui_log(f"   ↳ 📸 Capturing live website snapshot profile view...")
                 screenshot_asset_url = capture_business_site_snapshot(website_link, place_token)
 
-        # --- PIPELINE METRICS FILTER MATRIX ---
-        if rating < rating_min:
-            emit_ui_log(f"   ↳ ⏭️ Skipped: Rating (★ {rating}) is below threshold cutoff.")
-            continue
-
-        if reviews > max_reviews:
-            emit_ui_log(f"   ↳ ⏭️ Skipped: Review count ({reviews}) exceeds maximum selection boundary.")
-            continue
-
         lead = {
             "name": business_name,
             "place_id": place_token,
@@ -226,8 +249,9 @@ def run_discovery(city, niche, rating_min=0.0, max_reviews=100, lat=None, lng=No
             "phone": phone_number,
             "rating": rating,
             "reviews": reviews,
-            "category": niche,
+            "category": category,
             "email": discovered_email,
+            "website_url": website_link,
             "screenshot_path": screenshot_asset_url # <-- Properly append column variable payload
         }
         valid_leads.append(lead)

@@ -11,16 +11,19 @@ from email.header import Header
 from psycopg2.extras import RealDictCursor
 from flask import Flask, request, jsonify, render_template, Response
 from dotenv import load_dotenv
+from discovery_runs import DiscoveryBusyError, LocalDiscoveryRuns
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 SYSTEM_LOG_BUFFER = []
+LOCAL_DISCOVERY_RUNS = LocalDiscoveryRuns()
 
 def emit_ui_log(message):
     """Appends an operational milestone directly to the user viewport queue."""
     global SYSTEM_LOG_BUFFER
     print(message) # Keep standard terminal output intact
     SYSTEM_LOG_BUFFER.append(message)
+    LOCAL_DISCOVERY_RUNS.record_log(message)
     # Keep the live cache clean (trim past 50 entries)
     if len(SYSTEM_LOG_BUFFER) > 50:
         SYSTEM_LOG_BUFFER.pop(0)
@@ -58,6 +61,7 @@ def run_startup_migrations():
         "ALTER TABLE prospects ADD COLUMN IF NOT EXISTS subject_line        TEXT;",
         "ALTER TABLE prospects ADD COLUMN IF NOT EXISTS followup_due_at     TIMESTAMP     DEFAULT NULL;",
         "ALTER TABLE prospects ADD COLUMN IF NOT EXISTS website_url         TEXT;",
+        "ALTER TABLE prospects ADD COLUMN IF NOT EXISTS profile_url         TEXT;",
         "ALTER TABLE prospects ADD COLUMN IF NOT EXISTS source_platform     VARCHAR(50)   DEFAULT 'google_maps';",
         "ALTER TABLE prospects ADD COLUMN IF NOT EXISTS email               TEXT;",
         "ALTER TABLE prospects ADD COLUMN IF NOT EXISTS screenshot_path     TEXT;",
@@ -70,6 +74,42 @@ def run_startup_migrations():
         "CREATE INDEX IF NOT EXISTS idx_prospects_lead_score ON prospects (lead_score DESC);",
         "CREATE INDEX IF NOT EXISTS idx_prospects_lead_type  ON prospects (lead_type);",
         "CREATE INDEX IF NOT EXISTS idx_prospects_followup   ON prospects (followup_due_at) WHERE followup_due_at IS NOT NULL;",
+        # Phase 4: Dedicated job_leads table (idempotent — safe to re-run every startup)
+        """
+        CREATE TABLE IF NOT EXISTS job_leads (
+            id              SERIAL PRIMARY KEY,
+            company_name    VARCHAR(512)  NOT NULL,
+            job_title       VARCHAR(512)  NOT NULL,
+            location        TEXT,
+            lead_type       VARCHAR(50)   NOT NULL,
+            job_role_signal VARCHAR(255),
+            job_via         TEXT,
+            job_salary      TEXT,
+            job_schedule    TEXT,
+            job_description TEXT,
+            job_apply_link  TEXT,
+            website_url     TEXT,
+            email           TEXT,
+            suggested_angle TEXT,
+            status          VARCHAR(50)   DEFAULT 'discovered',
+            ai_pitch_draft  TEXT,
+            subject_line    TEXT,
+            source_platform VARCHAR(50)   DEFAULT 'job_board',
+            created_at      TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
+            updated_at      TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT unique_job_lead UNIQUE (company_name, job_role_signal)
+        );
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_job_leads_status    ON job_leads (status);",
+        "CREATE INDEX IF NOT EXISTS idx_job_leads_lead_type ON job_leads (lead_type);",
+        "CREATE INDEX IF NOT EXISTS idx_job_leads_email     ON job_leads (email) WHERE email IS NOT NULL;",
+        "DROP TRIGGER IF EXISTS update_job_leads_modtime ON job_leads;",
+        """
+        CREATE TRIGGER update_job_leads_modtime
+            BEFORE UPDATE ON job_leads
+            FOR EACH ROW
+            EXECUTE FUNCTION update_modified_column();
+        """,
     ]
 
     try:
@@ -106,65 +146,129 @@ def handle_global_exception(e):
     print(f"[SERVER CRASH ERROR] {str(e)}", file=sys.stderr)
     return jsonify({"status": "error", "message": str(e)}), 500
 
-@app.route('/', methods=['GET'])
-def serve_dashboard():
-    return render_template('dashboard.html')
+@app.route('/', defaults={'page': 'overview'}, methods=['GET'])
+@app.route('/prospects', defaults={'page': 'prospects'}, methods=['GET'])
+@app.route('/job-leads', defaults={'page': 'jobs'}, methods=['GET'])
+@app.route('/discovery', defaults={'page': 'discovery'}, methods=['GET'])
+def serve_dashboard(page):
+    pages = {
+        'overview': ('Overview', 'YOUR PIPELINE, AT A GLANCE',
+                     'A clear view of your leads, outreach, and next opportunities.'),
+        'prospects': ('Prospects', 'LOCAL BUSINESS PIPELINE',
+                      'Review businesses, personalize your outreach, and build meaningful connections.'),
+        'jobs': ('Job Leads', 'HIRING SIGNALS',
+                 'Explore companies actively hiring for the services you offer.'),
+        'discovery': ('Discovery', 'FIND YOUR NEXT OPPORTUNITY',
+                      'Two ways to find better leads. Choose your audience and start a focused search.'),
+    }
+    page_title, page_eyebrow, page_description = pages[page]
+    return render_template(
+        'dashboard.html',
+        page=page,
+        page_title=page_title,
+        page_eyebrow=page_eyebrow,
+        page_description=page_description,
+        carto_basemap_api_key=os.getenv('CARTO_BASEMAP_API_KEY', '')
+    )
 
 @app.route('/api/trigger/discover', methods=['POST'])
 def trigger_discovery_engine():
     data = request.get_json() or {}
+    if not isinstance(data, dict):
+        return jsonify({"status": "error", "message": "Discovery expects a JSON object."}), 400
     target_location = data.get('location')
     target_categories = data.get('categories', [])
     selected_sources = data.get('sources', ['google'])
+    if not isinstance(selected_sources, list) or not selected_sources:
+        return jsonify({"status": "error", "message": "Select at least one supported discovery data source."}), 400
+    if 'linkedin' in selected_sources:
+        return jsonify({"status": "error", "message":
+            "LinkedIn discovery is not available. Select Google Maps, Facebook, Instagram, or Yelp."}), 400
+    if any(source not in ('google', 'facebook', 'instagram', 'yelp') for source in selected_sources):
+        return jsonify({"status": "error", "message": "Unsupported discovery data source selected."}), 400
     
-    rating_min = float(data.get('rating_min', 0.0))
-    max_reviews = int(data.get('max_reviews', 100))
+    try:
+        raw_rating = data.get('rating_min', 0.0)
+        raw_reviews = data.get('max_reviews', 100)
+        rating_min = float(raw_rating)
+        max_reviews = None if raw_reviews is None else int(raw_reviews)
+        if isinstance(raw_rating, bool) or not 0 <= rating_min <= 5:
+            raise ValueError("Minimum rating must be between 0 and 5.")
+        if max_reviews is not None and (
+            isinstance(raw_reviews, bool) or max_reviews < 0 or float(raw_reviews) != max_reviews
+        ):
+            raise ValueError("Maximum reviews must be a nonnegative integer or null for unlimited.")
+    except (ValueError, TypeError, OverflowError):
+        return jsonify({"status": "error", "message":
+            "Invalid filters: minimum rating must be 0-5; maximum reviews must be a nonnegative integer or null for unlimited."}), 400
     
     lat = data.get('lat')
     lng = data.get('lng')
-    radius_km = int(data.get('radius_km', 10))
+    raw_radius = data.get('radius_km', 10)
+    radius_km = 10
+    if 'google' in selected_sources:
+        try:
+            lat, lng = float(lat), float(lng)
+            radius_km = int(raw_radius)
+            if (
+                isinstance(data.get('lat'), bool) or isinstance(data.get('lng'), bool)
+                or not -90 <= lat <= 90 or not -180 <= lng <= 180
+                or isinstance(raw_radius, bool) or not 2 <= radius_km <= 50
+                or float(raw_radius) != radius_km
+            ):
+                raise ValueError("Invalid map pin or radius")
+        except (ValueError, TypeError, OverflowError):
+            return jsonify({"status": "error", "message":
+                "Google Maps requires a valid latitude/longitude pin and a whole-number radius from 2 to 50 km."}), 400
 
-    if not target_location:
+    if not isinstance(target_location, str) or not target_location.strip():
         return jsonify({"status": "error", "message": "Location context argument missing."}), 400
+    if (
+        not isinstance(target_categories, list) or not target_categories
+        or any(not isinstance(category, str) or not category.strip() for category in target_categories)
+    ):
+        return jsonify({"status": "error", "message": "Select at least one valid target industry."}), 400
 
-    def background_worker_execution_loop():
-        print(f"[THREAD WORKER] Initiating multi-channel background loop for {target_location}...")
-        for platform in selected_sources:
-            if platform == 'google':
-                from discovery_engine import run_discovery
-                for industry in target_categories:
-                    run_discovery(target_location, industry, rating_min, max_reviews, lat, lng, radius_km)
-                    
-            elif platform == 'facebook':
-                from discovery_facebook import run_facebook_discovery
-                for industry in target_categories:
-                    run_facebook_discovery(target_location, industry)
-                    
-            elif platform == 'yelp':
-                from discovery_yelp import run_yelp_discovery
-                for industry in target_categories:
-                    run_yelp_discovery(target_location, industry)
+    def execute_search(platform, industry):
+        if platform == 'google':
+            from discovery_engine import run_discovery
+            run_discovery(target_location, industry, rating_min, max_reviews, lat, lng, radius_km)
+        elif platform == 'facebook':
+            from discovery_facebook import run_facebook_discovery
+            run_facebook_discovery(target_location, industry)
+        elif platform == 'yelp':
+            from discovery_yelp import run_yelp_discovery
+            run_yelp_discovery(target_location, industry, rating_min, max_reviews)
+        elif platform == 'instagram':
+            from discovery_instagram import run_instagram_discovery
+            run_instagram_discovery(target_location, industry)
 
-            elif platform == 'instagram':
-                from discovery_instagram import run_instagram_discovery
-                for industry in target_categories:
-                    run_instagram_discovery(target_location, industry)
-
-            elif platform == 'linkedin':
-                print("[PIPELINE NOTICE] LinkedIn channel skipped. Testing Meta focus phase.")
-                continue
-                
-        print("[THREAD WORKER] Complete process successfully cleared background pass.")
-        emit_ui_log("Complete process successfully cleared background pass.")
-
-    task_thread = threading.Thread(target=background_worker_execution_loop)
-    task_thread.daemon = True  
-    task_thread.start()
+    tasks = [
+        (platform, industry, lambda platform=platform, industry=industry: execute_search(platform, industry))
+        for platform in dict.fromkeys(selected_sources)
+        for industry in dict.fromkeys(category.strip() for category in target_categories)
+    ]
+    try:
+        run_id = LOCAL_DISCOVERY_RUNS.start(tasks, emit_ui_log)
+    except DiscoveryBusyError as error:
+        return jsonify({"status": "error", "message": str(error)}), 409
+    except Exception as error:
+        emit_ui_log(f"[DISCOVERY ERROR] Worker could not start: {error}")
+        return jsonify({"status": "error", "message": "Discovery worker could not start. Please try again."}), 500
 
     return jsonify({
-        "status": "success", 
-        "message": "Multi-channel background extraction worker initiated successfully."
+        "status": "success", "run_id": run_id,
+        "message": "Local discovery worker started. Poll its run status for the outcome."
     }), 202
+
+
+@app.route('/api/discovery/runs/<run_id>', methods=['GET'])
+def get_local_discovery_run(run_id):
+    run = LOCAL_DISCOVERY_RUNS.snapshot(run_id)
+    if run is None:
+        return jsonify({"status": "error", "message":
+            "Discovery status is unavailable. The app may have restarted or the run expired; check saved results before retrying."}), 404
+    return jsonify({"status": "success", "run": run})
 
 @app.route('/api/trigger/pitch-single/<int:lead_id>', methods=['POST'])
 def trigger_single_pitch_generation(lead_id):
@@ -370,7 +474,7 @@ def get_review_queue():
                site_quality_score,
                suggested_angle, subject_line, ai_pitch_draft,
                phone, email, formatted_address,
-               website_url, google_place_id, screenshot_path,
+               website_url, profile_url, google_place_id, screenshot_path,
                followup_due_at, status,
                job_via, job_salary, job_schedule, job_description, job_apply_link
         FROM prospects
@@ -625,6 +729,118 @@ def trigger_job_discovery():
     }), 202
 
 
+@app.route('/api/job-leads', methods=['GET'])
+def get_job_leads():
+    """
+    Returns paginated job-board leads from the dedicated job_leads table.
+    Query params:
+      - page, per_page         : pagination (default 1, 20)
+      - q                      : full-text search (company_name, job_title, email)
+      - lead_type              : filter by service type
+      - status                 : filter by status (default: all except 'rejected')
+      - sort_by                : 'date_desc' (default), 'date_asc', 'company'
+    """
+    page       = int(request.args.get('page', 1))
+    per_page   = int(request.args.get('per_page', 20))
+    search_q   = request.args.get('q', '').strip()
+    lead_type  = request.args.get('lead_type', '').strip()
+    status_f   = request.args.get('status', '').strip()
+    sort_by    = request.args.get('sort_by', 'date_desc').strip()
+    offset     = (page - 1) * per_page
+
+    SORT_MAP = {
+        'date_desc': 'id DESC',
+        'date_asc':  'id ASC',
+        'company':   'company_name ASC',
+    }
+    order_clause = SORT_MAP.get(sort_by, 'id DESC')
+
+    conditions = []
+    params = []
+
+    if status_f:
+        conditions.append("status = %s")
+        params.append(status_f)
+    else:
+        conditions.append("status != 'rejected'")
+
+    if search_q:
+        conditions.append(
+            "(company_name ILIKE %s OR job_title ILIKE %s OR COALESCE(email, '') ILIKE %s)"
+        )
+        params.extend([f"%{search_q}%"] * 3)
+
+    if lead_type:
+        conditions.append("lead_type = %s")
+        params.append(lead_type)
+
+    where = "WHERE " + " AND ".join(conditions) if conditions else ""
+
+    metrics_sql = f"""
+        SELECT
+            COUNT(*) AS total,
+            COUNT(*) FILTER (WHERE status IN ('discovered', 'drafted')) AS pending,
+            COUNT(*) FILTER (WHERE status IN ('sent', 'sent_followup_1'))  AS sent,
+            COUNT(*) FILTER (WHERE email IS NOT NULL AND email != '')       AS with_email
+        FROM job_leads {where};
+    """
+    data_sql = f"""
+        SELECT id, company_name, job_title, location, lead_type, job_role_signal,
+               job_via, job_salary, job_schedule, job_description, job_apply_link,
+               website_url, email, suggested_angle, ai_pitch_draft, subject_line,
+               status, source_platform, created_at, updated_at
+        FROM job_leads
+        {where}
+        ORDER BY {order_clause}
+        LIMIT %s OFFSET %s;
+    """
+
+    with psycopg2.connect(DB_DSN, cursor_factory=RealDictCursor) as conn:
+        with conn.cursor() as cur:
+            cur.execute(metrics_sql, tuple(params))
+            metrics = cur.fetchone()
+            cur.execute(data_sql, tuple(params) + (per_page, offset))
+            records = cur.fetchall()
+
+    return jsonify({
+        "status":       "success",
+        "current_page": page,
+        "per_page":     per_page,
+        "leads":        records,
+        "metrics": {
+            "total":      metrics["total"]      if metrics else 0,
+            "pending":    metrics["pending"]    if metrics else 0,
+            "sent":       metrics["sent"]       if metrics else 0,
+            "with_email": metrics["with_email"] if metrics else 0,
+        }
+    })
+
+
+@app.route('/api/job-leads/<int:lead_id>/reject', methods=['POST'])
+def reject_job_lead(lead_id):
+    """Soft-reject a job lead — moves it out of the active queue."""
+    with psycopg2.connect(DB_DSN) as conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE job_leads SET status = 'rejected' WHERE id = %s;", (lead_id,))
+            conn.commit()
+    return jsonify({"status": "success", "message": "Job lead rejected."})
+
+
+@app.route('/api/job-leads/<int:lead_id>/update-email', methods=['POST'])
+def update_job_lead_email(lead_id):
+    """Updates the contact email for a specific job lead."""
+    data      = request.get_json() or {}
+    new_email = data.get('email', '').strip()
+    with psycopg2.connect(DB_DSN) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE job_leads SET email = %s WHERE id = %s;",
+                (new_email or None, lead_id)
+            )
+            conn.commit()
+    return jsonify({"status": "success", "message": "Job lead email updated."})
+
+
 @app.route('/api/trigger/pitch-bulk', methods=['POST'])
 def trigger_bulk_pitch_generation():
     """
@@ -807,7 +1023,7 @@ def export_leads_csv():
     columns = [
         'id', 'business_name', 'category', 'lead_type', 'source_platform',
         'rating', 'review_count', 'lead_score', 'site_quality_score',
-        'email', 'phone', 'formatted_address', 'website_url',
+        'email', 'phone', 'formatted_address', 'website_url', 'profile_url',
         'subject_line', 'ai_pitch_draft', 'suggested_angle',
         'status', 'followup_due_at', 'created_at'
     ]

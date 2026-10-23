@@ -1,10 +1,11 @@
 import os
 import sys
-import uuid
 import requests
 import psycopg2
 from psycopg2.extras import execute_values
 from dotenv import load_dotenv
+from discovery_profiles import canonical_social_profile, load_existing_social_ids
+from discovery_industries import matching_industry_category
 
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 load_dotenv(os.path.join(base_dir, ".env"))
@@ -21,7 +22,7 @@ def save_instagram_leads(leads):
         return
 
     insert_query = """
-        INSERT INTO prospects (business_name, category, phone, formatted_address, google_place_id, review_count, rating, source_platform, status)
+        INSERT INTO prospects (business_name, category, phone, formatted_address, google_place_id, review_count, rating, email, profile_url, source_platform, status)
         VALUES %s
         ON CONFLICT (google_place_id) DO NOTHING;
     """
@@ -33,6 +34,7 @@ def save_instagram_leads(leads):
                 emit_ui_log(f"💾 [PostgreSQL] Ingested {len(leads)} target profiles from Instagram organic sweep.")
     except Exception as e:
         emit_ui_log(f"❌ [DB ERROR] Instagram batch write failure: {e}")
+        raise
 
 
 def run_instagram_discovery(city, niche):
@@ -45,7 +47,7 @@ def run_instagram_discovery(city, niche):
 
     if not SERPAPI_KEY:
         emit_ui_log("❌ [INSTAGRAM ENGINE ERROR] Missing SERPAPI_API_KEY inside your environment settings.")
-        return
+        raise RuntimeError("Instagram discovery requires SERPAPI_API_KEY.")
 
     emit_ui_log(f"📸 Launching organic Instagram index sweep for [{niche}] in '{city}'...")
 
@@ -62,9 +64,11 @@ def run_instagram_discovery(city, niche):
         response = requests.get("https://serpapi.com/search", params=params, timeout=15)
         response.raise_for_status()
         search_results = response.json()
+        if search_results.get("error"):
+            raise RuntimeError(search_results["error"])
     except Exception as e:
         emit_ui_log(f"❌ [IG ENGINE FAILURE] Search engine routing dropped: {e}")
-        return
+        raise
 
     organic_results = search_results.get("organic_results", [])
     if not organic_results:
@@ -72,6 +76,11 @@ def run_instagram_discovery(city, niche):
         return
 
     valid_leads = []
+    try:
+        existing_ids = load_existing_social_ids(DB_DSN, "instagram")
+    except psycopg2.Error as error:
+        emit_ui_log(f"[IG DEDUP ERROR] Cannot check existing profiles; search stopped: {error}")
+        raise
 
     for result in organic_results:
         title = result.get("title", "")
@@ -86,6 +95,17 @@ def run_instagram_discovery(city, niche):
         business_name = title.split("•")[0].split("(")[0].strip()
         if not business_name:
             continue
+        if matching_industry_category(result, niche, "instagram", emit_ui_log) is None:
+            continue
+        try:
+            ig_token, profile_url = canonical_social_profile("instagram", link)
+        except ValueError as error:
+            emit_ui_log(f"[IG PROFILE] Skipped '{business_name}': {error}")
+            continue
+        if ig_token in existing_ids:
+            emit_ui_log(f"[DEDUP] Skipping Instagram profile '{business_name}': already discovered.")
+            continue
+        existing_ids.add(ig_token)
 
         # Try to extract email from the snippet first (some profiles expose it in meta)
         import re
@@ -95,14 +115,12 @@ def run_instagram_discovery(city, niche):
 
         if not discovered_email:
             # Attempt crawl on the profile page directly
-            discovered_email = attempt_domain_email_crawl(link)
+            discovered_email = attempt_domain_email_crawl(profile_url)
 
         if discovered_email:
             emit_ui_log(f"   ↳ 🔥 Email found for '{business_name}': {discovered_email}")
         else:
             emit_ui_log(f"✅ [IG Profile Locked] '{business_name}' → Saved without email.")
-
-        ig_token = f"ig_serp_{uuid.uuid4().hex[:8]}"
 
         lead_tuple = (
             business_name,
@@ -110,8 +128,10 @@ def run_instagram_discovery(city, niche):
             "Check IG Profile",
             f"General Area, {city}",
             ig_token,
-            0,    # review_count
-            0.0,  # rating
+            None,
+            None,
+            discovered_email,
+            profile_url,
             'instagram',
             'discovered'
         )
