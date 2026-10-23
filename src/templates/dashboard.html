@@ -8,6 +8,11 @@
     <div class="discovery-guidance"><strong>Make your next search count.</strong> Find local businesses for website and digital services, or use hiring signals to find companies that need your expertise. Each search has its own dedicated results page.</div>
     {% endif %}
 
+    <div class="text-xs text-slate-400">
+        <p id="hiring-services-error" role="alert" class="hidden text-red-400"></p>
+        <button id="btn-reload-hiring-services" type="button" onclick="loadHiringServices()" class="hidden underline">Reload hiring services</button>
+    </div>
+
     <div id="loading-overlay"
         class="hidden fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex flex-col items-center justify-center p-4">
         <div class="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4"></div>
@@ -395,12 +400,28 @@
             <div>
                 <label class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-2">Service Offerings to Scan</label>
                 <div class="space-y-2 bg-slate-950 p-3 border border-slate-800 rounded-lg text-xs text-slate-300">
-                    <label class="flex items-center gap-2 cursor-pointer py-0.5"><input type="checkbox" name="job-service" value="video_editing" checked class="accent-purple-500"> <span>🎬 <strong>Video Editing</strong> — companies hiring in-house video editors</span></label>
-                    <label class="flex items-center gap-2 cursor-pointer py-0.5"><input type="checkbox" name="job-service" value="bpo_customer_service" class="accent-purple-500"> <span>📞 <strong>Customer Service BPO</strong> — companies hiring CS / support agents</span></label>
-                    <label class="flex items-center gap-2 cursor-pointer py-0.5"><input type="checkbox" name="job-service" value="bpo_data_entry" class="accent-purple-500"> <span>📋 <strong>Data Entry BPO</strong> — companies hiring data processors</span></label>
-                    <label class="flex items-center gap-2 cursor-pointer py-0.5"><input type="checkbox" name="job-service" value="social_media_management" class="accent-purple-500"> <span>📱 <strong>Social Media Management</strong> — companies hiring SMM staff</span></label>
-                    <label class="flex items-center gap-2 cursor-pointer py-0.5"><input type="checkbox" name="job-service" value="virtual_assistant" class="accent-purple-500"> <span>💼 <strong>Virtual Assistant</strong> — companies hiring remote assistants</span></label>
+                    {% for service in hiring_builtin_services %}
+                    <label class="flex items-center gap-2 cursor-pointer py-0.5"><input type="checkbox" name="job-service" value="{{ service.id }}" {% if service.id == 'video_editing' %}checked{% endif %} class="accent-purple-500"> <span><strong>{{ service.name }}</strong> - {{ service.roles | length }} role searches</span></label>
+                    {% endfor %}
                 </div>
+                <div id="custom-hiring-services" class="space-y-2 mt-2 text-xs text-slate-300"></div>
+                <details class="mt-3 rounded-lg border border-slate-800 p-3 text-xs">
+                    <summary class="cursor-pointer text-purple-300 font-semibold">Add Service</summary>
+                    <div class="space-y-3 mt-3">
+                        <label class="block">Service name
+                            <input id="new-service-name" maxlength="80" class="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 mt-1" placeholder="e.g., Bookkeeping">
+                        </label>
+                        <label class="block">Job-role searches (1-4, one per line)
+                            <textarea id="new-service-roles" rows="3" class="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 mt-1" placeholder="Bookkeeper&#10;Accounts payable clerk"></textarea>
+                        </label>
+                        <label class="block">Required title-match phrases (1-12, one per line)
+                            <textarea id="new-service-phrases" rows="3" class="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 mt-1" placeholder="bookkeeper&#10;accounts payable"></textarea>
+                        </label>
+                        <p class="text-slate-400">A returned title must contain at least one match phrase. Matching ignores case, punctuation, and accents; phrases are literal, not regex. Use specific terms. Each phrase needs 3-100 characters. Saved services persist and cannot be edited or deleted here. Discovery only, not pitch generation.</p>
+                        <button id="btn-save-hiring-service" type="button" onclick="saveHiringService()" class="secondary-button">Save Service</button>
+                        <p id="hiring-service-save-message" role="status" class="text-slate-300"></p>
+                    </div>
+                </details>
             </div>
             <div>
                 <label class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">Target Country <span class="text-slate-600 normal-case font-normal">(optional — blank means no country filter)</span></label>
@@ -535,11 +556,9 @@
                                 class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-slate-300 focus:outline-none focus:border-purple-500 cursor-pointer">
                                 <option value="">All Types</option>
                                 <option value="web_design">🌐 Web Design</option>
-                                <option value="video_editing">🎬 Video Editing</option>
-                                <option value="bpo_customer_service">📞 Customer Service</option>
-                                <option value="bpo_data_entry">📋 Data Entry</option>
-                                <option value="social_media_management">📱 Social Media</option>
-                                <option value="virtual_assistant">💼 Virtual Assistant</option>
+                                {% for service in hiring_builtin_services %}
+                                <option value="{{ service.id }}">{{ service.name }}</option>
+                                {% endfor %}
                             </select>
 
                             <select id="filter-status" onchange="handleFilterChange()"
@@ -690,6 +709,10 @@
         const workspacePage = document.body.dataset.page;
         let discoveryResultsView = 'prospects';
         let queueRequestId = 0;
+        let hiringServiceCatalog = new Map({{ hiring_builtin_services | tojson }}.map(service => [service.id, service]));
+        const builtinHiringServiceIds = new Set(hiringServiceCatalog.keys());
+        let hiringServicesLoading = false;
+        let hiringServiceSaving = false;
 
         // STATE LOGIC PARAMETERS
         let currentPage = 1;
@@ -1119,7 +1142,7 @@
                     const values = [
                         lead.company_name,
                         lead.job_title,
-                        String(lead.lead_type || '').replace(/_/g, ' '),
+                        hiringServiceLabel(lead.lead_type),
                         [lead.location, lead.email].filter(Boolean).join(' · '),
                         lead.status,
                     ];
@@ -1285,7 +1308,7 @@
             document.getElementById('job-modal-platform').innerText = lead.job_via ? `via ${lead.job_via}` : 'Job Board';
             document.getElementById('job-modal-title').innerText = lead.job_title || lead.category || '—';
             document.getElementById('job-modal-signal').innerText = lead.job_role_signal ? `Search signal: ${lead.job_role_signal}` : '';
-            document.getElementById('job-modal-service').innerText = (lead.lead_type || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+            document.getElementById('job-modal-service').innerText = hiringServiceLabel(lead.lead_type);
             document.getElementById('job-modal-location').innerText = lead.location || lead.formatted_address || 'Unknown';
             document.getElementById('job-modal-schedule').innerText = lead.job_schedule || 'Not specified';
             document.getElementById('job-modal-salary').innerText = lead.job_salary || 'Not disclosed';
@@ -1569,11 +1592,144 @@
             document.getElementById('btn-send').disabled = true; document.getElementById('btn-send').innerText = "Approve & Send Test"; document.getElementById('btn-send').className = "col-span-2 bg-slate-800 text-slate-500 font-bold text-sm py-2.5 rounded-lg opacity-50";
         }
 
+        function hiringServiceLabel(id) {
+            return hiringServiceCatalog.get(id)?.name || String(id || '').replace(/_/g, ' ');
+        }
+
+        function validHiringService(service) {
+            const phrases = (values, max, min) => Array.isArray(values) && values.length >= min
+                && values.length <= max && values.every(value => typeof value === 'string'
+                    && value.trim().length >= 3 && value.length <= 100);
+            return service && typeof service.name === 'string' && service.name.trim().length >= 3
+                && service.name.length <= 80 && typeof service.id === 'string'
+                && typeof service.builtin === 'boolean'
+                && (service.builtin ? builtinHiringServiceIds.has(service.id) : /^custom_[a-f0-9]{32}$/.test(service.id))
+                && phrases(service.roles, 4, 1) && phrases(service.title_phrases, 12, service.builtin ? 0 : 1);
+        }
+
+        function renderHiringServices(selectId = null) {
+            const selected = new Set(Array.from(document.querySelectorAll('input[name="job-service"]:checked')).map(input => input.value));
+            if (selectId) selected.add(selectId);
+            const custom = [...hiringServiceCatalog.values()].filter(service => !service.builtin);
+            document.getElementById('custom-hiring-services').replaceChildren(...custom.map(service => {
+                const label = document.createElement('label');
+                label.className = 'flex items-center gap-2 cursor-pointer py-1';
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.name = 'job-service';
+                checkbox.value = service.id;
+                checkbox.checked = selected.has(service.id);
+                const text = document.createElement('span');
+                text.innerText = `${service.name} (${service.roles.length} role search(es))`;
+                label.appendChild(checkbox);
+                label.appendChild(text);
+                return label;
+            }));
+            const filter = document.getElementById('filter-lead-type');
+            if (filter) {
+                const value = filter.value;
+                filter.querySelectorAll('option[data-custom-service]').forEach(option => option.remove());
+                custom.forEach(service => {
+                    const option = document.createElement('option');
+                    option.value = service.id;
+                    option.innerText = service.name;
+                    option.setAttribute('data-custom-service', 'true');
+                    filter.appendChild(option);
+                });
+                filter.value = value;
+            }
+            updateHiringSearchBudget();
+            if (activeQueueView === 'jobs') {
+                renderTable();
+                if (selectedLeadId && !document.getElementById('job-profile-modal').classList.contains('hidden')) {
+                    const lead = currentLeads.find(item => item.id === selectedLeadId);
+                    if (lead) document.getElementById('job-modal-service').innerText = hiringServiceLabel(lead.lead_type);
+                }
+            }
+        }
+
+        async function loadHiringServices() {
+            if (hiringServicesLoading || hiringServiceSaving) return;
+            hiringServicesLoading = true;
+            const error = document.getElementById('hiring-services-error');
+            const retry = document.getElementById('btn-reload-hiring-services');
+            try {
+                const response = await fetch('/api/hiring-services', { signal: AbortSignal.timeout(15000) });
+                const data = await response.json();
+                if (!response.ok || data.status !== 'success' || !Array.isArray(data.services)
+                    || !data.services.every(validHiringService)
+                    || new Set(data.services.map(service => service.id)).size !== data.services.length
+                    || [...builtinHiringServiceIds].some(id => !data.services.some(service => service.id === id && service.builtin))) {
+                    throw new Error(data.message || 'Invalid service catalog response.');
+                }
+                hiringServiceCatalog = new Map(data.services.map(service => [service.id, service]));
+                renderHiringServices();
+                error.classList.add('hidden');
+                retry.classList.add('hidden');
+            } catch (failure) {
+                error.innerText = `${failure.message} Custom services may be unavailable or stale. Reload the service list.`;
+                error.classList.remove('hidden');
+                retry.classList.remove('hidden');
+            } finally {
+                hiringServicesLoading = false;
+            }
+        }
+
+        async function saveHiringService() {
+            const message = document.getElementById('hiring-service-save-message');
+            if (hiringServicesLoading || hiringServiceSaving) {
+                message.innerText = 'Wait for the current service request to finish.';
+                return;
+            }
+            const name = document.getElementById('new-service-name').value.trim();
+            const lines = id => document.getElementById(id).value.split(/\r?\n/).map(value => value.trim()).filter(Boolean);
+            const roles = lines('new-service-roles');
+            const titlePhrases = lines('new-service-phrases');
+            if (name.length < 3 || name.length > 80 || !roles.length || roles.length > 4
+                || !titlePhrases.length || titlePhrases.length > 12
+                || [...roles, ...titlePhrases].some(value => value.length < 3 || value.length > 100)) {
+                message.innerText = 'Use a 3-80 character name, 1-4 job-role searches, and 1-12 title-match phrases of 3-100 characters.';
+                return;
+            }
+            hiringServiceSaving = true;
+            document.getElementById('btn-save-hiring-service').disabled = true;
+            message.innerText = 'Saving service...';
+            try {
+                const response = await fetch('/api/hiring-services', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, roles, title_phrases: titlePhrases }),
+                    signal: AbortSignal.timeout(15000),
+                });
+                const data = await response.json();
+                if (!response.ok || data.status !== 'success' || !validHiringService(data.service) || data.service.builtin) {
+                    throw new Error(data.message || 'Service could not be confirmed as saved.');
+                }
+                hiringServiceCatalog.set(data.service.id, data.service);
+                renderHiringServices(data.service.id);
+                ['new-service-name', 'new-service-roles', 'new-service-phrases'].forEach(id => {
+                    document.getElementById(id).value = '';
+                });
+                message.innerText = `Saved ${data.service.name}. Selected for your next search.`;
+            } catch (failure) {
+                message.innerText = `${failure.message} Reload the service list before retrying; a lost response may still have saved the service.`;
+                document.getElementById('btn-reload-hiring-services').classList.remove('hidden');
+            } finally {
+                hiringServiceSaving = false;
+                document.getElementById('btn-save-hiring-service').disabled = false;
+            }
+        }
+
         function updateHiringSearchBudget() {
-            const services = document.querySelectorAll('input[name="job-service"]:checked').length;
+            const services = Array.from(document.querySelectorAll('input[name="job-service"]:checked'));
+            const definitions = services.map(input => hiringServiceCatalog.get(input.value));
+            if (definitions.some(service => !service)) {
+                document.getElementById('job-search-budget').innerText = 'A service definition is unavailable. Reload hiring services before searching.';
+                return;
+            }
+            const roles = definitions.reduce((count, service) => count + service.roles.length, 0);
             const pages = Number(document.getElementById('job-pages-input').value);
             document.getElementById('job-search-budget').innerText = [1, 2, 3, 5].includes(pages)
-                ? `Up to ${services * 4 * pages} Google Jobs requests (${services} service(s) × 4 roles × ${pages} page(s)), plus company-contact searches.`
+                ? `Up to ${roles * pages} Google Jobs requests (${services.length} service(s), ${roles} role searches × ${pages} page(s)), plus company-contact searches.`
                 : 'Choose 1, 2, 3, or 5 pages per role.';
         }
 
@@ -1584,6 +1740,10 @@
             const pagesPerRole = Number(document.getElementById('job-pages-input').value);
             if (serviceTypes.length === 0) {
                 showDiscoveryError('Select at least one service offering.');
+                return;
+            }
+            if (serviceTypes.some(id => !hiringServiceCatalog.has(id))) {
+                showDiscoveryError('A service definition is unavailable. Reload hiring services before searching.');
                 return;
             }
             if (![1, 2, 3, 5].includes(pagesPerRole)) {
@@ -1730,6 +1890,7 @@
         }
 
         window.onload = () => {
+            if (workspacePage === 'discovery' || workspacePage === 'jobs') loadHiringServices();
             if (workspacePage === 'overview') loadOverview();
             else if (workspacePage === 'discovery') setDiscoveryMode('local');
             else setQueueView(workspacePage === 'jobs' ? 'jobs' : 'prospects');

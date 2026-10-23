@@ -8,7 +8,8 @@ const root = path.join(__dirname, '..');
 const template = fs.readFileSync(path.join(root, 'src', 'templates', 'dashboard.html'), 'utf8');
 const script = [...template.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)]
     .map(match => match[1]).find(source => source.includes('function loadOverview'))
-    .replace('{{ carto_basemap_api_key | tojson }}', '""');
+    .replace('{{ carto_basemap_api_key | tojson }}', '""')
+    .replace('{{ hiring_builtin_services | tojson }}', '[]');
 const themeScript = fs.readFileSync(path.join(root, 'static', 'workspace.js'), 'utf8');
 
 function mockElement() {

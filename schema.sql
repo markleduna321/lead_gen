@@ -103,6 +103,15 @@ ALTER TABLE job_leads ADD COLUMN IF NOT EXISTS contact_evidence JSONB;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_job_leads_identity ON job_leads (job_identity);
 ALTER TABLE job_leads DROP CONSTRAINT IF EXISTS unique_job_lead;
 
+CREATE TABLE IF NOT EXISTS hiring_services (
+    service_id VARCHAR(50) PRIMARY KEY,
+    name VARCHAR(80) NOT NULL,
+    name_key TEXT NOT NULL UNIQUE,
+    roles JSONB NOT NULL CHECK (jsonb_typeof(roles) = 'array' AND jsonb_array_length(roles) BETWEEN 1 AND 4),
+    title_phrases JSONB NOT NULL CHECK (jsonb_typeof(title_phrases) = 'array' AND jsonb_array_length(title_phrases) BETWEEN 1 AND 12),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS idx_job_leads_status    ON job_leads (status);
 CREATE INDEX IF NOT EXISTS idx_job_leads_lead_type ON job_leads (lead_type);
 CREATE INDEX IF NOT EXISTS idx_job_leads_email     ON job_leads (email) WHERE email IS NOT NULL;

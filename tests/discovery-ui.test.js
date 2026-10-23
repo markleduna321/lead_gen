@@ -7,7 +7,12 @@ const vm = require('node:vm');
 const html = fs.readFileSync(path.join(__dirname, '..', 'src', 'templates', 'dashboard.html'), 'utf8');
 const script = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)]
     .map(match => match[1]).find(source => source.includes('function submitActiveDiscovery'))
-    .replace('{{ carto_basemap_api_key | tojson }}', '""');
+    .replace('{{ carto_basemap_api_key | tojson }}', '""')
+    .replace('{{ hiring_builtin_services | tojson }}', JSON.stringify([
+        ['video_editing', 'Video Editing'], ['bpo_customer_service', 'Customer Service BPO'],
+        ['bpo_data_entry', 'Data Entry BPO'], ['social_media_management', 'Social Media Management'],
+        ['virtual_assistant', 'Virtual Assistant']
+    ].map(([id, name]) => ({ id, name, builtin: true, roles: Array(4).fill('QA role'), title_phrases: [] }))));
 
 function setup(page = 'prospects') {
     const elements = new Map();
@@ -28,7 +33,10 @@ function setup(page = 'prospects') {
                 },
                 setAttribute(name, value) { this.attributes[name] = value; },
                 replaceChildren(...children) { this.children = children; },
-                appendChild(child) { this.children.push(child); },
+                appendChild(child) { child.parent = this; this.children.push(child); },
+                querySelectorAll() {
+                    return this.children.filter(child => child.attributes?.['data-custom-service']);
+                },
                 focus() { this.focused = true; }
             });
         }
@@ -39,11 +47,22 @@ function setup(page = 'prospects') {
             body: { dataset: { page } },
             getElementById: element,
             createElement() {
-                return { children: [], appendChild(child) { this.children.push(child); } };
+                return {
+                    children: [], attributes: {},
+                    appendChild(child) { child.parent = this; this.children.push(child); },
+                    setAttribute(name, value) { this.attributes[name] = value; },
+                    remove() { this.parent.children = this.parent.children.filter(child => child !== this); }
+                };
             },
             querySelectorAll(selector) {
                 const name = selector.match(/name="([^"]+)"/)[1];
-                return checked[name].map(value => ({ value }));
+                const preset = checked[name].map(value => ({ value }));
+                if (name === 'job-service') {
+                    const custom = element('custom-hiring-services').children
+                        .map(label => label.children[0]).filter(input => input.checked);
+                    return [...preset, ...custom];
+                }
+                return preset;
             }
         },
         window: { location: { assign() {} } }, URL, URLSearchParams, AbortSignal, console: { error() {} },
@@ -323,6 +342,154 @@ test('invalid hiring depth is rejected before any search request', async () => {
         assert.match(element('discovery-error').innerText, /Choose 1, 2, 3, or 5/);
     }
     assert.equal(requests.length, 0);
+});
+
+const customService = {
+    id: `custom_${'a'.repeat(32)}`, name: 'Bookkeeping', builtin: false,
+    roles: ['Bookkeeper', 'Accounts payable clerk'], title_phrases: ['bookkeeper', 'accounts payable']
+};
+
+test('saved service is selected immediately and drives exact role budget, filters and labels', async () => {
+    const { context, element, checked, requests } = setup('discovery');
+    element('new-service-name').value = 'Bookkeeping';
+    element('new-service-roles').value = 'Bookkeeper\nAccounts payable clerk';
+    element('new-service-phrases').value = 'bookkeeper\naccounts payable';
+    context.fetch = async (url, options) => {
+        requests.push({ url, options });
+        return { ok: true, json: async () => url === '/api/hiring-services'
+            ? { status: 'success', service: customService }
+            : { status: 'success', run_id: 'custom-run' } };
+    };
+    await context.saveHiringService();
+    assert.equal(requests[0].url, '/api/hiring-services');
+    assert.equal(requests[0].options.method, 'POST');
+    assert.deepEqual(JSON.parse(requests[0].options.body), {
+        name: 'Bookkeeping', roles: customService.roles, title_phrases: customService.title_phrases
+    });
+    assert.match(element('hiring-service-save-message').innerText, /Saved Bookkeeping/);
+    assert.equal(element('new-service-name').value, '');
+    assert.equal(element('btn-save-hiring-service').disabled, false);
+    const label = element('custom-hiring-services').children[0];
+    assert.equal(label.children[0].value, customService.id);
+    assert.equal(label.children[0].checked, true);
+    const option = element('filter-lead-type').children[0];
+    assert.equal(option.value, customService.id);
+    assert.equal(option.innerText, 'Bookkeeping');
+    assert.equal(context.hiringServiceLabel(customService.id), 'Bookkeeping');
+    context.setDiscoveryMode('jobs');
+    assert.match(element('job-search-budget').innerText, /Up to 6 Google Jobs requests/);
+    checked['job-service'] = [];
+    element('job-pages-input').value = '3';
+    context.updateHiringSearchBudget();
+    assert.match(element('job-search-budget').innerText, /Up to 6 Google Jobs requests/);
+    await context.submitActiveDiscovery();
+    assert.deepEqual(JSON.parse(requests[1].options.body), {
+        service_types: [customService.id], country: '', pages_per_role: 3
+    });
+});
+
+test('service reload restores persisted definitions without duplicate controls or lost selections', async () => {
+    const { context, element } = setup('discovery');
+    const builtins = vm.runInContext('[...hiringServiceCatalog.values()]', context);
+    context.fetch = async () => ({ ok: true, json: async () => ({
+        status: 'success', services: [...builtins, customService]
+    }) });
+    await context.loadHiringServices();
+    assert.equal(element('custom-hiring-services').children.length, 1);
+    assert.equal(element('custom-hiring-services').children[0].children[0].checked, false);
+    element('custom-hiring-services').children[0].children[0].checked = true;
+    element('filter-lead-type').value = customService.id;
+    await context.loadHiringServices();
+    assert.equal(element('custom-hiring-services').children.length, 1);
+    assert.equal(element('filter-lead-type').children.length, 1);
+    assert.equal(element('filter-lead-type').value, customService.id);
+    assert.equal(element('custom-hiring-services').children[0].children[0].checked, true);
+    assert.equal(element('hiring-services-error').classList.contains('hidden'), true);
+    const fresh = setup('discovery');
+    fresh.context.fetch = context.fetch;
+    await fresh.context.loadHiringServices();
+    assert.equal(fresh.context.hiringServiceLabel(customService.id), 'Bookkeeping');
+});
+
+test('service loading errors are explicit and malformed catalogs do not replace current definitions', async () => {
+    const { context, element } = setup('jobs');
+    for (const body of [
+        { status: 'error', message: 'QA database unavailable' },
+        { status: 'success', services: [null] },
+        { status: 'success', services: [{ ...customService, roles: 'invalid' }] },
+    ]) {
+        context.fetch = async () => ({ ok: body.status === 'success', json: async () => body });
+        await context.loadHiringServices();
+        assert.equal(element('hiring-services-error').classList.contains('hidden'), false);
+        assert.equal(element('btn-reload-hiring-services').classList.contains('hidden'), false);
+        assert.match(element('hiring-services-error').innerText, /Reload the service list/);
+        assert.equal(vm.runInContext('hiringServiceCatalog.size', context), 5);
+    }
+    context.fetch = async () => { throw new Error('Network unavailable'); };
+    await context.loadHiringServices();
+    assert.match(element('hiring-services-error').innerText, /Network unavailable/);
+});
+
+test('service save rejects invalid input and retains values on conflict or ambiguous network failure', async () => {
+    const { context, element, requests } = setup('discovery');
+    await context.saveHiringService();
+    assert.equal(requests.length, 0);
+    element('new-service-name').value = 'Bookkeeping';
+    element('new-service-roles').value = 'Bookkeeper';
+    element('new-service-phrases').value = 'bookkeeper';
+    for (const fails of [false, true]) {
+        context.fetch = async () => {
+            if (fails) throw new Error('Network timeout');
+            return { ok: false, json: async () => ({ status: 'error', message: 'Service already exists' }) };
+        };
+        await context.saveHiringService();
+        assert.match(element('hiring-service-save-message').innerText, /Reload the service list before retrying/);
+        assert.equal(element('new-service-name').value, 'Bookkeeping');
+        assert.equal(element('btn-save-hiring-service').disabled, false);
+        assert.equal(element('custom-hiring-services').children.length, 0);
+    }
+});
+
+test('overlapping catalog requests are blocked and catalog refresh preserves a drafted email edit', async () => {
+    const { context, element } = setup('jobs');
+    const builtins = vm.runInContext('[...hiringServiceCatalog.values()]', context);
+    let finish;
+    let calls = 0;
+    context.fetch = () => { calls++; return new Promise(resolve => { finish = resolve; }); };
+    const pending = context.loadHiringServices();
+    await context.loadHiringServices();
+    await context.saveHiringService();
+    assert.equal(calls, 1);
+    assert.match(element('hiring-service-save-message').innerText, /Wait for/);
+    vm.runInContext(`
+        activeQueueView = 'jobs';
+        currentLeads = [{ id: 7, job_title: 'Bookkeeper', lead_type: '${customService.id}', email: 'old@example.test' }];
+        selectedLeadId = 7;
+    `, context);
+    element('job-modal-email-input').value = 'unsaved@example.test';
+    finish({ ok: true, json: async () => ({ status: 'success', services: [...builtins, customService] }) });
+    await pending;
+    assert.equal(element('job-modal-service').innerText, 'Bookkeeping');
+    assert.equal(element('job-modal-email-input').value, 'unsaved@example.test');
+});
+
+test('unknown service definitions block estimates and paid discovery, names are rendered as text', async () => {
+    const { context, element, checked, requests } = setup('discovery');
+    checked['job-service'] = ['custom_unknown'];
+    context.setDiscoveryMode('jobs');
+    assert.match(element('job-search-budget').innerText, /definition is unavailable/);
+    await context.submitActiveDiscovery();
+    assert.equal(requests.length, 0);
+    assert.match(element('discovery-error').innerText, /definition is unavailable/);
+    checked['job-service'] = [];
+    const hostile = { ...customService, name: '<img src=x onerror=alert(1)>' };
+    context.fetch = async () => ({ ok: true, json: async () => ({ status: 'success', service: hostile }) });
+    element('new-service-name').value = hostile.name;
+    element('new-service-roles').value = 'Bookkeeper';
+    element('new-service-phrases').value = 'bookkeeper';
+    await context.saveHiringService();
+    assert.match(element('custom-hiring-services').children[0].children[1].innerText, /<img src=x/);
+    assert.equal(element('filter-lead-type').children[0].innerText, hostile.name);
 });
 
 test('validation prevents empty searches', async () => {

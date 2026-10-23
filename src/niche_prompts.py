@@ -302,4 +302,6 @@ OUTSOURCING_SERVICE_TYPES = {
 def get_service_parameters(service_type: str) -> dict:
     """Returns pitch parameters for a given service type (video editing, BPO, VA, etc.)."""
     normalized = str(service_type).lower().strip()
+    if normalized.startswith("custom_"):
+        raise ValueError("Custom hiring services are discovery-only; pitch generation is not configured.")
     return SERVICE_PITCH_MATRIX.get(normalized, SERVICE_PITCH_MATRIX["web_design"])
