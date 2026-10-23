@@ -114,7 +114,7 @@ class RouteGuardTests(unittest.TestCase):
 
     def test_anonymous_page_requests_redirect_to_sign_in(self):
         client = self.module.app.test_client()
-        for path in ["/", "/prospects", "/job-leads", "/discovery"]:
+        for path in ["/overview", "/prospects", "/job-leads", "/discovery"]:
             with self.subTest(path=path):
                 response = client.get(path)
                 self.assertEqual(response.status_code, 302)

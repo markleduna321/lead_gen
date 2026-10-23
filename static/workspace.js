@@ -28,6 +28,7 @@ themeMedia.addEventListener('change', () => {
 });
 
 function toggleSidebar(show) {
+    if (!document.getElementById('menu-toggle')) return;
     const open = show === undefined ? !document.body.classList.contains('nav-open') : show;
     document.body.classList.toggle('nav-open', open);
     document.getElementById('menu-toggle').setAttribute('aria-expanded', String(open));

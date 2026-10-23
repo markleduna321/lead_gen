@@ -431,7 +431,17 @@ def handle_global_exception(e):
     print(f"[SERVER CRASH ERROR] {str(e)}", file=sys.stderr)
     return jsonify({"status": "error", "message": str(e)}), 500
 
-@app.route('/', defaults={'page': 'overview'}, methods=['GET'])
+@app.route('/', methods=['GET'])
+def home():
+    from auth import current_user_id, sign_out_session
+    if signed_in_user() is not None:
+        return serve_dashboard('overview')
+    if current_user_id() is not None:
+        sign_out_session()
+    return render_template('home.html')
+
+
+@app.route('/overview', defaults={'page': 'overview'}, methods=['GET'])
 @app.route('/prospects', defaults={'page': 'prospects'}, methods=['GET'])
 @app.route('/job-leads', defaults={'page': 'jobs'}, methods=['GET'])
 @app.route('/discovery', defaults={'page': 'discovery'}, methods=['GET'])

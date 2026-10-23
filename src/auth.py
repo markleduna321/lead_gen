@@ -23,7 +23,7 @@ MAX_PASSWORD_LENGTH = 200
 
 # Paths reachable without a session. Everything else requires sign-in.
 PUBLIC_ENDPOINTS = frozenset({
-    "sign_in", "register", "static", "silence_favicon", "silence_chrome_devtools",
+    "home", "sign_in", "register", "static", "silence_favicon", "silence_chrome_devtools",
 })
 
 _EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s.]+(\.[^@\s.]+)+$")

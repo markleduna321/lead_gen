@@ -2,13 +2,16 @@
 
 ## Accounts and data isolation
 
-Every page and API route requires a signed-in account. Visiting any page while
+Workspace pages and API routes require a signed-in account. The product home,
+sign-in, and registration pages are public. Visiting a workspace page while
 signed out redirects to `/login`; API calls return `401` with
 `{"code": "auth_required"}` so the dashboard can send you back to sign in
 instead of failing on an unexpected HTML response.
 
 | Route | Purpose |
 | --- | --- |
+| `/` | Public product home; Overview for signed-in accounts |
+| `/overview` | Signed-in Overview |
 | `/register` | Create an account (open registration) |
 | `/login` | Sign in |
 | `/logout` | Sign out (POST) |
@@ -84,6 +87,12 @@ Providers using two-factor authentication require an **app password**; spaces
 and dashes in pasted app passwords are stripped automatically.
 
 ## Workspace
+
+Visitors at `/` see the public product home page, with links to sign in or
+create an account. Its Light / Dark / System appearance control shares the
+workspace's saved theme preference. The product illustration uses labeled
+example data, not live account data. Signed-in users at `/` still see their
+Overview; `/overview` also opens it directly and requires authentication.
 
 Run `venv\Scripts\python.exe app.py` to open the desktop application.
 The shared sidebar links to four independently addressable pages:

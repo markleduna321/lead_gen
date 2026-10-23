@@ -30,6 +30,7 @@ class DashboardPagesTests(unittest.TestCase):
     def test_all_pages_render_without_database_access(self):
         cases = [
             ("/", "overview", "Overview"),
+            ("/overview", "overview", "Overview"),
             ("/prospects", "prospects", "Prospects"),
             ("/job-leads", "jobs", "Job Leads"),
             ("/discovery", "discovery", "Discovery"),
@@ -56,11 +57,35 @@ class DashboardPagesTests(unittest.TestCase):
         self.assertIn('id="discovery-panel-jobs"', discovery)
 
     def test_shared_assets_are_available(self):
-        for asset in ("dashboard.css", "workspace.js"):
+        for asset in ("dashboard.css", "workspace.js", "home.css"):
             with self.subTest(asset=asset):
                 response = self.client.get(f"/static/{asset}")
                 self.assertEqual(response.status_code, 200)
                 response.close()
+
+    def test_public_home_is_available_without_database_access(self):
+        with patch("psycopg2.connect", side_effect=AssertionError("Unexpected database access")):
+            response = self.module.app.test_client().get("/")
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn('data-page="home"', html)
+        self.assertIn('id="theme-preference"', html)
+        for preference in ('system', 'light', 'dark'):
+            self.assertIn(f'value="{preference}"', html)
+        self.assertIn('href="/login"', html)
+        self.assertIn('href="/register"', html)
+        self.assertIn('id="platform"', html)
+        self.assertIn('id="how-it-works"', html)
+        self.assertIn('PRODUCT PREVIEW', html)
+        self.assertNotIn('id="table-body"', html)
+
+    def test_public_home_clears_a_removed_account_session(self):
+        client = signed_in_client(self.module.app, user_id=4242)
+        response = client.get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('data-page="home"', response.get_data(as_text=True))
+        with client.session_transaction() as session:
+            self.assertNotIn("user_id", session)
 
     def test_prospect_queue_and_export_preserve_separate_profile_urls(self):
         database = MagicMock()

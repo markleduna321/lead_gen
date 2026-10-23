@@ -63,6 +63,30 @@ test('appearance follows system, supports overrides, and persists preference', (
     assert.equal(elements.get('sidebar-backdrop').hidden, true);
 });
 
+test('public pages share theme persistence and Escape needs no sidebar', () => {
+    const root = mockElement();
+    const selector = mockElement();
+    const handlers = {};
+    const stored = new Map([['asuratech-theme', 'dark']]);
+    const context = vm.createContext({
+        window: { matchMedia: () => ({ matches: false, addEventListener() {} }) }, console,
+        localStorage: { getItem: key => stored.get(key), setItem: (key, value) => stored.set(key, value) },
+        document: {
+            documentElement: root, body: { dataset: { page: 'home' } },
+            getElementById: id => id === 'theme-preference' ? selector : null,
+            addEventListener: (event, handler) => { handlers[event] = handler; }
+        }
+    });
+    vm.runInContext(themeScript, context);
+    handlers.DOMContentLoaded();
+    assert.equal(root.dataset.theme, 'dark');
+    assert.equal(selector.value, 'dark');
+    assert.doesNotThrow(() => handlers.keydown({ key: 'Escape' }));
+    context.setThemePreference('light');
+    assert.equal(stored.get('asuratech-theme'), 'light');
+    assert.equal(root.dataset.theme, 'light');
+});
+
 function overviewContext(fail = false) {
     const elements = new Map();
     const document = {
