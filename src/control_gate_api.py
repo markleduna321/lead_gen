@@ -109,6 +109,16 @@ def run_startup_migrations():
         "ALTER TABLE job_leads ADD COLUMN IF NOT EXISTS contact_evidence JSONB;",
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_job_leads_identity ON job_leads (job_identity);",
         "ALTER TABLE job_leads DROP CONSTRAINT IF EXISTS unique_job_lead;",
+        """
+        CREATE TABLE IF NOT EXISTS hiring_services (
+            service_id VARCHAR(50) PRIMARY KEY,
+            name VARCHAR(80) NOT NULL,
+            name_key TEXT NOT NULL UNIQUE,
+            roles JSONB NOT NULL CHECK (jsonb_typeof(roles) = 'array' AND jsonb_array_length(roles) BETWEEN 1 AND 4),
+            title_phrases JSONB NOT NULL CHECK (jsonb_typeof(title_phrases) = 'array' AND jsonb_array_length(title_phrases) BETWEEN 1 AND 12),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """,
         "CREATE INDEX IF NOT EXISTS idx_job_leads_status    ON job_leads (status);",
         "CREATE INDEX IF NOT EXISTS idx_job_leads_lead_type ON job_leads (lead_type);",
         "CREATE INDEX IF NOT EXISTS idx_job_leads_email     ON job_leads (email) WHERE email IS NOT NULL;",
@@ -160,6 +170,7 @@ def handle_global_exception(e):
 @app.route('/job-leads', defaults={'page': 'jobs'}, methods=['GET'])
 @app.route('/discovery', defaults={'page': 'discovery'}, methods=['GET'])
 def serve_dashboard(page):
+    from hiring_services import BUILTIN_SERVICES
     pages = {
         'overview': ('Overview', 'YOUR PIPELINE, AT A GLANCE',
                      'A clear view of your leads, outreach, and next opportunities.'),
@@ -177,6 +188,7 @@ def serve_dashboard(page):
         page_title=page_title,
         page_eyebrow=page_eyebrow,
         page_description=page_description,
+        hiring_builtin_services=[service.public_dict() for service in BUILTIN_SERVICES.values()],
         carto_basemap_api_key=os.getenv('CARTO_BASEMAP_API_KEY', '')
     )
 
@@ -706,16 +718,37 @@ def silence_chrome_devtools(filename):
 # NEW ROUTES — International Lead Gen Expansion
 # ---------------------------------------------------------------------------
 
+@app.route('/api/hiring-services', methods=['GET', 'POST'])
+def hiring_service_catalog():
+    from hiring_services import DuplicateHiringService, create_hiring_service, list_hiring_services
+    try:
+        if request.method == "POST":
+            service = create_hiring_service(DB_DSN, request.get_json(silent=True))
+            return jsonify({"status": "success", "service": service.public_dict()}), 201
+        return jsonify({"status": "success", "services": [
+            service.public_dict() for service in list_hiring_services(DB_DSN)
+        ]})
+    except DuplicateHiringService as error:
+        return jsonify({"status": "error", "message": str(error)}), 409
+    except ValueError as error:
+        emit_ui_log(f"[HIRING SERVICES ERROR] {error}")
+        return jsonify({"status": "error", "message": str(error)}), 400 if request.method == "POST" else 500
+    except Exception as error:
+        emit_ui_log(f"[HIRING SERVICES ERROR] {request.method} failed: {error}")
+        return jsonify({"status": "error", "message":
+            "Hiring services could not be saved or loaded. Restart the app after migration, then reload the list before retrying."}), 500
+
+
 @app.route('/api/trigger/discover-jobs', methods=['POST'])
 def trigger_job_discovery():
     """
     Scans Google Jobs for companies actively hiring roles that signal outsourcing need.
-    service_types: list of any of ['video_editing', 'bpo_customer_service',
-                   'bpo_data_entry', 'social_media_management', 'virtual_assistant']
+    service_types: list of preset or persisted custom service IDs
     country: optional country filter string (e.g. 'United States', 'Australia')
     pages_per_role: optional page budget, one of 1 (default), 2, 3, or 5
     """
-    from discovery_jobs import JOB_SIGNAL_MAP, validate_hiring_pages
+    from discovery_jobs import validate_hiring_pages
+    from hiring_services import BUILTIN_SERVICES, list_hiring_services
     data = request.get_json()
     if not isinstance(data, dict):
         return jsonify({"status": "error", "message": "Hiring discovery expects a JSON object."}), 400
@@ -728,7 +761,7 @@ def trigger_job_discovery():
 
     if (
         not isinstance(service_types, list) or not service_types
-        or any(not isinstance(service, str) or service not in JOB_SIGNAL_MAP for service in service_types)
+        or any(not isinstance(service, str) for service in service_types)
     ):
         return jsonify({"status": "error", "message": "Select at least one supported service offering."}), 400
     if not isinstance(country, str):
@@ -740,10 +773,25 @@ def trigger_job_discovery():
     except ValueError as error:
         return jsonify({"status": "error", "message": str(error)}), 400
     service_types = list(dict.fromkeys(service_types))
+    services = dict(BUILTIN_SERVICES)
+    if any(service not in services for service in service_types):
+        if any(service not in services and not service.startswith("custom_") for service in service_types):
+            return jsonify({"status": "error", "message": "Select supported service offerings."}), 400
+        try:
+            services = {service.id: service for service in list_hiring_services(DB_DSN)}
+        except Exception as error:
+            emit_ui_log(f"[HIRING SERVICES ERROR] Could not load service definitions: {error}")
+            return jsonify({"status": "error", "message": "Service definitions could not be loaded. Restart after migration and retry."}), 500
+    if any(service not in services for service in service_types):
+        return jsonify({"status": "error", "message": "A selected service no longer exists. Reload the service list."}), 400
 
     def scan(service):
         from discovery_jobs import run_job_discovery
-        run_job_discovery(service, country, pages_per_role=pages_per_role)
+        definition = services[service]
+        if definition.builtin:
+            run_job_discovery(service, country, pages_per_role=pages_per_role)
+        else:
+            run_job_discovery(service, country, pages_per_role=pages_per_role, service_definition=definition)
 
     tasks = [("google_jobs", service, lambda service=service: scan(service)) for service in service_types]
     try:
@@ -756,7 +804,7 @@ def trigger_job_discovery():
     return jsonify({
         "status": "success", "run_id": run_id,
         "pages_per_role": pages_per_role,
-        "max_job_requests": sum(len(JOB_SIGNAL_MAP[service]) for service in service_types) * pages_per_role,
+        "max_job_requests": sum(len(services[service].roles) for service in service_types) * pages_per_role,
         "message": f"Job board discovery started for: {', '.join(service_types)}"
     }), 202
 

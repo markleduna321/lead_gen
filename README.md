@@ -156,9 +156,9 @@ A newly matched website does not inherit an older unconfirmed email when no
 current domain-matched email is found. No live migration is applied during QA.
 Hiring searches default to **one page per role**. The Pages per Role selector
 allows **1, 2, 3, or 5** pages (maximum 5), preserved when switching discovery modes.
-Each service has four role queries, so its Google Jobs budget is at most
-`4 × pages per role` requests; the form displays the total for selected services.
-Five pages for one service means up to 20 Google Jobs requests, plus separate
+Each preset has four role queries; custom services have 1-4. The Google Jobs
+budget is `selected role count × pages per role`; the form displays the total.
+Five pages for one preset means up to 20 Google Jobs requests, plus separate
 company-contact searches. These may consume paid SerpAPI credits. A page contains
 up to 10 raw postings before filtering/deduplication; more pages do not guarantee
 more matching leads. No automatic retries add to this page budget.
@@ -173,6 +173,52 @@ remaining roles/services continue and valid postings can still be saved.
 Deduplication covers all fetched pages before contact enrichment. Progress logs
 identify the role and page; the run progress counter continues to count services,
 not pages. No database-schema change is required for search depth.
+
+### Adding a hiring service
+
+In **Discovery > Hiring Companies**, expand **Add Service**. Enter a service name,
+1-4 job-role search phrases (one per line), and 1-12 title-match phrases (one per
+line), then select **Save Service**. The service is immediately selected for the
+next search and appears in the Job Leads filter, table, and profile labels.
+Saving only registers the definition; it does not launch provider searches.
+
+Names must contain 3-80 characters; search/match phrases must contain 3-100.
+Blank, control-character, oversized, and non-text values are rejected. Repeated
+phrases are normalized/deduplicated. Returned titles must contain at least one
+literal normalized match phrase: matching ignores case, punctuation, and accents,
+but does not interpret regex, invent aliases, or inspect the job description.
+Enter variants explicitly (for example, "bookkeeper" and "accounts payable").
+Country targeting, page limits, deduplication, contact matching, and run/error
+reporting are the same as for presets. Broad phrases can still produce
+unrelated matches; choose specific role wording.
+
+Custom definitions are stored in the new `hiring_services` table with generated
+stable `custom_...` IDs. Name uniqueness ignores case, compatibility Unicode, and
+whitespace, including conflicts with preset names. A database unique key also
+prevents concurrent duplicate custom names. Existing runs retain immutable
+definition snapshots. The five presets and their existing role patterns remain
+unchanged; their roles/names now share a registry across the backend and UI.
+Request estimates use the actual number of selected role searches, not four
+for every custom service.
+
+Restart the app before adding services: the normal startup migration creates
+the table if absent without inserting/relabeling historical leads or changing
+existing services. The list is reloaded from PostgreSQL on page load, so saved
+services survive restarts and are shared by clients using the same database.
+GET `/api/hiring-services` lists preset/custom definitions; POST accepts
+`name`, `roles`, and `title_phrases` and returns the saved definition (201).
+Invalid inputs return 400, duplicate names 409, and database failures 500 with
+an explicit UI error/reload option. After a save timeout/lost response, reload
+the list before retrying because the database may already have saved it.
+Preset searches remain available if the custom catalog cannot be loaded;
+the failure is visible, not presented as an empty successful catalog.
+
+This first version is **add-only and discovery-only**: no editing, disabling,
+deleting, AI-generated definitions, historical backfill, or custom pitch strategy
+is included. Job Leads has no dedicated pitch-generation workflow. Attempts to
+use a custom ID through the generic pitch helper raise explicitly rather than
+silently generating a web-design pitch. Database migration and SQL/provider I/O
+are mocked during QA; no configured database is changed by those checks.
 
 Use **Appearance** in the sidebar to choose System, Light, or Dark. The preference
 is saved in the browser. System mode follows the operating system's color theme.

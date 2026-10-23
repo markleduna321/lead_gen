@@ -10,47 +10,13 @@ from psycopg2.extras import Json, execute_values
 from dotenv import load_dotenv
 from discovery_job_filters import matches_hiring_country, matches_hiring_role, resolve_hiring_country
 from discovery_job_contacts import find_company_contact, web_url
+from hiring_services import BUILTIN_SERVICES, JOB_SIGNAL_MAP, HiringService, matches_service_title
 
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 load_dotenv(os.path.join(base_dir, ".env"))
 
 DB_DSN = os.getenv("DATABASE_URL")
 SERPAPI_KEY = os.getenv("SERPAPI_API_KEY")
-
-# Maps service offering to job role signals that indicate a company is hiring
-# instead of outsourcing — these are your warmest BPO/freelance prospects
-JOB_SIGNAL_MAP = {
-    "video_editing": [
-        "video editor",
-        "video content creator",
-        "motion graphics designer",
-        "video production specialist",
-    ],
-    "bpo_customer_service": [
-        "customer service representative",
-        "customer support agent",
-        "call center agent",
-        "support specialist",
-    ],
-    "bpo_data_entry": [
-        "data entry specialist",
-        "data processing clerk",
-        "back office processor",
-        "data operations analyst",
-    ],
-    "social_media_management": [
-        "social media manager",
-        "social media specialist",
-        "community manager",
-        "content creator social media",
-    ],
-    "virtual_assistant": [
-        "virtual assistant",
-        "executive assistant remote",
-        "administrative assistant remote",
-        "online business manager",
-    ],
-}
 
 HIRING_PAGE_OPTIONS = (1, 2, 3, 5)
 
@@ -205,7 +171,7 @@ def save_job_leads(leads):
 
 
 
-def run_job_discovery(service_type, country="", pages_per_role=1):
+def run_job_discovery(service_type, country="", pages_per_role=1, service_definition: HiringService | None = None):
     """
     Scans Google Jobs via SerpApi to find companies actively hiring for roles
     that signal they need outsourcing — video editing, BPO, VA, social media, etc.
@@ -218,13 +184,14 @@ def run_job_discovery(service_type, country="", pages_per_role=1):
         emit_ui_log("❌ [JOB ENGINE ERROR] Missing SERPAPI_API_KEY inside your .env configuration.")
         raise RuntimeError("Hiring discovery requires SERPAPI_API_KEY.")
 
-    job_roles = JOB_SIGNAL_MAP.get(service_type)
-    if not job_roles:
+    service = service_definition or BUILTIN_SERVICES.get(service_type)
+    if service is None or service.id != service_type:
         emit_ui_log(
             f"❌ [JOB ENGINE] Unknown service type: '{service_type}'. "
             f"Valid options: {list(JOB_SIGNAL_MAP.keys())}"
         )
         raise ValueError(f"Unsupported hiring service: {service_type}")
+    job_roles = service.roles
 
     target_country = resolve_hiring_country(country)
     if target_country:
@@ -274,7 +241,11 @@ def run_job_discovery(service_type, country="", pages_per_role=1):
                         errors.append(message)
                         emit_ui_log(f"[JOB DATA ERROR] {message}")
                         continue
-                    if not matches_hiring_role(lead["job_title"], service_type):
+                    relevant = (
+                        matches_hiring_role(lead["job_title"], service_type) if service.builtin
+                        else matches_service_title(lead["job_title"], service)
+                    )
+                    if not relevant:
                         emit_ui_log(f"[JOB TARGETING] Skipped '{lead['job_title']}': no title evidence for {service_type}.")
                         continue
                     if not matches_hiring_country(lead["location"], target_country):
