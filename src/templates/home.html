@@ -16,21 +16,7 @@
 </head>
 <body data-page="home" class="home-body">
     <a class="skip-link" href="#main-content">Skip to content</a>
-    <header class="home-header">
-        <nav class="home-nav home-container" aria-label="Main navigation">
-            <a class="brand" href="/" aria-label="AsuraTECH home"><span class="brand-mark">A<span>.</span></span><span>AsuraTECH<small>LEAD WORKSPACE</small></span></a>
-            <div class="home-nav-links"><a href="#platform">The platform</a><a href="#how-it-works">How it works</a></div>
-            <div class="home-nav-actions">
-                <label class="home-theme" for="theme-preference">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2"/></svg>
-                    <span class="home-sr-only">Appearance</span>
-                    <select id="theme-preference" onchange="setThemePreference(this.value)"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select>
-                </label>
-                <a class="home-sign-in" href="{{ url_for('sign_in') }}">Sign in</a>
-                <a class="home-button home-nav-cta" href="{{ url_for('register') }}">Get started {{ arrow() }}</a>
-            </div>
-        </nav>
-    </header>
+    {% include "public_nav.html" %}
     <main id="main-content">
         <section class="home-hero home-container" aria-labelledby="home-title">
             <div class="home-hero-copy">

@@ -2,8 +2,10 @@ import contextlib
 import csv
 import importlib
 import io
+from html import unescape
 import os
 from pathlib import Path
+import re
 import sys
 import types
 import unittest
@@ -74,6 +76,8 @@ class DashboardPagesTests(unittest.TestCase):
             self.assertIn(f'value="{preference}"', html)
         self.assertIn('href="/login"', html)
         self.assertIn('href="/register"', html)
+        self.assertIn('href="/plans"', html)
+        self.assertNotIn('id="plan-solo"', html)
         self.assertIn('id="platform"', html)
         self.assertIn('id="how-it-works"', html)
         self.assertIn('id="hero-globe"', html)
@@ -88,6 +92,72 @@ class DashboardPagesTests(unittest.TestCase):
         self.assertIn('data-page="home"', response.get_data(as_text=True))
         with client.session_transaction() as session:
             self.assertNotIn("user_id", session)
+
+    def test_plans_are_on_a_separate_public_page_without_checkout(self):
+        clients = [self.module.app.test_client(), signed_in_client(self.module.app)]
+        with patch("psycopg2.connect", side_effect=AssertionError("Unexpected database access")):
+            for client in clients:
+                with self.subTest(authenticated=client is clients[1]):
+                    response = client.get("/plans")
+                    self.assertEqual(response.status_code, 200)
+                    html = response.get_data(as_text=True)
+                    self.assertIn('<title>Plans &amp; Pricing | AsuraTECH</title>', html)
+                    self.assertIn('data-page="plans"', html)
+                    for key, name in [('solo', 'Solo'), ('team', 'Small Team'), ('enterprise', 'Enterprise')]:
+                        self.assertIn(f'<h2 id="plan-{key}">{name}</h2>', html)
+                    self.assertEqual(html.count('class="plan-availability"'), 3)
+                    self.assertNotIn('Coming soon', html)
+                    self.assertIn('id="trial-title"', html)
+                    self.assertIn('Best Value', html)
+                    self.assertIn('href="/plans" aria-current="page"', html)
+                    self.assertEqual(html.count('aria-current="page"'), 1)
+                    self.assertIn('href="/#platform"', html)
+                    self.assertIn('href="/#how-it-works"', html)
+                    self.assertIn('id="theme-preference"', html)
+                    for preference in ('system', 'light', 'dark'):
+                        self.assertIn(f'value="{preference}"', html)
+                    self.assertNotIn('globe/globe.js', html)
+                    self.assertNotIn('type="submit"', html)
+                    self.assertNotIn('$', html)
+                    self.assertIn('Creating an account does not activate a plan or a timed trial.', html)
+
+    def test_plan_comparison_matches_published_offering(self):
+        response = self.module.app.test_client().get("/plans")
+        self.assertEqual(response.status_code, 200)
+        html = unescape(response.get_data(as_text=True))
+        table = re.search(r'<table class="plans-table">(.*?)</table>', html, re.S).group(1)
+        rows = re.findall(r'<tr>(.*?)</tr>', table, re.S)
+        cells = [
+            [' '.join(re.sub(r'<[^>]+>', ' ', cell).split())
+             for cell in re.findall(r'<t[hd]\b[^>]*>(.*?)</t[hd]>', row, re.S)]
+            for row in rows
+        ]
+        self.assertEqual(cells, [
+            ['Feature / Metric', 'Free Trial', 'Solo Plan', 'Small Team Plan Best Value', 'Enterprise Plan'],
+            ['Monthly Price', '₱0 (7 Days)', '₱999 / month', '₱2,499 / month', '₱5,999 / month'],
+            ['Annual Billing (2 Months Free)', 'Not available', '₱9,990 / year (approx. ₱832/mo)', '₱24,990 / year (approx. ₱2,082/mo)', '₱59,990 / year (approx. ₱4,999/mo)'],
+            ['Included Lead Credits', '30 Lead Credits', '750 Lead Credits / mo', '2,500 Lead Credits / mo', '7,500 Lead Credits / mo'],
+            ['Price Per Lead to User', 'Free', '₱1.33 per lead', '₱1.00 per lead', '₱0.80 per lead'],
+            ['Team Seats', '1 User', '1 User', 'Up to 4 Users', 'Up to 15 Users'],
+            ['Daily Search Cap (Anti-abuse)', '10 searches / day', '50 searches / day', '200 searches / day', '1,000 searches / day'],
+            ['Channels Unlocked', 'Maps / Location Search + Site Email/Phone', 'Maps / Location Search + Website Email/Phone + Social Links', 'All in Solo + Job Postings + LinkedIn Dorks + Ad Pixel Check', 'All in Team + Bulk CSV Enrichment + Webhook/API Export'],
+            ['Max Credit Rollover', 'None', 'Up to 350 credits', 'Up to 1,250 credits', 'Up to 3,500 credits'],
+            ['Credit Top-Up Pack (Active subs only)', 'Must upgrade', '₱499 for 350 credits', '₱799 for 750 credits', '₱1,499 for 2,000 credits'],
+        ])
+        cards = re.findall(r'<article class="plan-card[^"]*".*?</article>', html, re.S)
+        for card, monthly, annual, equivalent, credits, seats, searches, rollover, topup in zip(
+            cards, ['999', '2,499', '5,999'], ['9,990', '24,990', '59,990'],
+            ['832', '2,082', '4,999'], ['750', '2,500', '7,500'],
+            ['1 user', 'Up to 4 users', 'Up to 15 users'], ['50', '200', '1,000'],
+            ['350', '1,250', '3,500'],
+            ['₱499 for 350 credits', '₱799 for 750 credits', '₱1,499 for 2,000 credits'],
+        ):
+            for expected in [f'₱{monthly}<small> / month', f'₱{annual} / year',
+                             f'₱{equivalent}/mo', f'{credits} lead credits / month',
+                             seats, f'{searches} searches / day',
+                             f'Rollover up to {rollover} credits', topup]:
+                with self.subTest(expected=expected):
+                    self.assertIn(expected, card)
 
     def test_globe_assets_are_public_and_have_browser_compatible_content_types(self):
         client = self.module.app.test_client()

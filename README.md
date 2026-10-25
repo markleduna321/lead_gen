@@ -94,6 +94,16 @@ workspace's saved theme preference. The hero globe is illustrative, not live
 account data or a claim of provider coverage. Signed-in users at `/` still see their
 Overview; `/overview` also opens it directly and requires authentication.
 
+The public navigation links to a separate **Plans & Pricing** page at `/plans`,
+available with or without signing in and using the same saved theme preference.
+It displays a 7-day free trial (30 credits) and Solo (PHP 999/month), Small Team
+(PHP 2,499/month, Best Value), and Enterprise (PHP 5,999/month). Annual totals
+include two months free; the comparison table lists credits, seats, daily search
+caps, channels, rollover, and subscriber-only top-up packs. Monthly equivalents
+and per-lead prices are rounded. These are published offering details only:
+this page does not activate trials, subscriptions, credit enforcement, top-ups,
+API access, or shared team data.
+
 ### Home hero globe
 
 The public hero uses a self-hosted Three.js globe with GSAP easing. Ten featured

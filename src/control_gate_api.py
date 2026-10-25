@@ -441,6 +441,11 @@ def home():
     return render_template('home.html')
 
 
+@app.route('/plans', methods=['GET'])
+def plans():
+    return render_template('plans.html')
+
+
 @app.route('/overview', defaults={'page': 'overview'}, methods=['GET'])
 @app.route('/prospects', defaults={'page': 'prospects'}, methods=['GET'])
 @app.route('/job-leads', defaults={'page': 'jobs'}, methods=['GET'])
