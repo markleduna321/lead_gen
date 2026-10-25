@@ -90,9 +90,49 @@ and dashes in pasted app passwords are stripped automatically.
 
 Visitors at `/` see the public product home page, with links to sign in or
 create an account. Its Light / Dark / System appearance control shares the
-workspace's saved theme preference. The product illustration uses labeled
-example data, not live account data. Signed-in users at `/` still see their
+workspace's saved theme preference. The hero globe is illustrative, not live
+account data or a claim of provider coverage. Signed-in users at `/` still see their
 Overview; `/overview` also opens it directly and requires authentication.
+
+### Home hero globe
+
+The public hero uses a self-hosted Three.js globe with GSAP easing. Ten featured
+countries (Philippines, India, Australia, Brazil, South Africa, Japan, United
+Kingdom, United States, Egypt, Indonesia) independently turn green with a
+ragged paper-burn edge as they face the viewer. Real SVG flag badges appear
+as burns finish, fade at the horizon, and rotate with the globe. After all
+countries finish, the result holds, fades to slate, and repeats. This is a
+decorative animation: it does not call discovery APIs or show lead counts.
+
+The existing light/dark/system preference updates the globe palette.
+The animation pauses offscreen, in background tabs, or with the Pause globe
+button. Reduced-motion users get a completed, non-rotating globe. If WebGL
+or an asset fails, the static PNG remains visible and an error is logged.
+Mobile initialization uses 2048px masks, a 64-segment sphere, and six countries;
+desktop uses 4096px masks and ten countries.
+
+Built assets are included in `static/globe`, so the Flask VPS needs **no Node.js
+runtime or frontend build**. Deploy these files together with the updated
+template and stylesheet. CloudPanel must forward `/static/` to Flask (your
+production application port is 8090), including `.js`, `.json`, `.png`, and
+`.svg` files.
+
+To rebuild after changing the globe source or featured countries, use Node.js
+20+ in a development checkout:
+
+```text
+npm ci
+npm run build:globe
+npm run test:globe
+```
+
+On Windows PowerShell, use `npm.cmd` if execution policy blocks `npm.ps1`.
+The build uses Natural Earth 50m country boundaries through `world-atlas`,
+exact per-pixel country IDs, and same-origin flags from `flag-icons`.
+`@napi-rs/canvas` provides portable build-time rasterization instead of requiring
+system Cairo libraries. Third-party notices ship alongside the generated assets.
+Commit rebuilt assets when changing `frontend/globe.js`,
+`frontend/globe-state.mjs`, or `scripts/build-region-textures.mjs`.
 
 Run `venv\Scripts\python.exe app.py` to open the desktop application.
 The shared sidebar links to four independently addressable pages:

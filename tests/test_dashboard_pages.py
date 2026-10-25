@@ -76,7 +76,9 @@ class DashboardPagesTests(unittest.TestCase):
         self.assertIn('href="/register"', html)
         self.assertIn('id="platform"', html)
         self.assertIn('id="how-it-works"', html)
-        self.assertIn('PRODUCT PREVIEW', html)
+        self.assertIn('id="hero-globe"', html)
+        self.assertIn('globe/globe.js', html)
+        self.assertIn('Illustrative animation, not live discovery data.', html)
         self.assertNotIn('id="table-body"', html)
 
     def test_public_home_clears_a_removed_account_session(self):
@@ -86,6 +88,26 @@ class DashboardPagesTests(unittest.TestCase):
         self.assertIn('data-page="home"', response.get_data(as_text=True))
         with client.session_transaction() as session:
             self.assertNotIn("user_id", session)
+
+    def test_globe_assets_are_public_and_have_browser_compatible_content_types(self):
+        client = self.module.app.test_client()
+        assets = {
+            'globe.js': ('text/javascript', 'application/javascript'),
+            'regions.json': ('application/json',),
+            'region-id.png': ('image/png',),
+            'region-id-mobile.png': ('image/png',),
+            'world-mask.png': ('image/png',),
+            'world-mask-mobile.png': ('image/png',),
+            'globe-fallback.png': ('image/png',),
+            'flags/ph.svg': ('image/svg+xml',),
+        }
+        with patch("psycopg2.connect", side_effect=AssertionError("Unexpected database access")):
+            for asset, mimetypes in assets.items():
+                with self.subTest(asset=asset):
+                    response = client.get(f"/static/globe/{asset}")
+                    self.assertEqual(response.status_code, 200)
+                    self.assertIn(response.mimetype, mimetypes)
+                    response.close()
 
     def test_prospect_queue_and_export_preserve_separate_profile_urls(self):
         database = MagicMock()

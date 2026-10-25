@@ -12,6 +12,7 @@
     <script src="{{ url_for('static', filename='workspace.js') }}"></script>
     <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='home.css') }}">
+    <script type="module" src="{{ url_for('static', filename='globe/globe.js') }}"></script>
 </head>
 <body data-page="home" class="home-body">
     <a class="skip-link" href="#main-content">Skip to content</a>
@@ -39,22 +40,17 @@
                 <div class="home-hero-actions"><a class="home-button" href="{{ url_for('register') }}">Build your pipeline {{ arrow() }}</a><a class="home-text-link" href="#how-it-works">See how it works <span aria-hidden="true">&searr;</span></a></div>
                 <div class="home-hero-note"><span aria-hidden="true">&#10003;</span> Your workspace. Your leads. Your next move.</div>
             </div>
-            <div class="home-product-scene" aria-label="Illustrative preview of the AsuraTECH workspace">
-                <div class="home-scene-orbit" aria-hidden="true"></div>
-                <div class="home-preview">
-                    <div class="home-preview-toolbar"><span><b>A.</b> YOUR WORKSPACE</span><span class="home-preview-demo">PRODUCT PREVIEW</span></div>
-                    <div class="home-preview-main">
-                        <div class="home-preview-heading"><div><p>PIPELINE OVERVIEW</p><h2>A little momentum.</h2></div><span class="home-preview-spark" aria-hidden="true">&#8599;</span></div>
-                        <div class="home-preview-stats"><div><span>Prospects</span><strong>24<span>+6 new</span></strong></div><div><span>Hiring companies</span><strong>12<span>+3 new</span></strong></div></div>
-                        <div class="home-preview-table-title"><strong>Fresh opportunities</strong><span>Newest first</span></div>
-                        <div class="home-preview-row"><span class="home-company-avatar">S</span><div><strong>Studio North</strong><small>Creative agency</small></div><span class="home-preview-pill">Discovered</span></div>
-                        <div class="home-preview-row"><span class="home-company-avatar home-avatar-purple">B</span><div><strong>Bloom &amp; Co.</strong><small>Hiring a video editor</small></div><span class="home-preview-pill home-pill-purple">Hiring signal</span></div>
-                        <div class="home-preview-row"><span class="home-company-avatar home-avatar-gold">O</span><div><strong>Oak Street Dental</strong><small>Local business</small></div><span class="home-preview-pill">Discovered</span></div>
-                        <div class="home-preview-footnote"><span class="home-status-dot"></span> A clearer view of what comes next.</div>
-                    </div>
-                </div>
-                <div class="home-discovery-note"><span class="home-note-icon" aria-hidden="true">&#10003;</span><div><strong>From discovery to possibility.</strong><small>Keep your next step in one place.</small></div></div>
-            </div>
+            <figure id="hero-globe" class="home-globe" data-state="loading"
+                data-asset-base="{{ url_for('static', filename='globe/') }}"
+                aria-label="Illustrative rotating globe highlighting countries in green with national flag pins. This is not live lead coverage.">
+                <div class="home-globe-orbit" aria-hidden="true"></div>
+                <img class="home-globe-fallback" src="{{ url_for('static', filename='globe/globe-fallback.png') }}"
+                    width="600" height="600" alt="" fetchpriority="high">
+                <canvas class="home-globe-canvas" aria-hidden="true"></canvas>
+                <span class="home-globe-label" aria-hidden="true"><span></span> OPPORTUNITY HAS NO BORDERS</span>
+                <figcaption class="home-globe-caption"><span data-globe-caption>Global possibilities. One focused workspace.</span><small>Illustrative animation, not live discovery data.</small></figcaption>
+                <button type="button" class="home-globe-pause" aria-pressed="false" hidden>Pause globe</button>
+            </figure>
         </section>
         <div class="home-capabilities home-container" aria-label="Platform capabilities"><span>BUILT FOR YOUR NEXT CHAPTER</span><p>Local business discovery</p><i aria-hidden="true"></i><p>Hiring signals</p><i aria-hidden="true"></i><p>Personalized outreach</p></div>
         <section id="platform" class="home-platform home-container" aria-labelledby="platform-title">

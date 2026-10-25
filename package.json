@@ -1,0 +1,21 @@
+{
+  "name": "asuratech-web-assets",
+  "private": true,
+  "scripts": {
+    "build:globe": "node scripts/build-region-textures.mjs && esbuild frontend/globe.js --bundle --minify --format=esm --outfile=static/globe/globe.js --legal-comments=linked",
+    "test:globe": "node --test tests/globe.test.mjs"
+  },
+  "dependencies": {
+    "gsap": "3.14.2",
+    "three": "0.180.0"
+  },
+  "devDependencies": {
+    "@napi-rs/canvas": "0.1.80",
+    "d3-geo": "3.1.1",
+    "esbuild": "0.25.10",
+    "flag-icons": "7.5.0",
+    "i18n-iso-countries": "7.14.0",
+    "topojson-client": "3.1.0",
+    "world-atlas": "2.0.2"
+  }
+}
