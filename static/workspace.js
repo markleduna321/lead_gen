@@ -27,6 +27,49 @@ themeMedia.addEventListener('change', () => {
     if (document.documentElement.dataset.themePreference === 'system') setThemePreference('system', false);
 });
 
+// Sidebar collapse state persistence (desktop rail mode)
+(function initSidebarPreference() {
+    try {
+        if (localStorage.getItem('asuratech-sidebar-collapsed') === 'true') {
+            document.documentElement.dataset.sidebar = 'collapsed';
+        }
+    } catch (error) {
+        console.warn('Sidebar preference could not be loaded.', error);
+    }
+})();
+
+function toggleSidebarCollapsed(force) {
+    const isCurrentlyCollapsed = document.documentElement.dataset.sidebar === 'collapsed';
+    const shouldCollapse = force !== undefined ? force : !isCurrentlyCollapsed;
+
+    if (shouldCollapse) {
+        document.documentElement.dataset.sidebar = 'collapsed';
+    } else {
+        delete document.documentElement.dataset.sidebar;
+    }
+
+    const collapseBtn = document.getElementById('sidebar-collapse');
+    if (collapseBtn) {
+        collapseBtn.setAttribute('aria-expanded', String(!shouldCollapse));
+        const label = shouldCollapse ? 'Expand sidebar' : 'Collapse sidebar';
+        collapseBtn.setAttribute('aria-label', label);
+        collapseBtn.setAttribute('title', label);
+    }
+
+    try {
+        localStorage.setItem('asuratech-sidebar-collapsed', shouldCollapse ? 'true' : 'false');
+    } catch (error) {
+        console.warn('Sidebar preference could not be saved.', error);
+    }
+}
+
+function onSidebarBrandClick(event) {
+    if (document.documentElement.dataset.sidebar === 'collapsed') {
+        event.preventDefault();
+        toggleSidebarCollapsed(false);
+    }
+}
+
 function toggleSidebar(show) {
     if (!document.getElementById('menu-toggle')) return;
     const open = show === undefined ? !document.body.classList.contains('nav-open') : show;
@@ -37,6 +80,14 @@ function toggleSidebar(show) {
 
 document.addEventListener('DOMContentLoaded', () => {
     setThemePreference(document.documentElement.dataset.themePreference, false);
+    const isCollapsed = document.documentElement.dataset.sidebar === 'collapsed';
+    const collapseBtn = document.getElementById('sidebar-collapse');
+    if (collapseBtn) {
+        collapseBtn.setAttribute('aria-expanded', String(!isCollapsed));
+        const label = isCollapsed ? 'Expand sidebar' : 'Collapse sidebar';
+        collapseBtn.setAttribute('aria-label', label);
+        collapseBtn.setAttribute('title', label);
+    }
 });
 document.addEventListener('keydown', event => {
     if (event.key === 'Escape') {

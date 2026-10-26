@@ -6,13 +6,15 @@ from psycopg2.extras import execute_values
 from dotenv import load_dotenv
 from discovery_filters import filter_business_metrics
 from discovery_industries import matching_industry_category
-from serpapi_client import fetch as serpapi_fetch
+from scrapingdog_client import fetch as scrapingdog_fetch
+serpapi_fetch = scrapingdog_fetch
 
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 load_dotenv(os.path.join(base_dir, ".env"))
 
 DB_DSN = os.getenv("DATABASE_URL")
-SERPAPI_KEY = os.getenv("SERPAPI_API_KEY")
+SCRAPINGDOG_KEY = os.getenv("SCRAPINGDOG_API_KEY") or os.getenv("SERPAPI_API_KEY")
+SERPAPI_KEY = SCRAPINGDOG_KEY
 
 
 def save_yelp_leads(leads, user_id):
@@ -47,7 +49,7 @@ def save_yelp_leads(leads, user_id):
 
 def run_yelp_discovery(city, niche, rating_min: float = 0.0, max_reviews: int | None = 100, user_id=None):
     """
-    Uses SerpAPI Yelp engine to discover local businesses matching the niche and city.
+    Uses Scrapingdog Yelp engine to discover local businesses matching the niche and city.
     Applies the same email + screenshot enrichment pipeline as Google Maps discovery.
     """
     from control_gate_api import emit_ui_log
@@ -55,8 +57,8 @@ def run_yelp_discovery(city, niche, rating_min: float = 0.0, max_reviews: int | 
     from screenshot_agent import capture_business_site_snapshot
 
     if not SERPAPI_KEY:
-        emit_ui_log("❌ [YELP ENGINE ERROR] Missing SERPAPI_API_KEY in your .env configuration.")
-        raise RuntimeError("Yelp discovery requires SERPAPI_API_KEY.")
+        emit_ui_log("❌ [YELP ENGINE ERROR] Missing SCRAPINGDOG_API_KEY / SERPAPI_API_KEY in your .env configuration.")
+        raise RuntimeError("Yelp discovery requires SERPAPI_API_KEY / SCRAPINGDOG_API_KEY.")
 
     emit_ui_log(f"⭐ Launching Yelp discovery for [{niche}] in '{city}'...")
 
@@ -77,7 +79,7 @@ def run_yelp_discovery(city, niche, rating_min: float = 0.0, max_reviews: int | 
         emit_ui_log(f"❌ [YELP ENGINE FAILURE] API request failed: {e}")
         raise
 
-    organic = results.get("organic_results", [])
+    organic = results.get("businesses") or results.get("organic_results", [])
     if not organic:
         emit_ui_log(f"⚠️ No Yelp results returned for '{niche}' in '{city}'.")
         return
@@ -99,7 +101,7 @@ def run_yelp_discovery(city, niche, rating_min: float = 0.0, max_reviews: int | 
     valid_leads = []
 
     for biz in organic:
-        title = (biz.get("title") or "").strip()
+        title = (biz.get("title") or biz.get("name") or "").strip()
         if not title:
             continue
 
@@ -110,12 +112,12 @@ def run_yelp_discovery(city, niche, rating_min: float = 0.0, max_reviews: int | 
             emit_ui_log(f"[DEDUP] Skipping '{title}' — already in database.")
             continue
 
-        # Extract fields from SerpAPI Yelp result
+        # Extract fields from Yelp result
         metrics = filter_business_metrics(biz, rating_min, max_reviews, emit_ui_log)
         if metrics is None:
             continue
         rating, reviews = metrics
-        phone      = (biz.get("phone") or "No Public Number Listed").strip()
+        phone      = (biz.get("phone") or biz.get("display_phone") or "No Public Number Listed").strip()
 
         # Address: some results have 'address', others 'neighborhoods'
         address = (
@@ -124,9 +126,9 @@ def run_yelp_discovery(city, niche, rating_min: float = 0.0, max_reviews: int | 
             or f"General Area, {city}"
         )
 
-        # Website comes under links.website in SerpAPI Yelp results
+        # Website comes under links.website or url in Yelp results
         links = biz.get("links") or {}
-        website_link = links.get("website") or biz.get("website") or ""
+        website_link = links.get("website") or biz.get("website") or biz.get("url") or ""
 
         category_label = matching_industry_category(biz, niche, "yelp", emit_ui_log)
         if category_label is None:

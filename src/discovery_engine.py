@@ -8,14 +8,16 @@ from email_hunter import attempt_domain_email_crawl
 from screenshot_agent import capture_business_site_snapshot
 from discovery_filters import filter_business_metrics, within_search_radius
 from discovery_industries import matching_industry_category
-from serpapi_client import fetch as serpapi_fetch
+from scrapingdog_client import fetch as scrapingdog_fetch
+serpapi_fetch = scrapingdog_fetch
 
 # Initialize path mapping for environment tokens
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 load_dotenv(os.path.join(base_dir, ".env"))
 
 DB_DSN = os.getenv("DATABASE_URL")
-SERPAPI_KEY = os.getenv("SERPAPI_API_KEY")
+SCRAPINGDOG_KEY = os.getenv("SCRAPINGDOG_API_KEY") or os.getenv("SERPAPI_API_KEY")
+SERPAPI_KEY = SCRAPINGDOG_KEY
 
 def save_leads_to_db(leads, user_id):
     from control_gate_api import emit_ui_log
@@ -64,7 +66,7 @@ def save_leads_to_db(leads, user_id):
 
 def _find_facebook_email(business_name, address):
     """
-    Searches for a business's Facebook page via SerpAPI and crawls it for a public email.
+    Searches for a business's Facebook page via search provider and crawls it for a public email.
     Returns (email, facebook_url) — either value may be None.
     """
     if not SERPAPI_KEY:
@@ -97,7 +99,7 @@ def _find_facebook_email(business_name, address):
 
 def _search_for_business_website(business_name, address):
     """
-    Falls back to a SerpAPI Google search when no website is listed on Google Maps.
+    Falls back to a Google search when no website is listed on Google Maps.
     Returns the first organic result URL, or None if nothing is found.
     """
     if not SERPAPI_KEY:
@@ -128,13 +130,13 @@ def _search_for_business_website(business_name, address):
 
 def run_discovery(city, niche, rating_min: float = 0.0, max_reviews: int | None = 100, lat=None, lng=None, radius_km=10, user_id=None):
     """
-    Queries SerpApi Google Maps framework utilizing precise geolocation coordinate pins 
+    Queries Google Maps framework utilizing precise geolocation coordinate pins 
     and custom radial distance tracking variables.
     """
     from control_gate_api import emit_ui_log
     if not SERPAPI_KEY:
-        emit_ui_log("❌ [SERPAPI ERROR] Missing SERPAPI_API_KEY inside your .env configuration file.")
-        raise RuntimeError("Google Maps discovery requires SERPAPI_API_KEY.")
+        emit_ui_log("❌ [SCRAPINGDOG ERROR] Missing SCRAPINGDOG_API_KEY / SERPAPI_API_KEY inside your .env configuration file.")
+        raise RuntimeError("Google Maps discovery requires SERPAPI_API_KEY / SCRAPINGDOG_API_KEY.")
 
     emit_ui_log(f"🛰️ Launching Google Maps scan for [{niche}] within {radius_km}km of pin ({lat or '0'}, {lng or '0'})...")
 
@@ -160,10 +162,10 @@ def run_discovery(city, niche, rating_min: float = 0.0, max_reviews: int | None 
         if search_results.get("error"):
             raise RuntimeError(search_results["error"])
     except Exception as e:
-        emit_ui_log(f"❌ [SERPAPI FAILURE] Handshake network drop: {e}")
+        emit_ui_log(f"❌ [SEARCH FAILURE] Handshake network drop: {e}")
         raise
 
-    local_results = search_results.get("local_results", [])
+    local_results = search_results.get("search_results") or search_results.get("local_results", [])
     if not local_results:
         emit_ui_log(f"⚠️ No results returned for category '{niche}' in this geographic zone.")
         return
@@ -188,9 +190,9 @@ def run_discovery(city, niche, rating_min: float = 0.0, max_reviews: int | None 
     enrichment_errors = []
 
     for business in local_results:
-        business_name = business.get("title")
+        business_name = business.get("title") or business.get("name")
         address = business.get("address") or business.get("formatted_address") or f"Discovered region near pin ({lat or '0'}, {lng or '0'})"
-        place_token = business.get("data_id")
+        place_token = business.get("data_id") or business.get("place_id")
         if not place_token:
             fallback_identity = "\x1f".join(
                 " ".join(str(value or "").casefold().split())
@@ -201,11 +203,11 @@ def run_discovery(city, niche, rating_min: float = 0.0, max_reviews: int | None 
         # --- CORE DATABASE DEDUPLICATION CHECK ---
         if place_token in existing_place_ids:
             # Silently skip the lead before running costly website/screenshot operations
-            print(f"[DEDUPLICATION] Skipping '{business.get('title')}' -> Already processed in active database.")
+            print(f"[DEDUPLICATION] Skipping '{business.get('title') or business.get('name')}' -> Already processed in active database.")
             continue
         
-        website_link = business.get("website")
-        phone_number = business.get("phone", "No Public Number Listed")
+        website_link = business.get("website") or business.get("website_url") or business.get("url")
+        phone_number = business.get("phone") or business.get("phone_number") or "No Public Number Listed"
         if has_coordinates and not within_search_radius(business, lat, lng, radius_km, emit_ui_log):
             continue
         metrics = filter_business_metrics(business, rating_min, max_reviews, emit_ui_log)

@@ -31,7 +31,7 @@ class HiringContactTests(unittest.TestCase):
             {"title": "Example Studios - Home", "link": "https://www.example.test"},
         ]}
         def get(url, **kwargs):
-            if url == "https://serpapi.com/search":
+            if url in ("https://api.scrapingdog.com/google", "https://serpapi.com/search"):
                 return search
             if url == "https://wrong.test":
                 return html_page("<title>Other Company</title><p>wrong@wrong.test</p>")

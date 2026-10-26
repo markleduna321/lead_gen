@@ -11,13 +11,15 @@ from dotenv import load_dotenv
 from discovery_job_filters import matches_hiring_country, matches_hiring_role, resolve_hiring_country
 from discovery_job_contacts import find_company_contact, web_url
 from hiring_services import BUILTIN_SERVICES, JOB_SIGNAL_MAP, HiringService, matches_service_title
-from serpapi_client import fetch as serpapi_fetch
+from scrapingdog_client import fetch as scrapingdog_fetch
+serpapi_fetch = scrapingdog_fetch
 
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 load_dotenv(os.path.join(base_dir, ".env"))
 
 DB_DSN = os.getenv("DATABASE_URL")
-SERPAPI_KEY = os.getenv("SERPAPI_API_KEY")
+SCRAPINGDOG_KEY = os.getenv("SCRAPINGDOG_API_KEY") or os.getenv("SERPAPI_API_KEY")
+SERPAPI_KEY = SCRAPINGDOG_KEY
 
 HIRING_PAGE_OPTIONS = (1, 2, 3, 5)
 
@@ -186,8 +188,8 @@ def run_job_discovery(service_type, country="", pages_per_role=1, service_defini
 
     pages_per_role = validate_hiring_pages(pages_per_role)
     if not SERPAPI_KEY:
-        emit_ui_log("❌ [JOB ENGINE ERROR] Missing SERPAPI_API_KEY inside your .env configuration.")
-        raise RuntimeError("Hiring discovery requires SERPAPI_API_KEY.")
+        emit_ui_log("❌ [JOB ENGINE ERROR] Missing SCRAPINGDOG_API_KEY / SERPAPI_API_KEY inside your .env configuration.")
+        raise RuntimeError("Hiring discovery requires SERPAPI_API_KEY / SCRAPINGDOG_API_KEY.")
 
     service = service_definition or BUILTIN_SERVICES.get(service_type)
     if service is None or service.id != service_type:
@@ -213,11 +215,12 @@ def run_job_discovery(service_type, country="", pages_per_role=1, service_defini
 
         params = {
             "engine": "google_jobs",
+            "query": query,
             "q": query,
             "api_key": SERPAPI_KEY,
         }
         if target_country:
-            params.update({"gl": target_country.code, "location": target_country.name})
+            params.update({"country": target_country.code, "gl": target_country.code, "location": target_country.name})
 
         page_number = 1
         try:
@@ -260,10 +263,10 @@ def run_job_discovery(service_type, country="", pages_per_role=1, service_defini
                 emit_ui_log(f"  [{role}, page {page_number}] Captured {captured} valid postings from {len(jobs)} results before deduplication.")
                 if page_number == pages_per_role:
                     break
-                pagination = data.get("serpapi_pagination", {})
-                if not isinstance(pagination, dict):
+                if "serpapi_pagination" in data and not isinstance(data["serpapi_pagination"], dict):
                     raise ValueError("Invalid Google Jobs pagination")
-                token = pagination.get("next_page_token")
+                pagination = data.get("serpapi_pagination") or {}
+                token = data.get("next_page_token") or pagination.get("next_page_token")
                 if token is None or token == "":
                     emit_ui_log(f"[JOB PAGE] {role}: no next page; search finished.")
                     break
@@ -347,7 +350,7 @@ def parse_job_posting(job, service_type, role):
     if not company or not title:
         raise ValueError("Company and job title are required")
     extensions = job.get("detected_extensions") or {}
-    options = job.get("apply_options") or []
+    options = job.get("apply_options") or job.get("apply_links") or []
     if not isinstance(extensions, dict) or not isinstance(options, list):
         raise ValueError("Invalid employment details or application links")
     if any(not isinstance(option, dict) for option in options):

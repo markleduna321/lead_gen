@@ -7,7 +7,8 @@ from bs4 import BeautifulSoup
 
 from discovery_job_filters import normalize_text
 from email_hunter import extract_emails_from_html
-from serpapi_client import fetch as serpapi_fetch
+from scrapingdog_client import fetch as scrapingdog_fetch
+serpapi_fetch = scrapingdog_fetch
 
 
 _SKIP_DOMAINS = {
@@ -75,7 +76,7 @@ def _fetch_page(url: str, host: str):
 
 def find_company_contact(company: str, location: str, api_key: str, log) -> dict:
     if not api_key:
-        raise RuntimeError("Company contact lookup requires SERPAPI_API_KEY.")
+        raise RuntimeError("Company contact lookup requires SERPAPI_API_KEY / SCRAPINGDOG_API_KEY.")
     evidence = {
         "status": "unconfirmed", "checked_at": datetime.now(timezone.utc).isoformat(),
         "email_status": "unconfirmed",
@@ -83,8 +84,9 @@ def find_company_contact(company: str, location: str, api_key: str, log) -> dict
         "emails": [], "phones": [], "pages_checked": [],
     }
     result = {"website_url": None, "email": None, "contact_evidence": evidence, "errors": []}
+    query_str = f'"{company}" official website contact {location}'.strip()
     response = serpapi_fetch({
-        "engine": "google", "q": f'"{company}" official website contact {location}'.strip(),
+        "engine": "google", "query": query_str, "q": query_str,
         "api_key": api_key, "num": 5,
     }, timeout=20, log=log, label=f"Contact search for '{company}'")
     data = response.json()

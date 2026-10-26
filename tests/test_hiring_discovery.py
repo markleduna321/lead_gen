@@ -100,9 +100,9 @@ class HiringDiscoveryTests(unittest.TestCase):
 
                 def network(url, **kwargs):
                     response = Mock(status_code=200)
-                    if url == "https://serpapi.com/search":
+                    if url in ("https://serpapi.com/search", "https://api.scrapingdog.com/google_jobs", "https://api.scrapingdog.com/google"):
                         params = kwargs["params"]
-                        if params["engine"] == "google_jobs":
+                        if params.get("engine") == "google_jobs" or url == "https://api.scrapingdog.com/google_jobs":
                             job_requests.append(dict(params))
                             self.assertEqual((params["gl"], params["location"]), ("ca", "Canada"))
                             if params.get("next_page_token"):
@@ -128,7 +128,6 @@ class HiringDiscoveryTests(unittest.TestCase):
                                     "serpapi_pagination": {"next_page_token": "qa-next"},
                                 }
                         else:
-                            self.assertEqual(params["engine"], "google")
                             contact_searches.append(params["q"])
                             response.json.return_value = {"organic_results": [{
                                 "title": "Example Studios | Official", "link": "https://example.test",

@@ -5,13 +5,15 @@ from psycopg2.extras import execute_values
 from dotenv import load_dotenv
 from discovery_profiles import canonical_social_profile, load_existing_social_ids
 from discovery_industries import matching_industry_category
-from serpapi_client import fetch as serpapi_fetch
+from scrapingdog_client import fetch as scrapingdog_fetch
+serpapi_fetch = scrapingdog_fetch
 
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 load_dotenv(os.path.join(base_dir, ".env"))
 
 DB_DSN = os.getenv("DATABASE_URL")
-SERPAPI_KEY = os.getenv("SERPAPI_API_KEY")
+SCRAPINGDOG_KEY = os.getenv("SCRAPINGDOG_API_KEY") or os.getenv("SERPAPI_API_KEY")
+SERPAPI_KEY = SCRAPINGDOG_KEY
 
 
 def save_instagram_leads(leads, user_id):
@@ -41,15 +43,15 @@ def save_instagram_leads(leads, user_id):
 
 def run_instagram_discovery(city, niche, user_id=None):
     """
-    Uses SerpAPI Google organic search operators to surface active Instagram business
+    Uses Scrapingdog Google organic search operators to surface active Instagram business
     profiles matching the target niche and city.
     """
     from control_gate_api import emit_ui_log
     from email_hunter import attempt_domain_email_crawl
 
     if not SERPAPI_KEY:
-        emit_ui_log("❌ [INSTAGRAM ENGINE ERROR] Missing SERPAPI_API_KEY inside your environment settings.")
-        raise RuntimeError("Instagram discovery requires SERPAPI_API_KEY.")
+        emit_ui_log("❌ [INSTAGRAM ENGINE ERROR] Missing SCRAPINGDOG_API_KEY / SERPAPI_API_KEY inside your environment settings.")
+        raise RuntimeError("Instagram discovery requires SERPAPI_API_KEY / SCRAPINGDOG_API_KEY.")
 
     emit_ui_log(f"📸 Launching organic Instagram index sweep for [{niche}] in '{city}'...")
 
@@ -57,6 +59,7 @@ def run_instagram_discovery(city, niche, user_id=None):
 
     params = {
         "engine": "google",
+        "query": search_query,
         "q": search_query,
         "api_key": SERPAPI_KEY,
         "num": 10

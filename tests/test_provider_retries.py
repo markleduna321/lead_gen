@@ -198,5 +198,71 @@ class MixedOutcomeTests(unittest.TestCase):
         self.assertIn("provider down", run["errors"][0])
 
 
+class ScrapingdogRoutingTests(unittest.TestCase):
+    """Verifies that generic search requests route to Scrapingdog endpoints correctly."""
+
+    def test_google_search_routing_and_param_mapping(self):
+        import scrapingdog_client
+        url, params = scrapingdog_client.resolve_endpoint_and_params({
+            "engine": "google",
+            "q": 'site:facebook.com "Dentist" "Austin"',
+            "api_key": "qa-key",
+            "num": 10,
+        })
+        self.assertEqual(url, scrapingdog_client.SCRAPINGDOG_GOOGLE_ENDPOINT)
+        self.assertEqual(params["query"], 'site:facebook.com "Dentist" "Austin"')
+        self.assertEqual(params["api_key"], "qa-key")
+
+    def test_google_maps_routing_and_param_mapping(self):
+        import scrapingdog_client
+        url, params = scrapingdog_client.resolve_endpoint_and_params({
+            "engine": "google_maps",
+            "q": "Roofing Contractor Austin",
+            "ll": "@30.2672,-97.7431,20000m",
+            "api_key": "qa-key",
+        })
+        self.assertEqual(url, scrapingdog_client.SCRAPINGDOG_MAPS_ENDPOINT)
+        self.assertEqual(params["query"], "Roofing Contractor Austin")
+        self.assertEqual(params["ll"], "@30.2672,-97.7431,20000m")
+        self.assertEqual(params["api_key"], "qa-key")
+
+    def test_google_jobs_routing_and_param_mapping(self):
+        import scrapingdog_client
+        url, params = scrapingdog_client.resolve_endpoint_and_params({
+            "engine": "google_jobs",
+            "q": "Video Editor",
+            "gl": "ca",
+            "location": "Canada",
+            "api_key": "qa-key",
+        })
+        self.assertEqual(url, scrapingdog_client.SCRAPINGDOG_JOBS_ENDPOINT)
+        self.assertEqual(params["query"], "Video Editor")
+        self.assertEqual(params["country"], "ca")
+        self.assertEqual(params["api_key"], "qa-key")
+
+    def test_yelp_routing_and_param_mapping(self):
+        import scrapingdog_client
+        url, params = scrapingdog_client.resolve_endpoint_and_params({
+            "engine": "yelp",
+            "find_desc": "Coffee",
+            "find_loc": "Seattle",
+            "api_key": "qa-key",
+        })
+        self.assertEqual(url, scrapingdog_client.SCRAPINGDOG_YELP_ENDPOINT)
+        self.assertEqual(params["find_desc"], "Coffee")
+        self.assertEqual(params["find_loc"], "Seattle")
+        self.assertEqual(params["api_key"], "qa-key")
+
+    def test_explicit_serpapi_endpoint_preservation(self):
+        import scrapingdog_client
+        url, params = scrapingdog_client.resolve_endpoint_and_params(
+            {"engine": "google", "q": "test", "api_key": "qa-key"},
+            endpoint="https://serpapi.com/search",
+        )
+        self.assertEqual(url, "https://serpapi.com/search")
+        self.assertEqual(params["q"], "test")
+
+
 if __name__ == "__main__":
     unittest.main()
+
