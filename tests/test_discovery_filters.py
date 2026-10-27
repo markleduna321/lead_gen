@@ -20,6 +20,8 @@ from support import QA_USER_ID, signed_in_client
 
 def load_function(filename, name, namespace):
     namespace.setdefault("matching_industry_category", matching_industry_category)
+    namespace.setdefault("insert_and_track",
+                         lambda cur, query, rows, executor: executor(cur, query, rows))
 
     def serpapi_fetch(params, timeout=None, attempts=None, log=None, label=""):
         """Stands in for serpapi_client.fetch inside an isolated namespace.
@@ -150,6 +152,7 @@ class DiscoveryFilterRouteTests(unittest.TestCase):
             ("discovery_yelp", "run_yelp_discovery"),
             ("discovery_facebook", "run_facebook_discovery"),
             ("discovery_instagram", "run_instagram_discovery"),
+            ("discovery_linkedin", "run_linkedin_discovery"),
         ]:
             module = types.ModuleType(module_name)
             worker = Mock()
@@ -161,11 +164,16 @@ class DiscoveryFilterRouteTests(unittest.TestCase):
             "threading": types.SimpleNamespace(Thread=self.thread), "emit_ui_log": Mock(),
             "LOCAL_DISCOVERY_RUNS": self.runs, "DiscoveryBusyError": DiscoveryBusyError,
             "active_user_id": lambda: QA_USER_ID, "bind_log_user": Mock(),
+            "DB_DSN": None,
         }
+        from plans import PlanError
+        namespace["PlanError"] = PlanError
+        namespace["start_paid"] = lambda dsn, user, mode, payload, runs, tasks, log, bind: runs.start(
+            tasks, log, owner=user, on_thread_start=lambda: bind(user))
         load_function("control_gate_api.py", "trigger_discovery_engine", namespace)
         self.payload = {
             "location": "Austin", "categories": ["Dental Clinic", "Cafe"],
-            "sources": ["google", "yelp", "facebook", "instagram"],
+            "sources": ["google", "yelp", "facebook", "instagram", "linkedin"],
             "rating_min": 4.5, "max_reviews": 25,
             "lat": 30, "lng": -97,
         }
@@ -180,6 +188,7 @@ class DiscoveryFilterRouteTests(unittest.TestCase):
                 self.workers["discovery_yelp"].assert_any_call("Austin", "Dental Clinic", 4.5, maximum, user_id=QA_USER_ID)
                 self.workers["discovery_facebook"].assert_any_call("Austin", "Cafe", user_id=QA_USER_ID)
                 self.workers["discovery_instagram"].assert_any_call("Austin", "Cafe", user_id=QA_USER_ID)
+                self.workers["discovery_linkedin"].assert_any_call("Austin", "Cafe", user_id=QA_USER_ID)
 
     def test_invalid_filters_do_not_start_workers(self):
         for field, value in [
@@ -195,10 +204,8 @@ class DiscoveryFilterRouteTests(unittest.TestCase):
         self.thread.assert_not_called()
         self.runs.start.assert_not_called()
 
-    def test_unavailable_or_invalid_sources_never_start_workers(self):
+    def test_invalid_sources_never_start_workers(self):
         for sources, message in [
-            (["linkedin"], "LinkedIn discovery is not available"),
-            (["google", "linkedin"], "LinkedIn discovery is not available"),
             (["unknown"], "Unsupported discovery data source"),
             ([], "Select at least one"),
             ("google", "Select at least one"),
@@ -213,6 +220,15 @@ class DiscoveryFilterRouteTests(unittest.TestCase):
                 self.assertIn(message, response.json["message"])
         self.thread.assert_not_called()
         self.runs.start.assert_not_called()
+
+    def test_linkedin_only_does_not_require_map_coordinates(self):
+        payload = {**self.payload, "sources": ["linkedin"]}
+        payload.pop("lat")
+        payload.pop("lng")
+        with patch.dict(sys.modules, self.modules):
+            response = self.app.test_client().post("/api/trigger/discover", json=payload)
+        self.assertEqual(response.status_code, 202)
+        self.workers["discovery_linkedin"].assert_any_call("Austin", "Dental Clinic", user_id=QA_USER_ID)
 
     def test_invalid_map_pins_or_radius_do_not_start_workers(self):
         for changes in [

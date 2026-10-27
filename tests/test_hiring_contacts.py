@@ -1,4 +1,7 @@
+import contextlib
+import inspect
 from pathlib import Path
+import socket
 import sys
 import unittest
 from unittest.mock import Mock, patch
@@ -8,14 +11,47 @@ import requests
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+import net_guard
 from discovery_job_contacts import find_company_contact, web_url
 from support import QA_USER_ID
 
 
+class FakePage:
+    def __init__(self, body, status=200, headers=None):
+        self.status_code = status
+        self.content = body.encode("utf-8")
+        self.encoding = "utf-8"
+        self.headers = headers or {"Content-Type": "text/html; charset=utf-8"}
+
+    def iter_content(self, chunk_size=65536):
+        yield self.content
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
 def html_page(body, status=200, headers=None):
-    response = Mock(status_code=status, text=body)
-    response.headers = headers or {"Content-Type": "text/html; charset=utf-8"}
-    return response
+    return FakePage(body, status, headers)
+
+
+def public_dns(host, port, *args, **kwargs):
+    return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", port))]
+
+
+@contextlib.contextmanager
+def network(search, pages):
+    """search answers the provider lookup; pages answer the guarded site fetches."""
+    proxy = Mock(url="http://127.0.0.1:9")
+    search_kw = {"side_effect": search} if inspect.isfunction(search) else {"return_value": search}
+    page_kw = {"side_effect": pages}
+    with (patch("requests.get", **search_kw),
+          patch("requests.Session.get", **page_kw) as site,
+          patch("socket.getaddrinfo", public_dns),
+          patch.object(net_guard, "shared_proxy", return_value=proxy)):
+        yield site
 
 
 class HiringContactTests(unittest.TestCase):
@@ -48,7 +84,7 @@ class HiringContactTests(unittest.TestCase):
             if url in {"https://www.example.test/about", "https://www.example.test/contact-us"}:
                 return html_page("", 404)
             raise AssertionError(f"Unexpected network: {url}")
-        with patch("requests.get", side_effect=get) as network:
+        with network(get, get) as site:
             result = find_company_contact("Example Studios", "Canada", "qa-only", self.log)
         self.assertEqual(result["website_url"], "https://www.example.test")
         self.assertEqual(result["email"], "hello@example.test")
@@ -61,7 +97,7 @@ class HiringContactTests(unittest.TestCase):
         self.assertEqual(evidence["phones"][0]["phone"], "+1-555-0100")
         self.assertEqual(len(evidence["pages_checked"]), 2)
         self.assertEqual(result["errors"], [])
-        urls = [call.args[0] for call in network.call_args_list]
+        urls = [call.args[0] for call in site.call_args_list]
         self.assertNotIn("https://unrelated.test", urls)
         self.assertNotIn("https://linkedin.com/company/example", urls)
 
@@ -71,13 +107,13 @@ class HiringContactTests(unittest.TestCase):
             {"title": "Example Studios", "link": "https://example.test"},
         ]}
         redirect = html_page("", 302, {"Location": "https://unrelated.test"})
-        with patch("requests.get", side_effect=[search, redirect]) as network:
+        with network(search, [redirect]) as site:
             result = find_company_contact("Example Studios", "Canada", "qa-only", self.log)
         self.assertIsNone(result["website_url"])
         self.assertIsNone(result["email"])
-        self.assertEqual(network.call_count, 2)
-        self.assertIn("outside the matched host", result["errors"][0])
-        self.assertFalse(network.call_args.kwargs["allow_redirects"])
+        self.assertEqual(site.call_count, 1)
+        self.assertIn("different website", result["errors"][0])
+        self.assertFalse(site.call_args.kwargs["allow_redirects"])
 
     def test_same_host_https_redirect_is_allowed(self):
         search = Mock()
@@ -86,8 +122,7 @@ class HiringContactTests(unittest.TestCase):
         ]}
         redirect = html_page("", 301, {"Location": "https://www.example.test/"})
         page = html_page("<title>Example Studios</title><p>info@example.test</p>")
-        with patch("requests.get", side_effect=[search, redirect, page,
-                                               html_page("", 404), html_page("", 404), html_page("", 404)]):
+        with network(search, [redirect, page, html_page("", 404), html_page("", 404), html_page("", 404)]):
             result = find_company_contact("Example Studios", "", "qa-only", self.log)
         self.assertEqual(result["website_url"], "https://www.example.test/")
         self.assertEqual(result["email"], "info@example.test")
@@ -98,8 +133,7 @@ class HiringContactTests(unittest.TestCase):
             {"title": "Example Studios", "link": "https://example.test"},
         ]}
         page = html_page("<title>Example Studios</title><p>business@gmail.com</p>")
-        with patch("requests.get", side_effect=[search, page, html_page("", 404),
-                                               html_page("", 404), html_page("", 404)]):
+        with network(search, [page, html_page("", 404), html_page("", 404), html_page("", 404)]):
             result = find_company_contact("Example Studios", "", "qa-only", self.log)
         self.assertEqual(result["website_url"], "https://example.test")
         self.assertIsNone(result["email"])
@@ -111,8 +145,7 @@ class HiringContactTests(unittest.TestCase):
             {"title": "Example Studios", "link": "https://example.test"},
         ]}
         page = html_page("<title>Example Studios</title><p>info@example.test</p>")
-        with patch("requests.get", side_effect=[search, page, requests.Timeout("QA timeout"),
-                                               html_page("", 404), html_page("", 404)]):
+        with network(search, [page, requests.Timeout("QA timeout"), html_page("", 404), html_page("", 404)]):
             result = find_company_contact("Example Studios", "", "qa-only", self.log)
         self.assertEqual(result["email"], "info@example.test")
         self.assertIn("QA timeout", result["errors"][0])

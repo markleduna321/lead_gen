@@ -35,7 +35,7 @@ class HiringServiceTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         with (
-            patch.dict(os.environ, {}, clear=True), patch("dotenv.load_dotenv"),
+            patch.dict(os.environ, {"APP_ENV": "local"}, clear=True), patch("dotenv.load_dotenv"),
             patch("psycopg2.connect", side_effect=AssertionError("Live DB forbidden")),
             contextlib.redirect_stderr(io.StringIO()),
         ):
@@ -46,6 +46,9 @@ class HiringServiceTests(unittest.TestCase):
         self.database_guard = patch("psycopg2.connect", side_effect=AssertionError("Live DB forbidden")).start()
         self.network_guard = patch("requests.get", side_effect=AssertionError("Live providers forbidden")).start()
         self.log = patch.object(self.api, "emit_ui_log", Mock()).start()
+        empty_linkedin = Mock()
+        empty_linkedin.json.return_value = []
+        patch.object(self.jobs, "fetch_linkedin_jobs", return_value=empty_linkedin).start()
         self.addCleanup(patch.stopall)
 
     def test_validation_bounds_normalization_and_duplicates(self):
@@ -184,7 +187,8 @@ class HiringServiceTests(unittest.TestCase):
                 "service_types": ["video_editing", SERVICE.id, SERVICE.id], "pages_per_role": 3,
             })
             self.assertEqual(response.status_code, 202)
-            self.assertEqual(response.json["max_job_requests"], 18)
+            self.assertNotIn("max_provider_credits", response.json)
+            self.assertNotIn("max_job_requests", response.json)
             tasks = runs.start.call_args.args[0]
             self.assertEqual(len(tasks), 2)
             definitions.clear()

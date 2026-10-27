@@ -99,8 +99,11 @@ class LocalDiscoveryRuns:
         log: Callable[[str], None],
         owner: object = None,
         on_thread_start: Callable[[], None] | None = None,
+        run_id: str | None = None,
+        on_progress=None,
+        on_finish=None,
     ) -> str:
-        run_id = uuid.uuid4().hex
+        run_id = run_id or uuid.uuid4().hex
         slots = worker_slots()
         with self._lock:
             # The owner check comes first so a user who already has a search
@@ -133,11 +136,13 @@ class LocalDiscoveryRuns:
                 "id": run_id, "state": "running", "total": len(tasks),
                 "completed": 0, "errors": [], "warnings": [], "saved": 0,
                 "logs": [], "owner": owner,
+                "successful_tasks": 0,
             }
 
         try:
             thread = threading.Thread(
-                target=self._execute, args=(run_id, tasks, log, on_thread_start, slots),
+                target=self._execute,
+                args=(run_id, tasks, log, on_thread_start, slots, on_progress, on_finish),
                 daemon=True,
             )
             thread.start()
@@ -156,11 +161,13 @@ class LocalDiscoveryRuns:
         log: Callable[[str], None],
         on_thread_start: Callable[[], None] | None = None,
         slots=None,
+        on_progress=None,
+        on_finish=None,
     ) -> None:
         self._context.run_id = run_id
-        if on_thread_start is not None:
-            on_thread_start()
         try:
+            if on_thread_start is not None:
+                on_thread_start()
             for source, industry, task in tasks:
                 try:
                     result = task()
@@ -170,6 +177,7 @@ class LocalDiscoveryRuns:
                         run = self._runs[run_id]
                         run["warnings"].append(message)
                         run["saved"] += partial.saved
+                        run["successful_tasks"] += 1
                     log(f"[DISCOVERY WARNING] {message}")
                 except Exception as error:
                     message = f"{source} / {industry}: {error}"
@@ -177,12 +185,20 @@ class LocalDiscoveryRuns:
                         self._runs[run_id]["errors"].append(message)
                     log(f"[DISCOVERY ERROR] {message}")
                 else:
+                    with self._lock:
+                        self._runs[run_id]["successful_tasks"] += 1
                     if isinstance(result, int) and not isinstance(result, bool):
                         with self._lock:
                             self._runs[run_id]["saved"] += result
                 finally:
                     with self._lock:
                         self._runs[run_id]["completed"] += 1
+                    if on_progress:
+                        on_progress(self.snapshot(run_id, self._runs[run_id]["owner"]))
+        except Exception as error:
+            log(f"[DISCOVERY CONTROL ERROR] Search stopped: {error}")
+            with self._lock:
+                self._runs[run_id]["errors"].append("Search control failed; check the saved results and credit settlement.")
         finally:
             with self._lock:
                 run = self._runs[run_id]
@@ -194,6 +210,15 @@ class LocalDiscoveryRuns:
                     run["warnings"].extend(run["errors"])
                     run["errors"] = []
                 run["state"] = "failed" if run["errors"] else "succeeded"
-            del self._context.run_id
-            if slots is not None:
-                slots.release()
+            try:
+                if on_finish:
+                    on_finish(self.snapshot(run_id, self._runs[run_id]["owner"]))
+            except Exception as error:
+                log(f"[BILLING ERROR] Search settlement failed; reservation retained for reconciliation: {error}")
+                with self._lock:
+                    self._runs[run_id]["state"] = "failed"
+                    self._runs[run_id]["errors"].append("Credit settlement needs operator reconciliation.")
+            finally:
+                del self._context.run_id
+                if slots is not None:
+                    slots.release()

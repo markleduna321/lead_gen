@@ -11,16 +11,18 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from discovery_runs import DiscoveryBusyError, LocalDiscoveryRuns
 from test_discovery_runs import ImmediateThread
-from support import QA_USER_ID, signed_in_client
+from support import QA_USER_ID, guarded_web, signed_in_client
+from scrapingdog_client import SCRAPINGDOG_LINKEDIN_JOBS_ENDPOINT
+from hiring_services import HiringService
 
 
 class HiringDiscoveryTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        with patch.dict(os.environ, {}, clear=True), patch("dotenv.load_dotenv"):
+        with patch.dict(os.environ, {"APP_ENV": "local"}, clear=True), patch("dotenv.load_dotenv"):
             cls.jobs = importlib.import_module("discovery_jobs")
         with (
-            patch.dict(os.environ, {}, clear=True), patch("dotenv.load_dotenv"),
+            patch.dict(os.environ, {"APP_ENV": "local"}, clear=True), patch("dotenv.load_dotenv"),
             patch("psycopg2.connect", side_effect=AssertionError("Live DB forbidden")),
             contextlib.redirect_stderr(io.StringIO()),
         ):
@@ -31,6 +33,12 @@ class HiringDiscoveryTests(unittest.TestCase):
         self.database = patch("psycopg2.connect", side_effect=AssertionError("Live DB forbidden")).start()
         self.addCleanup(patch.stopall)
         self.log = patch.object(self.api, "emit_ui_log", Mock()).start()
+        empty_linkedin = Mock()
+        empty_linkedin.json.return_value = []
+        self.linkedin_search_patch = patch.object(
+            self.jobs, "fetch_linkedin_jobs", return_value=empty_linkedin
+        )
+        self.linkedin_search = self.linkedin_search_patch.start()
 
     def test_request_validation_deduplication_and_conflict(self):
         client = signed_in_client(self.api.app)
@@ -51,7 +59,7 @@ class HiringDiscoveryTests(unittest.TestCase):
                 "service_types": ["video_editing", "video_editing"], "country": " Canada ",
             })
             self.assertEqual(response.status_code, 202)
-            self.assertEqual(response.json["run_id"], "qa-run")
+            self.assertEqual(response.json["run_id"], runs.start.call_args.kwargs["run_id"])
             tasks = runs.start.call_args.args[0]
             self.assertEqual(len(tasks), 1)
             with patch.object(self.jobs, "run_job_discovery") as worker:
@@ -164,6 +172,7 @@ class HiringDiscoveryTests(unittest.TestCase):
                     patch.object(self.api, "LOCAL_DISCOVERY_RUNS", local_runs),
                     patch.object(self.api, "emit_ui_log", side_effect=record_log),
                     patch("requests.get", side_effect=network),
+                    guarded_web(network),
                     patch("psycopg2.connect", return_value=database),
                     patch.object(self.jobs, "execute_values", side_effect=write_rows),
                     patch("discovery_runs.threading.Thread", ImmediateThread),
@@ -174,7 +183,8 @@ class HiringDiscoveryTests(unittest.TestCase):
                         "country": "Canada", "pages_per_role": 2,
                     })
                     self.assertEqual(started.status_code, 202)
-                    self.assertEqual(started.json["max_job_requests"], 8)
+                    self.assertNotIn("max_provider_credits", started.json)
+                    self.assertNotIn("max_job_requests", started.json)
                     run_id = started.json["run_id"]
                     run = client.get(f"/api/discovery/job-runs/{run_id}").json["run"]
                     # A page error still saves the postings it collected, so the
@@ -611,7 +621,8 @@ class HiringDiscoveryTests(unittest.TestCase):
                     })
                     self.assertEqual(response.status_code, 202)
                     self.assertEqual(response.json["pages_per_role"], pages)
-                    self.assertEqual(response.json["max_job_requests"], 8 * pages)
+                    self.assertNotIn("max_provider_credits", response.json)
+                    self.assertNotIn("max_job_requests", response.json)
                     tasks = runs.start.call_args.args[0]
                     with patch.object(self.jobs, "run_job_discovery") as worker:
                         tasks[0][2]()
@@ -623,3 +634,101 @@ class HiringDiscoveryTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "Pages per role"):
                     self.jobs.run_job_discovery("video_editing", pages_per_role=value, user_id=QA_USER_ID)
         self.network.assert_not_called()
+
+    def test_linkedin_jobs_results_are_normalized_deduplicated_and_enriched_with_google_jobs(self):
+        service = HiringService(
+            "custom_video_test", "Video Editing", ("Video Editor",), ("video editor",)
+        )
+        google = Mock()
+        google.json.return_value = {"jobs_results": [{
+            "company_name": "Acme Studio", "title": "Video Editor",
+            "location": "Toronto, Canada", "description": "Google description",
+            "via": "Indeed",
+        }]}
+        linkedin = Mock()
+        linkedin.json.return_value = [
+            {
+                "job_position": "Video Editor", "company_name": "Acme Studio",
+                "job_location": "Toronto, Canada", "job_description": "LinkedIn description",
+                "job_id": "linkedin-1",
+                "job_link": "https://www.linkedin.com/jobs/view/123",
+                "company_profile": "https://www.linkedin.com/company/acme",
+                "job_posting_date": "2 days ago",
+            },
+            {
+                "job_position": "Video Editor", "company_name": "North Studio",
+                "job_location": "Vancouver, Canada", "job_description": "Another posting",
+                "job_id": "linkedin-2",
+            },
+        ]
+        with (
+            patch.object(self.jobs, "SERPAPI_KEY", "qa-key"),
+            patch.object(self.jobs, "serpapi_fetch", return_value=google),
+            patch.object(self.jobs, "fetch_linkedin_jobs", return_value=linkedin) as search_linkedin,
+            patch.object(self.jobs, "enrich_company_contact",
+                         return_value={"website_url": "https://example.test", "email": "info@example.test"}),
+            patch.object(self.jobs, "save_job_leads") as save,
+        ):
+            count = self.jobs.run_job_discovery(
+                service.id, "Canada", service_definition=service, user_id=QA_USER_ID
+            )
+        self.assertEqual(count, 2)
+        search_linkedin.assert_called_once_with("Video Editor", "Canada", 1, self.api.emit_ui_log)
+        leads = save.call_args.args[0]
+        self.assertEqual(len(leads), 2)
+        acme = next(lead for lead in leads if lead["company_name"] == "Acme Studio")
+        self.assertEqual(acme["job_via"], "Indeed")
+        self.assertEqual(
+            acme["job_details"]["search_providers"], ["Google Jobs", "LinkedIn Jobs"]
+        )
+        self.assertEqual(acme["job_description"], "LinkedIn description")
+        self.assertIn(
+            {"title": "LinkedIn", "link": "https://www.linkedin.com/jobs/view/123"},
+            acme["job_details"]["apply_options"],
+        )
+        self.assertEqual(
+            acme["job_details"]["linkedin_company_profile"],
+            "https://www.linkedin.com/company/acme",
+        )
+        self.assertEqual(acme["job_details"]["posted_at"], "2 days ago")
+        self.assertEqual(acme["email"], "info@example.test")
+
+    def test_linkedin_jobs_uses_documented_scrapingdog_endpoint_and_parameters(self):
+        response = Mock(status_code=200)
+        response.raise_for_status.return_value = None
+        self.linkedin_search_patch.stop()
+        with (
+            patch.object(self.jobs, "SERPAPI_KEY", "qa-key"),
+            patch.object(self.jobs, "scrapingdog_fetch", return_value=response) as fetch,
+        ):
+            result = self.jobs.fetch_linkedin_jobs("Video Editor", "Canada", 2, self.log)
+        self.assertIs(result, response)
+        fetch.assert_called_once()
+        params = fetch.call_args.args[0]
+        self.assertEqual(fetch.call_args.kwargs["endpoint"], SCRAPINGDOG_LINKEDIN_JOBS_ENDPOINT)
+        self.assertEqual(params["field"], "Video Editor")
+        self.assertEqual(params["location"], "Canada")
+        self.assertEqual(params["page"], 2)
+        self.assertEqual(params["api_key"], "qa-key")
+
+    def test_linkedin_jobs_failure_is_reported_as_partial_when_google_saved_postings(self):
+        service = HiringService(
+            "custom_video_test", "Video Editing", ("Video Editor",), ("video editor",)
+        )
+        google = Mock()
+        google.json.return_value = {"jobs_results": [{
+            "company_name": "Acme Studio", "title": "Video Editor", "location": "Canada",
+        }]}
+        with (
+            patch.object(self.jobs, "SERPAPI_KEY", "qa-key"),
+            patch.object(self.jobs, "serpapi_fetch", return_value=google),
+            patch.object(self.jobs, "fetch_linkedin_jobs", side_effect=RuntimeError("LinkedIn API unavailable")),
+            patch.object(self.jobs, "enrich_company_contact",
+                         return_value={"website_url": None, "email": None}),
+            patch.object(self.jobs, "save_job_leads") as save,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "LinkedIn API unavailable"):
+                self.jobs.run_job_discovery(
+                    service.id, "Canada", service_definition=service, user_id=QA_USER_ID
+                )
+        self.assertEqual(len(save.call_args.args[0]), 1)

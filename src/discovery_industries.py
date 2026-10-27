@@ -66,7 +66,7 @@ def matching_industry_category(
     source: str,
     log: Callable[[str], None],
 ) -> str | None:
-    if source in {"facebook", "instagram"}:
+    if source in {"facebook", "instagram", "linkedin"}:
         evidence = f"{business.get('title') or ''} {business.get('snippet') or ''}"
         if has_industry_evidence(industry, evidence):
             return industry

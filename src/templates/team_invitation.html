@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% set page = 'team-invitation' %}
+{% set page_title = 'Team Invitation' %}
+{% set page_eyebrow = 'YOUR NEXT CHAPTER, TOGETHER' %}
+{% set page_description = 'Join a team with shared search credits while keeping your leads private.' %}
+{% block content %}
+<section class="settings-card" aria-labelledby="accept-team-title">
+    <h2 id="accept-team-title">Accept your invitation</h2>
+    <p class="settings-subtitle">Use the same email address that received the invitation. Accepting does not move your private leads or transfer an existing credit balance. Joining closes your personal free trial and discards its remaining credits; you will use the team's shared wallet instead.</p>
+    <p id="team-message" class="settings-notice" role="status" hidden></p>
+    {% if current_user %}
+    <button id="accept-team-invitation" type="button" class="primary-button">Accept invitation</button>
+    {% else %}
+    <p>Sign in or create an account before accepting.</p>
+    <a class="secondary-button" href="{{ url_for('sign_in', next='/team-invitation') }}">Sign in</a>
+    <a class="secondary-button" href="{{ url_for('register', next='/team-invitation') }}">Create account</a>
+    {% endif %}
+</section>
+<script src="{{ url_for('static', filename='team.js') }}" defer></script>
+{% endblock %}

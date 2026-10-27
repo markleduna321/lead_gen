@@ -1,17 +1,25 @@
 import os
+import re
+import secrets
 import sys
 import csv
 import io
 import requests
 import threading
 import psycopg2
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
+from html import escape as html_escape
 from psycopg2.extras import RealDictCursor
 from flask import Flask, request, jsonify, render_template, Response, redirect, session, url_for
+from werkzeug.exceptions import HTTPException
 from dotenv import load_dotenv
+import app_env
+import log_redact
 from discovery_runs import DiscoveryBusyError, LocalDiscoveryRuns
+from plans import PlanError
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+log_redact.install()
 
 SYSTEM_LOG_BUFFER = []
 USER_LOG_BUFFERS = {}
@@ -63,33 +71,116 @@ base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 load_dotenv(os.path.join(base_dir, ".env"))
 
 DB_DSN = os.getenv("DATABASE_URL")
-# Outgoing mail is per-account (see user_email.py); there is no shared mailbox.
+# Outreach is per-account; team invitations use separate system Resend SMTP.
 OPENAI_KEY = os.getenv("OPENAI_API_KEY")
 
 app = Flask(__name__, template_folder='templates', static_folder='../static')
 
 # Sessions must survive a restart, so the key is configuration rather than a
-# per-boot random value. Local development falls back to a fixed development
-# key; any non-local deployment must supply its own.
-APP_ENV = os.getenv("APP_ENV", "local").strip().lower()
-_secret = os.getenv("FLASK_SECRET_KEY", "").strip()
-if not _secret:
-    if APP_ENV != "local":
-        raise RuntimeError(
-            "FLASK_SECRET_KEY must be set when APP_ENV is not 'local'. "
-            "Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(48))\""
-        )
-    _secret = "local-development-only-key-do-not-use-when-hosted"
-    print("[STARTUP] ⚠️ FLASK_SECRET_KEY is unset — using the local development key.", file=sys.stderr)
+# per-boot random value. An unset APP_ENV means production; only local and
+# desktop may fall back to the fixed development key.
+APP_ENV = app_env.resolve_app_env(os.environ)
+_secret, _dev_secret = app_env.resolve_secret_key(APP_ENV, os.environ)
+if _dev_secret:
+    print(f"[STARTUP] ⚠️ FLASK_SECRET_KEY is unset — using the development key (APP_ENV={APP_ENV}).", file=sys.stderr)
 
 app.secret_key = _secret
+import account_email
+account_email.check_hosted_configuration(os.environ)
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
-    SESSION_COOKIE_SECURE=APP_ENV not in {"local", "desktop"},
+    SESSION_COOKIE_SECURE=not app_env.is_development(APP_ENV),
     PERMANENT_SESSION_LIFETIME=timedelta(days=14),
     MAX_CONTENT_LENGTH=2 * 1024 * 1024,
 )
+
+# Behind a proxy every request comes from the proxy's address. Trust exactly
+# as many X-Forwarded-* hops as there are proxies; more lets clients spoof IPs.
+_proxy_hops = os.getenv("TRUSTED_PROXY_HOPS", "0").strip() or "0"
+if not _proxy_hops.isdigit() or int(_proxy_hops) > 5:
+    raise RuntimeError("TRUSTED_PROXY_HOPS must be a whole number from 0 to 5.")
+if int(_proxy_hops):
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=int(_proxy_hops), x_proto=int(_proxy_hops))
+
+import rate_limit
+app.config["RATE_LIMITER"] = rate_limit.Limiter(
+    rate_limit.PostgresStore(DB_DSN) if DB_DSN else rate_limit.MemoryStore())
+
+
+def limiter():
+    return app.config["RATE_LIMITER"]
+
+
+def client_ip():
+    return request.remote_addr or "unknown"
+
+
+@app.errorhandler(rate_limit.RateLimited)
+def handle_rate_limited(error):
+    response = jsonify(status="error", code="rate_limited", message=str(error))
+    response.status_code = 429
+    response.headers["Retry-After"] = str(error.retry_after)
+    return response
+
+
+import security_headers
+security_headers.install(app, APP_ENV)
+CSP_REPORTS_SEEN = set()
+CSP_REPORTS_SEEN_MAX = 500
+
+
+def _report_field(report, *names):
+    for name in names:
+        value = report.get(name)
+        if isinstance(value, (str, int)):
+            text = str(value).split("?", 1)[0].split("#", 1)[0]
+            return "".join(ch for ch in text if ch.isprintable())[:200]
+    return "-"
+
+
+@app.route(security_headers.CSP_REPORT_PATH, methods=['POST'])
+def csp_report():
+    """Logs each distinct CSP violation once per process. Always answers 204."""
+    if (request.content_length or 0) > 16 * 1024:
+        return Response(status=204)
+    data = request.get_json(force=True, silent=True)
+    reports = data if isinstance(data, list) else [data]
+    for item in reports[:10]:
+        if not isinstance(item, dict):
+            continue
+        report = item.get("csp-report") or item.get("body") or {}
+        if not isinstance(report, dict):
+            continue
+        entry = (
+            _report_field(report, "effective-directive", "effectiveDirective", "violated-directive"),
+            _report_field(report, "blocked-uri", "blockedURL"),
+            _report_field(report, "document-uri", "documentURL"),
+            _report_field(report, "source-file", "sourceFile"),
+            _report_field(report, "line-number", "lineNumber"),
+        )
+        if entry in CSP_REPORTS_SEEN or len(CSP_REPORTS_SEEN) >= CSP_REPORTS_SEEN_MAX:
+            continue
+        try:
+            limiter().hit(rate_limit.CSP_REPORT, client_ip())
+        except rate_limit.RateLimited:
+            break
+        except Exception:
+            app.logger.exception("CSP report rate limit check failed")
+            break
+        CSP_REPORTS_SEEN.add(entry)
+        app.logger.warning("CSP violation: directive=%s blocked=%s page=%s source=%s:%s", *entry)
+    return Response(status=204)
+
+
+from team_api import bp as team_blueprint, start_paid
+app.config["BILLING_DSN"] = DB_DSN
+app.register_blueprint(team_blueprint)
+from purchase_api import bp as purchase_blueprint
+app.register_blueprint(purchase_blueprint)
+from account_api import bp as account_blueprint
+app.register_blueprint(account_blueprint)
 
 
 def run_startup_migrations():
@@ -192,12 +283,11 @@ def run_startup_migrations():
             display_name VARCHAR(120),
             role VARCHAR(20) NOT NULL DEFAULT 'member',
             is_active BOOLEAN NOT NULL DEFAULT TRUE,
-            failed_login_count INT NOT NULL DEFAULT 0,
-            locked_until TIMESTAMP,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             last_login_at TIMESTAMP
         );
         """,
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 1;",
         """
         CREATE TABLE IF NOT EXISTS user_email_settings (
             user_id INTEGER PRIMARY KEY REFERENCES users (id) ON DELETE CASCADE,
@@ -234,6 +324,12 @@ def run_startup_migrations():
             with conn.cursor() as cur:
                 for sql in migrations:
                     cur.execute(sql)
+                cur.execute(account_email.SCHEMA)
+                from billing import SCHEMA
+                cur.execute(SCHEMA)
+                from payments import SCHEMA as PAYMENT_SCHEMA
+                cur.execute(PAYMENT_SCHEMA)
+                cur.execute(rate_limit.SCHEMA)
             conn.commit()
     except Exception as e:
         print(f"[STARTUP] Migration warning (non-fatal): {e}", file=sys.stderr)
@@ -259,16 +355,23 @@ def require_signed_in_user():
     The account is re-checked every request so deactivating or deleting a user
     takes effect immediately instead of when their cookie eventually expires.
     """
-    from auth import PUBLIC_ENDPOINTS, current_user_id, sign_out_session, unauthorized_response
+    from auth import PUBLIC_ENDPOINTS, current_user_id, session_is_current, sign_out_session, unauthorized_response
+    # Legacy screenshots lived in the public static folder; they are private now.
+    if request.path.startswith('/static/screenshots/'):
+        return Response("Not found", status=404, mimetype='text/plain')
     if request.endpoint in PUBLIC_ENDPOINTS or request.endpoint is None:
         return None
     if current_user_id() is None:
         return unauthorized_response()
-    if signed_in_user() is None:
-        # The account was deactivated or removed after this session started.
+    if signed_in_user() is None or not session_is_current(signed_in_user()):
+        # The account was deactivated or removed, or its sessions were revoked.
         sign_out_session()
         return unauthorized_response()
     return None
+
+
+import csrf
+csrf.install(app)
 
 
 def signed_in_user():
@@ -314,18 +417,31 @@ def sign_in():
         return redirect(target)
     if request.method == 'POST':
         form = request.form
+        # Failures are counted per email and network, so nobody can lock a
+        # real user out from elsewhere, and unknown emails behave the same.
+        account_key = f"{str(form.get('email') or '').strip().lower()}|{client_ip()}"
         try:
+            limiter().hit(rate_limit.LOGIN_IP, client_ip())
+            limiter().check(rate_limit.LOGIN_FAILURES, account_key)
             user = authenticate(DB_DSN, form.get('email'), form.get('password'))
+        except rate_limit.RateLimited as error:
+            return render_template('auth.html', mode='login', error=str(error),
+                                   email=form.get('email', ''), next=target), 429, \
+                {"Retry-After": str(error.retry_after)}
         except AuthError as error:
+            limiter().record(rate_limit.LOGIN_FAILURES, account_key)
             return render_template('auth.html', mode='login', error=str(error),
                                    email=form.get('email', ''), next=target), 401
         except Exception as error:
             print(f"[AUTH ERROR] Sign-in failed: {error}", file=sys.stderr)
             return render_template('auth.html', mode='login', next=target,
                                    error="Sign-in is unavailable right now. Please try again."), 500
+        limiter().reset(rate_limit.LOGIN_FAILURES, account_key)
         sign_in_session(user)
         return redirect(safe_redirect_target(form.get('next'), target))
-    return render_template('auth.html', mode='login', next=target)
+    from account_api import RESET_DONE
+    notice = RESET_DONE if request.args.get('reset') == 'done' else None
+    return render_template('auth.html', mode='login', next=target, notice=notice)
 
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -336,12 +452,23 @@ def register():
         return redirect(target)
     if request.method == 'POST':
         form = request.form
+        try:
+            limiter().hit(rate_limit.REGISTER_IP, client_ip())
+        except rate_limit.RateLimited as error:
+            return render_template('auth.html', mode='register', error=str(error),
+                                   email=form.get('email', ''), display_name=form.get('display_name', ''),
+                                   next=target), 429, {"Retry-After": str(error.retry_after)}
+        except Exception as error:
+            print(f"[AUTH ERROR] Registration limit check failed: {error}", file=sys.stderr)
+            return render_template('auth.html', mode='register', next=target,
+                                   error="Accounts cannot be created right now. Please try again."), 500
         if form.get('password') != form.get('confirm_password'):
             return render_template('auth.html', mode='register', error="Both passwords must match.",
                                    email=form.get('email', ''), display_name=form.get('display_name', ''),
                                    next=target), 400
         try:
-            user = create_user(DB_DSN, form.get('email'), form.get('password'), form.get('display_name'))
+            user = create_user(DB_DSN, form.get('email'), form.get('password'), form.get('display_name'),
+                               network_hash=account_email.network_hash(client_ip()))
         except AuthError as error:
             return render_template('auth.html', mode='register', error=str(error),
                                    email=form.get('email', ''), display_name=form.get('display_name', ''),
@@ -351,6 +478,12 @@ def register():
             return render_template('auth.html', mode='register', next=target,
                                    error="Accounts cannot be created right now. Please try again."), 500
         sign_in_session(user)
+        try:
+            import system_mail
+            account_email.send_verification(DB_DSN, user["id"], system_mail.base_url())
+        except Exception as error:
+            # The account exists; the banner's "Resend email" button retries.
+            print(f"[AUTH ERROR] Verification email failed: {type(error).__name__}", file=sys.stderr)
         return redirect(safe_redirect_target(form.get('next'), target))
     return render_template('auth.html', mode='register', next=target)
 
@@ -362,9 +495,35 @@ def sign_out():
     return redirect(url_for('sign_in'))
 
 
+@app.route('/api/account/password', methods=['POST'])
+def update_password():
+    """Changing the password signs out every other device; this one stays."""
+    from auth import SESSION_VERSION_KEY, AuthError, change_password
+    user_id = active_user_id()
+    limiter().hit(rate_limit.PASSWORD_CHANGE, str(user_id))
+    data = request.get_json(silent=True)
+    data = data if isinstance(data, dict) else {}
+    try:
+        version = change_password(DB_DSN, user_id, data.get('current_password'),
+                                  data.get('new_password'), data.get('confirm_password'))
+    except AuthError as error:
+        return jsonify(status="error", code="invalid_password", message=str(error)), 400
+    session[SESSION_VERSION_KEY] = version
+    return jsonify(status="success", message="Password updated. Your other devices were signed out.")
+
+
+@app.route('/api/account/sign-out-everywhere', methods=['POST'])
+def sign_out_everywhere():
+    from auth import end_all_sessions, sign_out_session
+    end_all_sessions(DB_DSN, active_user_id())
+    sign_out_session()
+    return jsonify(status="success", redirect=url_for('sign_in'))
+
+
 @app.route('/api/session', methods=['GET'])
 def describe_session():
     user = signed_in_user()
+    user = {key: value for key, value in user.items() if key != "session_version"} if user else user
     return jsonify({"status": "success", "user": user})
 
 
@@ -399,6 +558,7 @@ def manage_email_settings():
 def send_email_settings_test():
     from user_email import EmailNotConfigured, EmailSettingsError, public_settings, send_test_email
     user_id = active_user_id()
+    limiter().hit(rate_limit.SMTP_TEST, user_id)
     try:
         result = send_test_email(DB_DSN, user_id)
     except EmailNotConfigured as error:
@@ -426,10 +586,57 @@ def clear_ui_logs():
     user_log_buffer(active_user_id()).clear()
     return jsonify({"status": "success"})
 
+HTTP_ERRORS = {
+    400: ("bad_request", "Bad request", "That request couldn't be processed. Check it and try again."),
+    401: ("auth_required", "Sign in required", "Sign in to continue."),
+    403: ("forbidden", "Access denied", "You don't have access to this page."),
+    404: ("not_found", "Page not found", "We couldn't find that page. It may have moved, or the link may be wrong."),
+    405: ("method_not_allowed", "Action not allowed", "That action isn't allowed here."),
+    413: ("payload_too_large", "Request too large", "That request is too large to process."),
+    429: ("rate_limited", "Too many requests", "Too many requests. Wait a moment and try again."),
+}
+SERVER_ERROR = ("server_error", "Something went wrong",
+                "Something went wrong on our side. Try again in a moment.")
+
+
+def error_response(status, code, title, message, reference=None, headers=None):
+    from auth import current_user_id, wants_json
+    if wants_json():
+        body = {"status": "error", "code": code, "message": message}
+        if reference:
+            body["reference"] = reference
+        response = jsonify(body)
+    else:
+        try:
+            html = render_template("error.html", status=status, title=title, message=message,
+                                   reference=reference, signed_in=current_user_id() is not None)
+        except Exception:
+            app.logger.exception("Error page could not be rendered")
+            html = f"{title}. {message}" + (f" Reference: {reference}" if reference else "")
+        response = Response(html, mimetype="text/html" if "<html" in html else "text/plain")
+    response.status_code = status
+    for name, value in (headers or {}).items():
+        response.headers[name] = value
+    return response
+
+
+@app.errorhandler(HTTPException)
+def handle_http_error(error):
+    if error.code is None:
+        return error
+    if error.code >= 500:
+        return handle_global_exception(error)
+    code, title, message = HTTP_ERRORS.get(error.code, ("http_error", error.name, error.name + "."))
+    headers = {name: value for name, value in error.get_headers() if name in ("Allow", "Retry-After")}
+    return error_response(error.code, code, title, message, headers=headers)
+
+
 @app.errorhandler(Exception)
 def handle_global_exception(e):
-    print(f"[SERVER CRASH ERROR] {str(e)}", file=sys.stderr)
-    return jsonify({"status": "error", "message": str(e)}), 500
+    reference = secrets.token_hex(3).upper()
+    app.logger.error("Unhandled error %s on %s %s", reference, request.method, request.path,
+                     exc_info=(type(e), e, e.__traceback__))
+    return error_response(500, *SERVER_ERROR, reference=reference)
 
 @app.route('/', methods=['GET'])
 def home():
@@ -486,10 +693,7 @@ def trigger_discovery_engine():
     selected_sources = data.get('sources', ['google'])
     if not isinstance(selected_sources, list) or not selected_sources:
         return jsonify({"status": "error", "message": "Select at least one supported discovery data source."}), 400
-    if 'linkedin' in selected_sources:
-        return jsonify({"status": "error", "message":
-            "LinkedIn discovery is not available. Select Google Maps, Facebook, Instagram, or Yelp."}), 400
-    if any(source not in ('google', 'facebook', 'instagram', 'yelp') for source in selected_sources):
+    if any(source not in ('google', 'facebook', 'instagram', 'linkedin', 'yelp') for source in selected_sources):
         return jsonify({"status": "error", "message": "Unsupported discovery data source selected."}), 400
     
     try:
@@ -550,6 +754,9 @@ def trigger_discovery_engine():
         if platform == 'instagram':
             from discovery_instagram import run_instagram_discovery
             return run_instagram_discovery(target_location, industry, user_id=owner_id)
+        if platform == 'linkedin':
+            from discovery_linkedin import run_linkedin_discovery
+            return run_linkedin_discovery(target_location, industry, user_id=owner_id)
         return None
 
     tasks = [
@@ -558,10 +765,10 @@ def trigger_discovery_engine():
         for industry in dict.fromkeys(category.strip() for category in target_categories)
     ]
     try:
-        run_id = LOCAL_DISCOVERY_RUNS.start(
-            tasks, emit_ui_log, owner=owner_id,
-            on_thread_start=lambda: bind_log_user(owner_id),
-        )
+        run_id = start_paid(DB_DSN, owner_id, "local", data, LOCAL_DISCOVERY_RUNS,
+                            tasks, emit_ui_log, bind_log_user)
+    except PlanError:
+        raise
     except DiscoveryBusyError as error:
         return jsonify({"status": "error", "message": str(error)}), 409
     except Exception as error:
@@ -577,6 +784,10 @@ def trigger_discovery_engine():
 @app.route('/api/discovery/runs/<run_id>', methods=['GET'])
 def get_local_discovery_run(run_id):
     run = LOCAL_DISCOVERY_RUNS.snapshot(run_id, owner=active_user_id())
+    from billing import snapshot
+    durable = snapshot(DB_DSN, active_user_id(), run_id)
+    if durable is not None:
+        run = durable
     if run is None:
         return jsonify({"status": "error", "message":
             "Discovery status is unavailable. The app may have restarted or the run expired; check saved results before retrying."}), 404
@@ -584,139 +795,44 @@ def get_local_discovery_run(run_id):
 
 @app.route('/api/trigger/pitch-single/<int:lead_id>', methods=['POST'])
 def trigger_single_pitch_generation(lead_id):
+    import ai_pitch
+    import billing
+
+    def failure(message, code, status):
+        return jsonify({"status": "error", "code": code, "message": message}), status
+
     if not OPENAI_KEY:
-        return jsonify({"status": "error", "message": "OpenAI credentials missing inside environment config."}), 401
+        return failure("AI drafting isn't set up on this server yet.", "ai_unavailable", 503)
+    user_id = active_user_id()
+    limiter().hit(rate_limit.PITCH, user_id)
+    try:
+        pitch_id, lead = billing.reserve_pitch(DB_DSN, user_id, lead_id)
+    except PlanError as error:
+        return failure(str(error), error.code, error.status)
 
-    with psycopg2.connect(DB_DSN, cursor_factory=RealDictCursor) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT business_name, category, lead_type FROM prospects WHERE id = %s AND user_id = %s;",
-                (lead_id, active_user_id())
-            )
-            res = cur.fetchone()
-            if not res:
-                return jsonify({"status": "error", "message": "Target lead record not found."}), 404
+    try:
+        draft, subject_line, angle = ai_pitch.draft_pitch(OPENAI_KEY, lead)
+    except Exception as error:
+        print(f"[AI WORKER] Pitch draft failed for lead {lead_id}: {error}", file=sys.stderr)
+        billing.fail_pitch(DB_DSN, user_id, pitch_id)
+        return failure("AI drafting is temporarily unavailable. Your credit was refunded; try again shortly.",
+                       "ai_failed", 502)
 
-            business_name = res['business_name']
-            category = res['category']
-            lead_type = res.get('lead_type') or 'web_design'
+    try:
+        balance = billing.finish_pitch(DB_DSN, user_id, pitch_id, lead_id, draft, subject_line, angle)
+    except PlanError as error:
+        return failure(str(error), error.code, error.status)
+    except Exception:
+        billing.fail_pitch(DB_DSN, user_id, pitch_id)
+        raise
 
-            print(f"[AI WORKER] Generating pitch for '{business_name}' | type: {lead_type} | category: {category}")
-
-            from niche_prompts import (
-                get_niche_parameters, get_service_parameters, OUTSOURCING_SERVICE_TYPES
-            )
-
-            ai_headers = {"Authorization": f"Bearer {OPENAI_KEY}", "Content-Type": "application/json"}
-
-            # --- Route to appropriate prompt strategy based on lead type ---
-            if lead_type in OUTSOURCING_SERVICE_TYPES:
-                strategy = get_service_parameters(lead_type)
-                system_prompt = (
-                    "You are a B2B outreach specialist for a Philippine-based outsourcing and digital services agency. "
-                    "Write a compelling cold outreach email to a company decision-maker. "
-                    "Be direct, professional, and concise. Zero corporate fluff or buzzword stuffing. "
-                    "CRITICAL: Do NOT write a subject line. Start directly with the greeting. "
-                    f"Service we're pitching: {lead_type.replace('_', ' ')}. "
-                    f"Core pain points to address: {strategy['pain_points']}. "
-                    f"Use this terminology naturally: {strategy['buzzwords']}."
-                )
-                user_prompt = (
-                    f"Write a cold outreach email to '{business_name}', a company actively hiring for '{category}' roles.\n\n"
-                    f"Use this hook angle: {strategy['hook_angle']}\n\n"
-                    f"End with this CTA: {strategy['cta']}\n\n"
-                    "Keep it under 160 words. Do NOT write a subject line under any circumstances."
-                )
-                suggested_angle_summary = f"[{lead_type.replace('_', ' ').title()}] {strategy['hook_angle'][:80]}..."
-            else:
-                strategy = get_niche_parameters(category)
-                system_prompt = (
-                    "You are an elite B2B outreach copywriting specialist for an international web design agency. "
-                    "Write a highly compelling cold outreach email from the agency to a business owner. "
-                    "Keep the tone direct, professional, and entirely free of corporate fluff. "
-                    "CRITICAL: Do NOT write a subject line. Start drafting directly from the greeting. "
-                    f"Tailor the pitch around these industry pain points: {strategy['pain_points']}. "
-                    f"Weave in this terminology naturally: {strategy['buzzwords']}."
-                )
-                user_prompt = (
-                    f"Write a personalized outreach email for '{business_name}', a business in the '{category}' space.\n\n"
-                    f"Core Strategy Hook: {strategy['hook_angle']}\n\n"
-                    "Requirements:\n"
-                    "1. Acknowledge their strong reputation and review history.\n"
-                    "2. Address the digital visibility gap they're losing market share to.\n"
-                    "3. Conclude with a low-friction CTA for a quick 5-minute sync or free mockup.\n"
-                    "4. Do NOT output a subject line under any circumstances."
-                )
-                suggested_angle_summary = f"[Web Design] {strategy['hook_angle'][:80]}..."
-
-            # --- Generate pitch body ---
-            pitch_payload = {
-                "model": "gpt-4o-mini",
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                "temperature": 0.65,
-                "max_tokens": 420
-            }
-
-            response = requests.post(
-                "https://api.openai.com/v1/chat/completions",
-                json=pitch_payload, headers=ai_headers, timeout=15
-            )
-            if response.status_code != 200:
-                return jsonify({"status": "error", "message": f"OpenAI rejection: {response.text}"}), response.status_code
-
-            generated_copy = response.json()["choices"][0]["message"]["content"].strip()
-
-            if "subject:" in generated_copy.lower():
-                lines = generated_copy.split('\n')
-                generated_copy = '\n'.join(
-                    l for l in lines if not l.lower().startswith('subject:')
-                ).strip()
-
-            # --- Generate subject line ---
-            subj_payload = {
-                "model": "gpt-4o-mini",
-                "messages": [
-                    {"role": "system", "content": (
-                        "Generate ONE compelling cold email subject line. "
-                        "Rules: Under 8 words. No clickbait. No ALL CAPS. No generic words like 'opportunity' or 'partnership'. "
-                        "Sound peer-to-peer, not like a mass sales blast. Output only the subject line, no quotes, no prefix."
-                    )},
-                    {"role": "user", "content": (
-                        f"Business: {business_name}\n"
-                        f"Service: {lead_type.replace('_', ' ')}\n"
-                        f"Hook: {strategy.get('hook_angle', '')[:100]}"
-                    )}
-                ],
-                "temperature": 0.85,
-                "max_tokens": 25
-            }
-            subj_resp = requests.post(
-                "https://api.openai.com/v1/chat/completions",
-                json=subj_payload, headers=ai_headers, timeout=10
-            )
-            subject_line = (
-                subj_resp.json()["choices"][0]["message"]["content"].strip().strip('"')
-                if subj_resp.status_code == 200
-                else f"Quick concept for {business_name}"
-            )
-
-            cur.execute(
-                """UPDATE prospects
-                   SET ai_pitch_draft = %s, subject_line = %s,
-                       suggested_angle = %s, status = 'drafted'
-                   WHERE id = %s AND user_id = %s;""",
-                (generated_copy, subject_line, suggested_angle_summary, lead_id, active_user_id())
-            )
-            conn.commit()
-
-            return jsonify({
-                "status": "success",
-                "message": f"Pitch and subject line drafted for {business_name}.",
-                "subject_line": subject_line
-            })
+    left = f"{balance.normalize():f}" if hasattr(balance, "normalize") else str(balance)
+    return jsonify({
+        "status": "success",
+        "message": f"Pitch and subject line drafted for {lead['business_name']}. 1 credit used \u00b7 {left} credits left.",
+        "subject_line": subject_line,
+        "balance": left,
+    })
 
 
 # The source shown on a prospect row. Mirrors the dashboard badge, which falls
@@ -753,10 +869,30 @@ def read_filter_options(cur, facet_sql, params):
     return options
 
 
+MAX_PER_PAGE = 50
+MAX_PAGE = 100000
+
+
+def read_page_args(default_per_page):
+    """Returns (page, per_page) clamped to safe ranges; raises ValueError for non-integers."""
+    def read(name, default, low, high):
+        raw = request.args.get(name)
+        if raw is None or raw.strip() == '':
+            return default
+        try:
+            value = int(raw.strip(), 10)
+        except ValueError:
+            raise ValueError(f"'{name}' must be a whole number.") from None
+        return max(low, min(value, high))
+    return read('page', 1, 1, MAX_PAGE), read('per_page', default_per_page, 1, MAX_PER_PAGE)
+
+
 @app.route('/api/queue', methods=['GET'])
 def get_review_queue():
-    page = int(request.args.get('page', 1))
-    per_page = int(request.args.get('per_page', 10))
+    try:
+        page, per_page = read_page_args(10)
+    except ValueError as error:
+        return jsonify({"status": "error", "code": "invalid_pagination", "message": str(error)}), 400
     search_query = request.args.get('q', '').strip()
     source_filter = request.args.get('source', '').strip().lower()
     category_filter = request.args.get('category', '').strip()
@@ -864,6 +1000,12 @@ def get_review_queue():
             filter_options = read_filter_options(
                 cur, facet_query, scope_params + scope_params + [active_user_id()])
 
+            import r2_storage
+            for record in records:
+                key = record.pop('screenshot_path', None)
+                record['screenshot_url'] = (f"/api/prospects/{record['id']}/screenshot"
+                                            if r2_storage.is_screenshot_key(key) else None)
+
             return jsonify({
                 "status": "success",
                 "current_page": page,
@@ -878,17 +1020,38 @@ def get_review_queue():
                 }
             })
 
+@app.route('/api/prospects/<int:lead_id>/screenshot', methods=['GET'])
+def prospect_screenshot(lead_id):
+    """Redirects the lead's owner to a short-lived signed link for its screenshot."""
+    import r2_storage
+    not_found = jsonify({"status": "error", "message": "Screenshot not available."}), 404
+    if not r2_storage.configured():
+        return not_found
+    with psycopg2.connect(DB_DSN, cursor_factory=RealDictCursor) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT screenshot_path FROM prospects WHERE id = %s AND user_id = %s;",
+                        (lead_id, active_user_id()))
+            row = cur.fetchone()
+    key = row and row['screenshot_path']
+    if not r2_storage.is_screenshot_key(key):
+        return not_found
+    response = redirect(r2_storage.signed_url(key), code=302)
+    response.headers['Cache-Control'] = 'no-store'
+    response.headers['Referrer-Policy'] = 'no-referrer'
+    return response
+
 @app.route('/api/dispatch/<int:lead_id>', methods=['POST'])
 def dispatch_lead_pitch(lead_id):
-    from user_email import EmailNotConfigured, EmailSettingsError, sender_identity
-    data = request.get_json() or {}
+    from user_email import EmailNotConfigured, EmailSettingsError, RecipientError, sender_identity, validate_recipient
+    data = request.get_json(silent=True)
+    data = data if isinstance(data, dict) else {}
     final_pitch_text = data.get('final_pitch')
-    test_destination_email = data.get('destination_email')
     
-    if not final_pitch_text:
+    if not final_pitch_text or not isinstance(final_pitch_text, str):
         return jsonify({"status": "error", "message": "Payload generation body required."}), 400
 
     owner_id = active_user_id()
+    limiter().hit(rate_limit.DISPATCH, owner_id)
     try:
         sender = sender_identity(DB_DSN, owner_id)
     except EmailNotConfigured as error:
@@ -901,8 +1064,6 @@ def dispatch_lead_pitch(lead_id):
     final_pitch_text = final_pitch_text.replace("[Your Name]", sender["name"])
     final_pitch_text = final_pitch_text.replace("[Your Agency Name]", sender["name"])
     final_pitch_text = final_pitch_text.replace("[Your Contact Information]", sender["email"])
-
-    final_recipient = test_destination_email if test_destination_email else sender["email"]
 
     with psycopg2.connect(DB_DSN, cursor_factory=RealDictCursor) as conn:
         with conn.cursor() as cur:
@@ -922,6 +1083,14 @@ def dispatch_lead_pitch(lead_id):
                 from followup_scheduler import schedule_followup
                 schedule_followup(lead_id, 'sent', active_user_id())
                 return jsonify({"status": "success", "message": "Follow-up scheduled. Use the follow-up sweep to stage the draft."})
+
+            # Never falls back to the sender: the address is saved on the
+            # prospect after sending, so a fallback would overwrite it.
+            try:
+                final_recipient = validate_recipient(data.get('destination_email'))
+            except RecipientError as error:
+                return jsonify({"status": "error", "code": "invalid_recipient",
+                                "message": str(error)}), 400
 
             # Production Flag: set to False to prefix subject with [TEST RUN]
             IS_PRODUCTION_ENVIRONMENT = True
@@ -948,7 +1117,7 @@ def dispatch_lead_pitch(lead_id):
                 lines = [line for line in lines if not line.lower().startswith('subject:')]
                 final_pitch_text = '\n'.join(lines).strip()
 
-            html_formatted_body = final_pitch_text.replace("\n", "<br>")
+            html_formatted_body = html_escape(final_pitch_text).replace("\n", "<br>")
             
             full_html_payload = f"""
             <html>
@@ -1004,7 +1173,7 @@ def update_prospect_email(lead_id):
             if cur.rowcount == 0:
                 return jsonify({"status": "error", "message": "That lead is not in your workspace."}), 404
             conn.commit()
-            print(f"[DATABASE RECORD LINK] Updated contact target email address for Lead ID: #{lead_id} -> {new_email}")
+            print(f"[DATABASE RECORD LINK] Updated contact email for Lead ID: #{lead_id}")
             return jsonify({"status": "success", "message": "Lead profile updated successfully."})
 
 @app.route('/favicon.ico')
@@ -1025,11 +1194,17 @@ def hiring_service_catalog():
     from hiring_services import DuplicateHiringService, create_hiring_service, list_hiring_services
     try:
         if request.method == "POST":
+            from billing import wallet_summary
+            account = wallet_summary(DB_DSN, active_user_id())
+            if not account["plan"]["custom_services"]:
+                raise PlanError("Upgrade to Enterprise to add custom hiring services.", "custom_service_locked")
             service = create_hiring_service(DB_DSN, request.get_json(silent=True), active_user_id())
             return jsonify({"status": "success", "service": service.public_dict()}), 201
         return jsonify({"status": "success", "services": [
             service.public_dict() for service in list_hiring_services(DB_DSN, active_user_id())
         ]})
+    except PlanError:
+        raise
     except DuplicateHiringService as error:
         return jsonify({"status": "error", "message": str(error)}), 409
     except ValueError as error:
@@ -1099,10 +1274,10 @@ def trigger_job_discovery():
 
     tasks = [("google_jobs", service, lambda service=service: scan(service)) for service in service_types]
     try:
-        run_id = HIRING_DISCOVERY_RUNS.start(
-            tasks, emit_ui_log, owner=owner_id,
-            on_thread_start=lambda: bind_log_user(owner_id),
-        )
+        run_id = start_paid(DB_DSN, owner_id, "hiring", data, HIRING_DISCOVERY_RUNS,
+                            tasks, emit_ui_log, bind_log_user)
+    except PlanError:
+        raise
     except DiscoveryBusyError as error:
         return jsonify({"status": "error", "message": str(error)}), 409
     except Exception as error:
@@ -1111,7 +1286,6 @@ def trigger_job_discovery():
     return jsonify({
         "status": "success", "run_id": run_id,
         "pages_per_role": pages_per_role,
-        "max_job_requests": sum(len(services[service].roles) for service in service_types) * pages_per_role,
         "message": f"Job board discovery started for: {', '.join(service_types)}"
     }), 202
 
@@ -1119,6 +1293,10 @@ def trigger_job_discovery():
 @app.route('/api/discovery/job-runs/<run_id>', methods=['GET'])
 def get_hiring_discovery_run(run_id):
     run = HIRING_DISCOVERY_RUNS.snapshot(run_id, owner=active_user_id())
+    from billing import snapshot
+    durable = snapshot(DB_DSN, active_user_id(), run_id)
+    if durable is not None:
+        run = durable
     if run is None:
         return jsonify({"status": "error", "message":
             "Hiring status is unavailable. The app may have restarted or the run expired; check Job Leads before retrying."}), 404
@@ -1137,8 +1315,10 @@ def get_job_leads():
       - status                 : filter by status (default: all except 'rejected')
       - sort_by                : 'date_desc' (default), 'date_asc', 'company'
     """
-    page       = int(request.args.get('page', 1))
-    per_page   = int(request.args.get('per_page', 20))
+    try:
+        page, per_page = read_page_args(20)
+    except ValueError as error:
+        return jsonify({"status": "error", "code": "invalid_pagination", "message": str(error)}), 400
     search_q   = request.args.get('q', '').strip()
     lead_type  = request.args.get('lead_type', '').strip()
     via_f      = request.args.get('via', '').strip()
@@ -1271,187 +1451,33 @@ def update_job_lead_email(lead_id):
     return jsonify({"status": "success", "message": "Job lead email updated."})
 
 
-@app.route('/api/trigger/pitch-bulk', methods=['POST'])
-def trigger_bulk_pitch_generation():
-    """
-    Generates AI pitches (body + subject line) for all 'discovered' leads with no draft.
-    Processes highest-scored leads first. Default batch size: 10.
-    """
-    if not OPENAI_KEY:
-        return jsonify({"status": "error", "message": "OpenAI API key missing."}), 401
+EXPORT_STATUSES = frozenset({
+    'discovered', 'drafted', 'sent', 'sent_followup_1', 'followup_1', 'followup_2', 'rejected',
+})
+CSV_FORMULA_START = ('=', '+', '-', '@', '\t', '\r')
+# Phone numbers such as "+63 912 345 6789" start with "+" but can't run anything.
+PLAIN_NUMBER = re.compile(r'[+-]?[\d\s().-]+')
 
-    data = request.get_json() or {}
-    limit = int(data.get('limit', 10))
-    owner_id = active_user_id()
 
-    def bulk_pitch_worker():
-        from niche_prompts import (
-            get_niche_parameters, get_service_parameters, OUTSOURCING_SERVICE_TYPES
-        )
-        bind_log_user(owner_id)
-        emit_ui_log(f"🤖 [BULK PITCH] Starting AI generation for up to {limit} leads...")
-
-        try:
-            with psycopg2.connect(DB_DSN, cursor_factory=RealDictCursor) as conn:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        SELECT id, business_name, category, lead_type
-                        FROM prospects
-                        WHERE status = 'discovered'
-                          AND (ai_pitch_draft IS NULL OR ai_pitch_draft = '')
-                          AND user_id = %s
-                        ORDER BY lead_score DESC, id DESC
-                        LIMIT %s;
-                        """,
-                        (owner_id, limit)
-                    )
-                    leads = cur.fetchall()
-
-                    if not leads:
-                        emit_ui_log("[BULK PITCH] No pending leads in discovery queue.")
-                        return
-
-                    ai_headers = {
-                        "Authorization": f"Bearer {OPENAI_KEY}",
-                        "Content-Type": "application/json"
-                    }
-                    success = 0
-
-                    for lead in leads:
-                        lead_type = lead.get('lead_type') or 'web_design'
-                        category = lead.get('category', '')
-                        business_name = lead.get('business_name', '')
-
-                        if lead_type in OUTSOURCING_SERVICE_TYPES:
-                            strategy = get_service_parameters(lead_type)
-                            system_prompt = (
-                                "You are a B2B outreach specialist for a Philippine-based outsourcing agency. "
-                                "Write a compelling cold outreach email to a company decision-maker. "
-                                "Direct, professional, concise. Zero fluff. "
-                                "CRITICAL: No subject line. Start with the greeting. "
-                                f"Service: {lead_type.replace('_', ' ')}. "
-                                f"Pain points: {strategy['pain_points']}. "
-                                f"Terminology: {strategy['buzzwords']}."
-                            )
-                            user_prompt = (
-                                f"Write a cold outreach email to '{business_name}', "
-                                f"actively hiring for '{category}' roles.\n\n"
-                                f"Hook: {strategy['hook_angle']}\n"
-                                f"CTA: {strategy['cta']}\n\n"
-                                "Under 160 words. No subject line."
-                            )
-                            suggested_angle = f"[{lead_type.replace('_', ' ').title()}] {strategy['hook_angle'][:80]}..."
-                        else:
-                            strategy = get_niche_parameters(category)
-                            system_prompt = (
-                                "You are a B2B outreach specialist for an international web design agency. "
-                                "Write a compelling cold outreach email to a business owner. "
-                                "Direct, professional. Zero fluff. "
-                                "CRITICAL: No subject line. Start with the greeting. "
-                                f"Pain points: {strategy['pain_points']}. "
-                                f"Terminology: {strategy['buzzwords']}."
-                            )
-                            user_prompt = (
-                                f"Cold outreach email for '{business_name}' in '{category}'.\n\n"
-                                f"Hook: {strategy['hook_angle']}\n\n"
-                                "1. Acknowledge their reputation. "
-                                "2. Address their digital gap. "
-                                "3. Low-friction CTA. No subject line."
-                            )
-                            suggested_angle = f"[Web Design] {strategy['hook_angle'][:80]}..."
-
-                        try:
-                            pitch_payload = {
-                                "model": "gpt-4o-mini",
-                                "messages": [
-                                    {"role": "system", "content": system_prompt},
-                                    {"role": "user", "content": user_prompt}
-                                ],
-                                "temperature": 0.65,
-                                "max_tokens": 420
-                            }
-                            resp = requests.post(
-                                "https://api.openai.com/v1/chat/completions",
-                                json=pitch_payload, headers=ai_headers, timeout=15
-                            )
-                            if resp.status_code != 200:
-                                emit_ui_log(f"⚠️ GPT error for {business_name}: {resp.status_code}")
-                                continue
-
-                            pitch_body = resp.json()['choices'][0]['message']['content'].strip()
-                            if "subject:" in pitch_body.lower():
-                                pitch_body = '\n'.join(
-                                    l for l in pitch_body.split('\n')
-                                    if not l.lower().startswith('subject:')
-                                ).strip()
-
-                            # Subject line generation
-                            subj_payload = {
-                                "model": "gpt-4o-mini",
-                                "messages": [
-                                    {"role": "system", "content": (
-                                        "Generate ONE cold email subject line. Under 8 words. "
-                                        "No clickbait. No ALL CAPS. Peer-to-peer tone. "
-                                        "Output only the text, no quotes."
-                                    )},
-                                    {"role": "user", "content": (
-                                        f"Business: {business_name}\n"
-                                        f"Service: {lead_type.replace('_', ' ')}\n"
-                                        f"Hook: {strategy.get('hook_angle', '')[:80]}"
-                                    )}
-                                ],
-                                "temperature": 0.85,
-                                "max_tokens": 25
-                            }
-                            subj_resp = requests.post(
-                                "https://api.openai.com/v1/chat/completions",
-                                json=subj_payload, headers=ai_headers, timeout=10
-                            )
-                            subject_line = (
-                                subj_resp.json()['choices'][0]['message']['content'].strip().strip('"')
-                                if subj_resp.status_code == 200
-                                else f"Quick concept for {business_name}"
-                            )
-
-                            cur.execute(
-                                """UPDATE prospects
-                                   SET ai_pitch_draft = %s, subject_line = %s,
-                                       suggested_angle = %s, status = 'drafted'
-                                   WHERE id = %s AND user_id = %s;""",
-                                (pitch_body, subject_line, suggested_angle, lead['id'], owner_id)
-                            )
-                            conn.commit()
-                            success += 1
-                            emit_ui_log(f"✅ [BULK PITCH] Drafted: {business_name}")
-
-                        except Exception as e:
-                            emit_ui_log(f"⚠️ [BULK PITCH] Failed on {business_name}: {e}")
-                            continue
-
-                    emit_ui_log(f"🏁 [BULK PITCH] Complete — {success}/{len(leads)} leads drafted.")
-
-        except Exception as e:
-            emit_ui_log(f"❌ [BULK PITCH CRITICAL ERROR] {e}")
-
-    thread = threading.Thread(target=bulk_pitch_worker)
-    thread.daemon = True
-    thread.start()
-
-    return jsonify({
-        "status": "success",
-        "message": f"Bulk pitch generation started for up to {limit} leads."
-    }), 202
+def csv_safe(value):
+    """Stops spreadsheet apps from running scraped or AI text as a formula."""
+    if not isinstance(value, str) or not value.startswith(CSV_FORMULA_START):
+        return value
+    if PLAIN_NUMBER.fullmatch(value) and any(ch.isdigit() for ch in value):
+        return value
+    return "'" + value
 
 
 @app.route('/api/export', methods=['GET'])
 def export_leads_csv():
-    """
-    Exports all prospects to a downloadable CSV file.
-    Optional query param: ?status=drafted  to filter by status.
-    Sorted by lead_score descending.
+    """Downloads the account's prospects as CSV, best leads first.
+
+    Optional ?status= must be one of EXPORT_STATUSES.
     """
     status_filter = request.args.get('status', '').strip()
+    if status_filter and status_filter not in EXPORT_STATUSES:
+        return jsonify({"status": "error", "code": "invalid_status",
+                        "message": "Choose a valid lead status to export."}), 400
 
     columns = [
         'id', 'business_name', 'category', 'lead_type', 'source_platform',
@@ -1476,69 +1502,85 @@ def export_leads_csv():
             rows = cur.fetchall()
 
     output = io.StringIO()
+    # The BOM makes Excel read the file as UTF-8, so accented names display correctly.
+    output.write('\ufeff')
     writer = csv.DictWriter(output, fieldnames=columns)
     writer.writeheader()
     for row in rows:
-        writer.writerow({k: row.get(k, '') for k in columns})
+        writer.writerow({k: csv_safe(row.get(k, '')) for k in columns})
 
-    output.seek(0)
-    filename = f"leads_{status_filter or 'all'}.csv"
+    filename = f"leads_{status_filter or 'all'}_{datetime.now(timezone.utc):%Y-%m-%d}.csv"
     return Response(
         output.getvalue(),
         mimetype='text/csv',
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
     )
+
+
+from background_jobs import JobGuard, JobUnavailable
+
+WEBSITE_CHECK_COOLDOWN = 60 * 60
+maintenance_jobs = JobGuard({
+    "score-leads": ("Lead scoring", 0),
+    "check-websites": ("Website check", WEBSITE_CHECK_COOLDOWN),
+    "followup-sweep": ("Follow-up check", 0),
+})
+
+
+def start_maintenance_job(job, work, started, cooldown_if=lambda result: True):
+    owner_id = active_user_id()
+
+    def worker():
+        bind_log_user(owner_id)
+        return work(owner_id)
+
+    try:
+        maintenance_jobs.start(owner_id, job, worker, cooldown_if)
+    except JobUnavailable as busy:
+        response = jsonify({"status": "error", "code": busy.code, "message": str(busy),
+                            "jobs": maintenance_jobs.status(owner_id)})
+        if busy.retry_after:
+            response.headers["Retry-After"] = str(busy.retry_after)
+        return response, 409 if busy.code == "job_running" else 429
+    return jsonify({"status": "success", "message": started,
+                    "jobs": maintenance_jobs.status(owner_id)}), 202
+
+
+@app.route('/api/jobs/status', methods=['GET'])
+def maintenance_job_status():
+    return jsonify({"status": "success", "jobs": maintenance_jobs.status(active_user_id())})
 
 
 @app.route('/api/trigger/score-leads', methods=['POST'])
 def trigger_lead_scoring():
     """Runs the lead scoring engine on all unscored prospects."""
-    owner_id = active_user_id()
-
-    def score_worker():
+    def work(owner_id):
         from lead_scorer import run_lead_scoring
-        bind_log_user(owner_id)
-        run_lead_scoring(owner_id)
-
-    thread = threading.Thread(target=score_worker)
-    thread.daemon = True
-    thread.start()
-
-    return jsonify({"status": "success", "message": "Lead scoring pass started."}), 202
+        return run_lead_scoring(owner_id)
+    return start_maintenance_job("score-leads", work, "Lead scoring started.")
 
 
 @app.route('/api/trigger/check-websites', methods=['POST'])
 def trigger_website_checker():
     """Runs Google PageSpeed audit on prospects that have a website but no quality score yet."""
-    owner_id = active_user_id()
-
-    def checker_worker():
+    def work(owner_id):
         from website_checker import run_website_quality_check
-        bind_log_user(owner_id)
-        run_website_quality_check(owner_id)
-
-    thread = threading.Thread(target=checker_worker)
-    thread.daemon = True
-    thread.start()
-
-    return jsonify({"status": "success", "message": "Website quality audit started."}), 202
+        return run_website_quality_check(owner_id)
+    return start_maintenance_job("check-websites", work, "Website quality audit started.",
+                                 cooldown_if=lambda checked: bool(checked))
 
 
 @app.route('/api/trigger/followup-sweep', methods=['POST'])
 def trigger_followup_sweep():
-    """Runs the follow-up scheduler sweep — stages next-in-sequence drafts for overdue leads."""
-    owner_id = active_user_id()
-
-    def sweep_worker():
+    """Runs the follow-up scheduler sweep \u2014 stages next-in-sequence drafts for overdue leads."""
+    def work(owner_id):
         from followup_scheduler import run_followup_sweep
-        bind_log_user(owner_id)
-        run_followup_sweep(owner_id)
-
-    thread = threading.Thread(target=sweep_worker)
-    thread.daemon = True
-    thread.start()
-
-    return jsonify({"status": "success", "message": "Follow-up sweep started."}), 202
+        return run_followup_sweep(owner_id)
+    return start_maintenance_job("followup-sweep", work, "Follow-up check started.")
 
 
 if __name__ == '__main__':

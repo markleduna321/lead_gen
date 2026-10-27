@@ -106,6 +106,12 @@ document.addEventListener('keydown', event => {
     const nativeFetch = window.fetch.bind(window);
     let redirecting = false;
     window.fetch = async function (...args) {
+        const [resource, options] = args;
+        if (typeof resource === 'string' && resource.startsWith('/api/')
+            && options && options.method && options.method.toUpperCase() !== 'GET') {
+            const token = document.querySelector('meta[name="csrf-token"]');
+            if (token) args[1] = {...options, headers: {...options.headers, 'X-CSRF-Token': token.content}};
+        }
         const response = await nativeFetch(...args);
         if (response.status !== 401 || redirecting) return response;
         if (document.body && document.body.dataset.page === 'auth') return response;

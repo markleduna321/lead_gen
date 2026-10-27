@@ -2,6 +2,7 @@ import os
 import sys
 import psycopg2
 from psycopg2.extras import execute_values
+from billing import insert_and_track
 from dotenv import load_dotenv
 from discovery_profiles import canonical_social_profile, load_existing_social_ids
 from discovery_industries import matching_industry_category
@@ -32,8 +33,9 @@ def save_facebook_leads(leads, user_id):
     try:
         with psycopg2.connect(DB_DSN) as conn:
             with conn.cursor() as cur:
-                execute_values(cur, insert_query,
-                               attach_owner(deduplicate_prospect_rows(leads, emit_ui_log), user_id))
+                insert_and_track(cur, insert_query,
+                                 attach_owner(deduplicate_prospect_rows(leads, emit_ui_log), user_id),
+                                 executor=execute_values)
                 conn.commit()
                 emit_ui_log(f"💾 [PostgreSQL] Ingested {len(leads)} target profiles from Facebook organic logs.")
     except Exception as e:

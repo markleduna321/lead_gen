@@ -144,10 +144,10 @@ CREATE TABLE IF NOT EXISTS users (
     display_name VARCHAR(120),
     role VARCHAR(20) NOT NULL DEFAULT 'member',
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    failed_login_count INT NOT NULL DEFAULT 0,
-    locked_until TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    last_login_at TIMESTAMP
+    last_login_at TIMESTAMP,
+    -- Raised to sign out every existing session (password change, sign out everywhere).
+    session_version INTEGER NOT NULL DEFAULT 1
 );
 
 -- SMTP passwords are encrypted (reversible), never hashed: they must be

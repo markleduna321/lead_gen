@@ -148,3 +148,68 @@ test('a failed overview refresh clears previously loaded pipeline values', async
     }
     assert.match(elements.get('overview-recent-prospects').children[0].children[0].textContent, /Data unavailable/);
 });
+
+const PAYLOAD = '<img src=x onerror="globalThis.pwned=1">';
+
+function htmlTrackingContext() {
+    const elements = new Map();
+    const htmlWrites = [];
+    function trackedElement() {
+        const el = mockElement();
+        let html = '';
+        Object.defineProperty(el, 'innerHTML', {
+            get: () => html,
+            set(value) { html = value; if (value) htmlWrites.push(value); }
+        });
+        return el;
+    }
+    const document = {
+        body: { dataset: { page: 'prospects' } },
+        createElement: trackedElement,
+        getElementById(id) {
+            if (!elements.has(id)) elements.set(id, trackedElement());
+            return elements.get(id);
+        },
+        querySelectorAll: () => []
+    };
+    const context = vm.createContext({ document, window: {}, URLSearchParams, console });
+    vm.runInContext(script, context);
+    return { context, elements, htmlWrites };
+}
+
+test('scraped lead fields render as text and never as HTML', () => {
+    const { context, elements, htmlWrites } = htmlTrackingContext();
+    context.lead = { id: 7, business_name: PAYLOAD, category: PAYLOAD, status: PAYLOAD,
+        email: 'a@example.test', lead_score: 80, source_platform: 'google_maps' };
+    vm.runInContext("activeQueueView = 'prospects'; currentLeads = [lead]; renderTable();", context);
+    const cells = elements.get('table-body').children[0].children;
+    assert.equal(cells[0].textContent, PAYLOAD);
+    assert.equal(cells[0].children[0].title, 'Email found');
+    assert.equal(cells[1].textContent, PAYLOAD);
+    assert.equal(cells[3].children[0].textContent, '80');
+    assert.equal(cells[4].textContent, PAYLOAD);
+    assert.ok(htmlWrites.every(value => !value.includes('onerror')), htmlWrites.join('\n'));
+    assert.match(cells[2].innerHTML, /G Maps/);
+});
+
+test('known statuses keep their badge and prototype keys are treated as text', () => {
+    const { context, elements } = htmlTrackingContext();
+    context.leads = [{ id: 1, business_name: 'A', status: 'sent' }, { id: 2, business_name: 'B', status: 'constructor' }];
+    vm.runInContext("activeQueueView = 'prospects'; currentLeads = leads; renderTable();", context);
+    const rows = elements.get('table-body').children;
+    assert.match(rows[0].children[4].innerHTML, />Sent</);
+    assert.equal(rows[1].children[4].textContent, 'constructor');
+});
+
+test('custom business types are added as text and capped at 60 characters', () => {
+    const { context, elements, htmlWrites } = htmlTrackingContext();
+    context.document.getElementById('custom-biz-input').value = `  ${PAYLOAD}${'y'.repeat(80)}  `;
+    context.addCustomBizType();
+    const [checkbox, , text] = elements.get('custom-biz-tags').children[0].children;
+    assert.equal(checkbox.value.length, 60);
+    assert.equal(checkbox.value, `${PAYLOAD}${'y'.repeat(80)}`.slice(0, 60));
+    assert.equal(text.textContent, checkbox.value);
+    assert.equal(checkbox.checked, true);
+    assert.equal(htmlWrites.length, 0);
+    assert.equal(elements.get('custom-biz-input').value, '');
+});

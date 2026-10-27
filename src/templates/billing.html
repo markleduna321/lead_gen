@@ -1,0 +1,63 @@
+{% extends 'base.html' %}
+{% set page = 'billing' %}
+{% set page_title = 'Billing & Plans' %}
+{% set page_eyebrow = 'INVEST IN YOUR NEXT CHAPTER' %}
+{% set page_description = 'Choose your plan, replenish shared credits, and keep every payment in view.' %}
+{% block content %}
+<div id="billing-message" class="queue-notice" role="status" hidden></div>
+<section id="billing-trial-offer" class="panel billing-topup" {% if not billing.can_start_trial %}hidden{% endif %}>
+    <div><h2>Start your free trial</h2><p class="settings-subtitle">7 days, 30 search credits, Google Maps discovery. No payment required.</p><p class="settings-hint">One trial per account and per network. Your trial starts when you select the button.</p></div>
+    <button id="billing-start-trial" type="button" class="primary-button">Start free trial</button>
+</section>
+{% if not billing.ready %}
+<p class="settings-error" role="alert">Payments are not configured yet. Contact support before purchasing. No payment will be taken here.</p>
+{% elif not billing.livemode %}
+<p class="settings-notice">PayMongo test mode. No real money is collected. Test confirmations activate access only in this configured application environment.</p>
+{% endif %}
+<section class="billing-summary panel" aria-label="Current subscription">
+    <div><p class="eyebrow">YOUR CURRENT PLAN</p><h2 id="billing-current-plan">{{ billing.account.plan.name }}</h2><p id="billing-current-balance" class="settings-subtitle">{{ billing.account.balance }} shared search credits available</p></div>
+    <div><span id="billing-current-status" class="settings-badge">{{ 'Active' if billing.account.plan.active else 'Inactive' }}</span><p class="settings-hint">One-time payments. No automatic renewal.</p><p class="settings-hint" id="billing-expiry"></p></div>
+</section>
+<section aria-labelledby="billing-choose-title">
+    <div class="billing-section-heading">
+        <div><p class="eyebrow">A LITTLE MORE POSSIBILITY</p><h2 id="billing-choose-title">Find your next plan.</h2></div>
+        <label class="billing-period" for="billing-months">Billing period<select id="billing-months"><option value="1">Monthly</option><option value="12">Annual · 2 months free</option></select></label>
+    </div>
+    <p class="settings-hint">Pay securely with QR Ph on PayMongo's hosted checkout. Published prices are the checkout totals; we do not add gateway fees. Annual plans receive credits monthly, not all at once.</p>
+    <div class="billing-plan-grid">
+        {% for plan_id, price in prices.items() %}
+        {% set plan = plans[plan_id] %}
+        <article id="buy-{{ plan_id }}" class="billing-plan panel{% if plan_id == 'small_team' %} billing-plan-featured{% endif %}">
+            <div class="billing-plan-title"><h3>{{ plan.name }}</h3>{% if plan_id == 'small_team' %}<span class="settings-badge settings-badge-on">Best value</span>{% endif %}</div>
+            <p class="billing-price" data-price-plan="{{ plan_id }}">&#8369;{{ '{:,.0f}'.format(price[1] / 100) }}<small> / month</small></p>
+            <p class="settings-hint" data-price-note="{{ plan_id }}">One-time monthly payment</p>
+            <ul class="billing-features">
+                <li>{{ '{:,}'.format(plan.credits) }} search credits / month</li>
+                <li>{{ plan.seats }} {{ 'seat' if plan.seats == 1 else 'seats' }}, including owner</li>
+                <li>Up to {{ plan.industries }} industries per submission</li>
+                <li>{{ '{:,}'.format(plan.rollover) }} maximum rollover credits</li>
+                {% if plan_id == 'solo' %}<li>Google Maps and Yelp discovery</li>
+                {% else %}<li>All five local discovery sources</li><li>Hiring discovery: up to {{ plan.hiring_pages }} pages per role</li>{% endif %}
+                {% if plan.custom_services %}<li>Custom hiring services</li>{% endif %}
+            </ul>
+            <button type="button" class="primary-button" data-buy-plan="{{ plan_id }}" disabled>Choose {{ plan.name }}</button>
+        </article>
+        {% endfor %}
+    </div>
+    <p class="settings-hint">Existing paid-plan changes are handled by support; self-service renewals open after expiry. A trial upgrade starts immediately after confirmed payment and replaces unused trial credits. Pending plan purchases pause discovery until completed or cancelled.</p>
+</section>
+<section class="panel billing-topup" aria-labelledby="billing-topup-title">
+    <div><p class="eyebrow">KEEP YOUR MOMENTUM</p><h2 id="billing-topup-title">Add search credits.</h2><p id="billing-topup-description" class="settings-subtitle">Available to active paid account owners.</p><p class="settings-hint">Top-ups go into the shared wallet. Unused top-up credits are subject to your plan's rollover cap at renewal.</p></div>
+    <button id="billing-buy-topup" type="button" class="secondary-button" disabled>Buy credit pack</button>
+</section>
+<section class="panel" aria-labelledby="billing-history-title">
+    <div class="billing-section-heading"><div><p class="eyebrow">EVERY PAYMENT, IN VIEW</p><h2 id="billing-history-title">Purchase history</h2></div><button id="billing-refresh" type="button" class="secondary-button">Refresh history</button></div>
+    <p class="settings-hint">A return from checkout does not prove payment. Access and credits are granted only after PayMongo confirmation. Closing checkout does not cancel a payable order; use Cancel below to expire it safely.</p>
+    <div class="billing-history-scroll"><table class="overview-table billing-history"><thead><tr><th scope="col">Purchase / reference</th><th scope="col">Date</th><th scope="col">Total</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead><tbody id="billing-orders"></tbody></table></div>
+    <p id="billing-empty" class="settings-subtitle" hidden>No purchases yet. Your next chapter starts above.</p>
+    <p class="settings-hint">Showing the latest 25 purchases. For cash refunds, payment disputes, plan changes, or an order marked “Review”, contact support with your order reference. Discovery credit refunds are separate from cash refunds.</p>
+</section>
+<script id="billing-data" type="application/json">{{ billing | tojson }}</script>
+<script id="billing-prices" type="application/json">{{ prices_json | tojson }}</script>
+<script src="{{ url_for('static', filename='billing.js') }}" defer></script>
+{% endblock %}

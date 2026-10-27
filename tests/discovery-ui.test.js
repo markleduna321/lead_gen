@@ -24,7 +24,7 @@ function setup(page = 'prospects') {
         if (!elements.has(id)) {
             const classes = new Set();
             elements.set(id, {
-                value: '', innerText: '', attributes: {}, children: [],
+                value: '', innerText: '', textContent: '', dataset: {}, attributes: {}, children: [],
                 classList: {
                     add: value => classes.add(value),
                     remove: value => classes.delete(value),
@@ -96,6 +96,109 @@ test('one discovery workspace with two search modes', () => {
     assert.equal((html.match(/function toggleDiscoveryModal\(/g) || []).length, 1);
 });
 
+test('Prospects removes bulk pitch drafting while retaining individual drafting and other tools', () => {
+    assert.doesNotMatch(html, /btn-bulk-pitch|bulk-pitch-modal|bulk-pitch-limit|submitBulkPitchRequest|pitch-bulk/);
+    assert.match(html, /id="btn-individual-ai"/);
+    assert.match(html, /id="btn-score-leads"/);
+    assert.match(html, /id="btn-followup-sweep"/);
+    assert.match(html, /href="\/api\/export"/);
+});
+
+test('Locked AI drafts show an upgrade toast built without HTML injection', () => {
+    const source = html.match(/function showUpgradeToast\(message\) \{[\s\S]*?\n        \}/)[0];
+    const created = [];
+    const body = { children: [], appendChild(node) { this.children.push(node); } };
+    const document = {
+        body,
+        createElement(tag) {
+            const node = { tag, attributes: {}, children: [], textContent: '',
+                setAttribute(name, value) { this.attributes[name] = value; },
+                append(...nodes) { this.children.push(...nodes); }, remove() {} };
+            created.push(node);
+            return node;
+        },
+    };
+    const context = { document, setTimeout() {} };
+    vm.runInNewContext(`${source}; showUpgradeToast('<img src=x onerror=alert(1)> Upgrade please');`, context);
+    const [toast] = body.children;
+    const [text, link] = toast.children;
+    assert.equal(text.textContent, '<img src=x onerror=alert(1)> Upgrade please');
+    assert.equal(link.tag, 'a');
+    assert.equal(link.href, '/billing');
+    assert.equal(link.textContent, 'Upgrade');
+    assert.ok(created.every(node => !('innerHTML' in node)));
+    assert.match(html, /data\.code === 'pitch_locked'\) \{\s*showUpgradeToast\(/);
+});
+
+test('Maintenance job buttons stay disabled while the server reports the job running', async () => {
+    const { context, element, timers } = setup();
+    const button = element('btn-score-leads');
+    button.textContent = '  Score leads  ';
+    const toasts = [];
+    const calls = [];
+    let running = true;
+    let reloads = 0;
+    context.showToast = message => toasts.push(message);
+    context.loadQueue = () => { reloads += 1; };
+    context.fetch = async (url, options) => {
+        calls.push({ url, method: options?.method || 'GET' });
+        if (url === '/api/trigger/score-leads') {
+            return { ok: true, json: async () => ({ status: 'success', message: 'Lead scoring started.',
+                jobs: { 'score-leads': { running: true } } }) };
+        }
+        return { ok: true, json: async () => ({ status: 'success', jobs: { 'score-leads': { running } } }) };
+    };
+
+    await context.triggerMaintenanceJob('score-leads');
+    assert.deepEqual(toasts, ['Lead scoring started.']);
+    assert.equal(button.disabled, true);
+    assert.equal(button.textContent, 'Scoring leads…');
+    assert.equal(button.attributes['aria-busy'], 'true');
+    await context.triggerMaintenanceJob('score-leads');
+    assert.equal(calls.length, 1);
+
+    const poll = () => { const [id, handler] = [...timers].pop(); timers.delete(id); return handler(); };
+    await poll();
+    assert.equal(button.disabled, true);
+    assert.equal(reloads, 0);
+    running = false;
+    await poll();
+    assert.equal(button.disabled, false);
+    assert.equal(button.textContent, 'Score leads');
+    assert.equal(button.attributes['aria-busy'], 'false');
+    assert.equal(reloads, 1);
+    assert.deepEqual(calls.map(call => call.url), ['/api/trigger/score-leads', '/api/jobs/status', '/api/jobs/status']);
+});
+
+test('Rejected maintenance jobs show the server reason and re-enable the button', async () => {
+    const { context, element } = setup();
+    const button = element('btn-followup-sweep');
+    button.textContent = 'Check follow-ups';
+    const toasts = [];
+    context.showToast = message => toasts.push(message);
+    context.fetch = async () => ({ ok: false, json: async () => ({ status: 'error', code: 'job_cooldown',
+        message: 'Follow-up check can run again in 5 minutes.', jobs: { 'followup-sweep': { running: false } } }) });
+    await context.triggerMaintenanceJob('followup-sweep');
+    assert.deepEqual(toasts, ['Follow-up check can run again in 5 minutes.']);
+    assert.equal(button.disabled, false);
+    assert.equal(button.textContent, 'Check follow-ups');
+});
+
+test('completed searches preserve credit settlement across the results redirect', () => {
+    const { context, element } = setup();
+    const stored = new Map();
+    context.sessionStorage = {
+        setItem(key, value) { stored.set(key, value); },
+        getItem(key) { return stored.get(key); },
+        removeItem(key) { stored.delete(key); }
+    };
+    context.rememberDiscoveryOutcome(8, [], ' New leads: 0. Search credits charged: 3.00; refunded: 7.00.');
+    context.showDiscoveryOutcome();
+    assert.equal(element('queue-notice').innerText,
+        'Search finished. 8 leads saved. New leads: 0. Search credits charged: 3.00; refunded: 7.00.');
+    assert.equal(stored.size, 0);
+});
+
 test('hiring guidance explains strict targeting without promising global coverage', () => {
     assert.match(html, /blank means no country filter/);
     assert.match(html, /Strict matching excludes unknown locations/);
@@ -103,10 +206,12 @@ test('hiring guidance explains strict targeting without promising global coverag
     assert.doesNotMatch(html, /leave blank for global/);
 });
 
-test('unavailable LinkedIn discovery cannot be selected', () => {
-    assert.match(html, /name="scan-source" value="linkedin" disabled/);
-    assert.match(html, /LinkedIn \(Not available\)/);
-    assert.match(html, /LinkedIn discovery is not integrated yet/);
+test('public LinkedIn company search is selectable and clearly scoped', () => {
+    assert.match(html, /name="scan-source" value="linkedin"[\s>]/);
+    assert.doesNotMatch(html, /name="scan-source" value="linkedin" disabled/);
+    assert.match(html, /LinkedIn Companies/);
+    assert.match(html, /public LinkedIn company pages indexed by Google via Scrapingdog/);
+    assert.match(html, /does not access LinkedIn accounts or private profiles/);
 });
 
 test('prospect details distinguish business websites from social profiles', () => {
@@ -370,13 +475,26 @@ test('local discovery tracks its own run without clearing shared logs', async ()
     assert.equal(context.resultView, 'prospects');
 });
 
+test('LinkedIn-only discovery uses location text and does not require map geocoding', async () => {
+    const { context, checked, requests } = setup();
+    checked['scan-source'] = ['linkedin'];
+    context.geocodeAddressTarget = () => { throw new Error('LinkedIn search should not geocode'); };
+    await context.submitDiscoveryRequest();
+    const payload = JSON.parse(requests[0].options.body);
+    assert.deepEqual(payload.sources, ['linkedin']);
+    assert.equal(payload.location, 'Town');
+    assert.equal('lat' in payload, false);
+    assert.equal('lng' in payload, false);
+    assert.equal('radius_km' in payload, false);
+});
+
 test('unlimited reviews is sent as null and filter scope is explained', async () => {
     const { context, element, requests } = setup();
     element('modal-reviews-max').value = '';
     await context.submitDiscoveryRequest();
     assert.equal(JSON.parse(requests[0].options.body).max_reviews, null);
     assert.match(html, /Stars and review limits apply only to Google Maps and Yelp/);
-    assert.match(html, /Facebook and Instagram leads are included without these filters/);
+    assert.match(html, /Facebook, Instagram, and LinkedIn leads are included without these filters/);
     assert.match(html, /25 or fewer/);
     assert.doesNotMatch(html, /value="99999"|Under 25 Reviews/);
 });
@@ -399,11 +517,11 @@ test('hiring discovery uses only job fields and separate results', async () => {
 test('hiring depth shows a credit budget, preserves selection and sends explicit opt-in', async () => {
     const { context, element, checked, requests } = setup();
     context.setDiscoveryMode('jobs');
-    assert.match(element('job-search-budget').innerText, /Up to 4 Google Jobs requests/);
+    assert.match(element('job-search-budget').innerText, /4 Google Jobs \+ 4 LinkedIn Jobs API requests; 8 total/);
     checked['job-service'] = ['video_editing', 'virtual_assistant'];
     element('job-pages-input').value = '5';
     context.updateHiringSearchBudget();
-    assert.match(element('job-search-budget').innerText, /Up to 40 Google Jobs requests/);
+    assert.match(element('job-search-budget').innerText, /40 Google Jobs \+ 40 LinkedIn Jobs API requests; 80 total/);
     assert.match(element('job-search-budget').innerText, /plus company-contact searches/);
     context.setDiscoveryMode('local');
     context.setDiscoveryMode('jobs');
@@ -456,11 +574,11 @@ test('saved service is selected immediately and drives exact role budget, filter
     assert.equal(label.children[0].checked, true);
     assert.equal(context.hiringServiceLabel(customService.id), 'Bookkeeping');
     context.setDiscoveryMode('jobs');
-    assert.match(element('job-search-budget').innerText, /Up to 6 Google Jobs requests/);
+    assert.match(element('job-search-budget').innerText, /6 Google Jobs \+ 6 LinkedIn Jobs API requests; 12 total/);
     checked['job-service'] = [];
     element('job-pages-input').value = '3';
     context.updateHiringSearchBudget();
-    assert.match(element('job-search-budget').innerText, /Up to 6 Google Jobs requests/);
+    assert.match(element('job-search-budget').innerText, /6 Google Jobs \+ 6 LinkedIn Jobs API requests; 12 total/);
     await context.submitActiveDiscovery();
     assert.deepEqual(JSON.parse(requests[1].options.body), {
         service_types: [customService.id], country: '', pages_per_role: 3

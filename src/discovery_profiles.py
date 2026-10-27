@@ -12,6 +12,20 @@ def canonical_social_profile(source: str, url: str) -> tuple[str, str]:
         "facebook": {"facebook.com", "www.facebook.com", "m.facebook.com", "mbasic.facebook.com"},
         "instagram": {"instagram.com", "www.instagram.com", "m.instagram.com"},
     }
+    if source == "linkedin":
+        if (
+            not host.endswith(".linkedin.com") and host != "linkedin.com"
+        ) or parsed.scheme not in {"http", "https"}:
+            raise ValueError("Expected a LinkedIn company page URL")
+        segments = [segment for segment in parsed.path.split("/") if segment]
+        if (
+            len(segments) != 2 or segments[0].lower() != "company"
+            or not re.fullmatch(r"[A-Za-z0-9._-]+", segments[1])
+        ):
+            raise ValueError("Search result is not a LinkedIn company page")
+        canonical = f"https://www.linkedin.com/company/{segments[1].lower()}"
+        return "ln_serp_" + uuid.uuid5(uuid.NAMESPACE_URL, canonical).hex, canonical
+
     if parsed.scheme not in {"http", "https"} or host not in allowed_hosts.get(source, set()):
         raise ValueError("Expected a supported Facebook or Instagram profile URL")
     path = parsed.path.strip("/").lower()

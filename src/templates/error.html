@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light dark">
+    <meta name="robots" content="noindex">
+    <title>{{ title }} | AsuraTECH</title>
+    <script src="{{ url_for('static', filename='workspace.js') }}"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='home.css') }}">
+</head>
+<body data-page="error" class="home-body">
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    {% include "public_nav.html" %}
+    <main id="main-content" class="plans-main home-container">
+        <section class="plans-intro error-intro" aria-labelledby="error-title">
+            <p class="home-kicker"><span></span> ERROR {{ status }}</p>
+            <h1 id="error-title">{{ title }}</h1>
+            <p>{{ message }}</p>
+            {% if reference %}<p class="error-reference">Reference: <code>{{ reference }}</code></p>{% endif %}
+            <div class="error-actions">
+                {% if signed_in %}
+                <a class="home-button" href="/overview">Back to workspace <span aria-hidden="true">&rarr;</span></a>
+                {% else %}
+                <a class="home-button" href="/">Go to home page <span aria-hidden="true">&rarr;</span></a>
+                <a class="home-sign-in" href="/login">Sign in</a>
+                {% endif %}
+            </div>
+        </section>
+    </main>
+</body>
+</html>

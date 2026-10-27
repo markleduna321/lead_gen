@@ -1,10 +1,11 @@
 import ipaddress
 from datetime import datetime, timezone
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import urlsplit
 
 import requests
 from bs4 import BeautifulSoup
 
+import net_guard
 from discovery_job_filters import normalize_text
 from email_hunter import extract_emails_from_html
 from scrapingdog_client import fetch as scrapingdog_fetch
@@ -55,23 +56,15 @@ def _company_evidence(company: str, text: str) -> bool:
     return len(name) >= 3 and f" {name} " in f" {normalize_text(text)} "
 
 
-def _fetch_page(url: str, host: str):
-    for _ in range(3):
-        response = requests.get(url, timeout=8, allow_redirects=False,
-                                headers={"User-Agent": "Mozilla/5.0"})
-        if response.status_code in {301, 302, 303, 307, 308}:
-            redirected = web_url(urljoin(url, response.headers.get("Location", "")))
-            if not redirected or website_host(redirected) != host:
-                raise ValueError("Website redirected outside the matched host")
-            url = redirected
-            continue
-        if response.status_code in {404, 410}:
-            return None
-        response.raise_for_status()
-        if "html" not in response.headers.get("Content-Type", "").lower():
-            raise ValueError("Company page did not return HTML")
-        return url, BeautifulSoup(response.text, "html.parser")
-    raise ValueError("Too many company-page redirects")
+def _fetch_page(url: str):
+    response = net_guard.safe_get(url, timeout=8, accept_redirect=lambda target: web_url(target) is not None)
+    if response.status_code in {404, 410}:
+        return None
+    if response.status_code >= 400:
+        raise requests.HTTPError(f"{response.status_code} error for {response.url}")
+    if not response.is_html:
+        raise ValueError("Company page did not return HTML")
+    return response.url, BeautifulSoup(response.text, "html.parser")
 
 
 def find_company_contact(company: str, location: str, api_key: str, log) -> dict:
@@ -113,7 +106,7 @@ def find_company_contact(company: str, location: str, api_key: str, log) -> dict
         if len(fetched) > 3:
             break
         try:
-            page = _fetch_page(url, host)
+            page = _fetch_page(url)
             if page is None:
                 log(f"[CONTACT MATCH] Company candidate page unavailable: {url}")
                 continue
@@ -141,7 +134,7 @@ def find_company_contact(company: str, location: str, api_key: str, log) -> dict
             if contact_url == page_url:
                 continue
             try:
-                contact_page = _fetch_page(contact_url, host)
+                contact_page = _fetch_page(contact_url)
                 if contact_page:
                     pages.append(contact_page)
             except (requests.RequestException, ValueError) as error:

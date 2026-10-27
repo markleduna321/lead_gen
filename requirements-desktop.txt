@@ -1,0 +1,4 @@
+# Desktop launcher (app.py) and .exe packaging (build.bat).
+-r requirements.txt
+pywebview==6.2.1
+pyinstaller==6.21.0

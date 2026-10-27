@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;450;500;550;600;650;700&family=Manrope:wght@400;500;600;650;700;750;800&display=swap');
+@import url('vendor/fonts/fonts.css');
 
 :root {
     color-scheme: light;
@@ -69,11 +69,57 @@ h1, h2, h3, .metric-value { font-family: 'Manrope', sans-serif; }
 .side-nav { display: flex; flex-direction: column; gap: 5px; }
 .nav-link { position: relative; display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 14px; border: 0; border-radius: 10px; background: transparent; color: var(--muted); font-size: 13.5px; font-weight: 550; text-align: left; white-space: nowrap; transition: background .15s, color .15s; text-decoration: none; }
 .nav-link svg { flex-shrink: 0; }
+#nav-user-management[hidden], #nav-billing[hidden] { display: none; }
 .nav-link:hover { background: var(--surface-soft); color: var(--text); }
 .nav-link.is-active { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
 .nav-text { min-width: 0; overflow: hidden; transition: opacity .15s; }
-.sidebar-footer { flex-shrink: 0; padding: 14px; border-top: 1px solid var(--border); }
+.sidebar-footer { flex-shrink: 0; max-height: calc(100dvh - 160px); overflow-y: auto; padding: 14px; border-top: 1px solid var(--border); }
 .sidebar-footer form { margin: 0; }
+.credit-card { margin-bottom: 12px; padding: 14px; border: 1px solid var(--border); border-radius: 14px; background: linear-gradient(145deg, var(--accent-soft), var(--surface-soft) 65%); }
+.credit-card-heading, .credit-usage-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.credit-card-label { color: var(--muted); font-size: 9px; font-weight: 750; letter-spacing: 1px; }
+.credit-plan { max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--accent); font-size: 10px; font-weight: 700; }
+.credit-card-balance { display: flex; align-items: center; gap: 10px; margin: 14px 0; }
+#credit-balance { display: block; font: 800 26px/1.2 'Manrope', sans-serif; letter-spacing: -.8px; overflow-wrap: anywhere; }
+.credit-card-caption { display: block; color: var(--muted); font-size: 11px; }
+.credit-ring { width: 40px; height: 40px; flex-shrink: 0; transform: rotate(-90deg); fill: none; stroke-width: 3.5; }
+.credit-ring-track { stroke: var(--border); }
+.credit-ring-value { stroke: var(--accent); stroke-linecap: round; }
+.credit-usage-row { color: var(--muted); font-size: 10px; }
+.credit-usage-row strong { color: var(--text); white-space: nowrap; font-size: 10px; }
+#credit-usage-meter { display: block; appearance: none; width: 100%; height: 5px; margin: 8px 0 10px; overflow: hidden; border: 0; border-radius: 8px; background: var(--border); color: var(--accent); accent-color: var(--accent); }
+#credit-usage-meter::-webkit-progress-bar { background: var(--border); }
+#credit-usage-meter::-webkit-progress-value { background: var(--accent); border-radius: 8px; }
+#credit-usage-meter::-moz-progress-bar { background: var(--accent); border-radius: 8px; }
+.credit-renewal { margin: 0; color: var(--muted); font-size: 10px; }
+.credit-live-status { margin: 4px 0 12px; color: var(--subtle); font-size: 9px; }
+.credit-card[data-state="error"] .credit-live-status { color: var(--danger); }
+.credit-card[data-state="low"] .credit-usage-row strong { color: var(--warning); }
+.credit-plan-link { display: flex; align-items: center; justify-content: space-between; gap: 8px; border-radius: 8px; padding: 8px 12px; background: #137e65; color: #fff; font-size: 11px; font-weight: 700; }
+.credit-plan-link:hover { background: #0d6a54; }
+.billing-summary, .billing-section-heading, .billing-topup, .billing-plan-title { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.billing-summary { margin-bottom: 32px; background: linear-gradient(120deg, var(--accent-soft), var(--surface)); }
+.billing-section-heading { margin: 20px 0 12px; }
+.billing-period { display: grid; gap: 5px; font-size: 11px; color: var(--muted); }
+.billing-period select { padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px; color: var(--text); background: var(--surface); }
+.billing-plan-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 18px; margin: 20px 0; }
+.billing-plan { display: flex; flex-direction: column; min-width: 0; }
+.billing-plan-featured { border-color: var(--accent); }
+.billing-price { margin: 20px 0 0; font: 800 24px/1.5 'Manrope', sans-serif; letter-spacing: -.7px; }
+.billing-price small { font: 400 12px 'DM Sans', sans-serif; letter-spacing: 0; color: var(--muted); }
+.billing-features { flex: 1; padding-left: 18px; margin: 20px 0 24px; color: var(--muted); font-size: 12px; }
+.billing-features li { margin-bottom: 9px; }
+.billing-topup { margin: 26px 0; }
+#billing-trial-offer[hidden] { display: none; }
+.billing-history-scroll { overflow-x: auto; }
+.billing-history td:first-child { min-width: 210px; overflow-wrap: anywhere; }
+.billing-history td:last-child { min-width: 180px; }
+.billing-history .secondary-button { margin: 3px; padding: 7px 10px; font-size: 10px; }
+body[data-page="billing"] button:disabled { opacity: .5; }
+@media (max-width: 1100px) { .billing-plan-grid { grid-template-columns: 1fr; } }
+@media (max-width: 640px) {
+    .billing-summary, .billing-section-heading, .billing-topup { flex-direction: column; align-items: flex-start; }
+}
 .eyebrow { color: var(--accent); font-size: 9px; font-weight: 700; letter-spacing: 1.7px; text-transform: uppercase; }
 .theme-setting { display: flex; align-items: center; gap: 8px; color: var(--subtle); font-size: 11px; }
 .theme-setting select { color: var(--text); background: var(--surface-soft); border: 1px solid var(--border); border-radius: 6px; padding: 4px 5px; font-size: 11px; }
@@ -99,6 +145,16 @@ h1, h2, h3, .metric-value { font-family: 'Manrope', sans-serif; }
 
 /* Collapsed rail (desktop only): icons stay, labels fade out, tooltips on hover. */
 @media (min-width: 901px) {
+    :root[data-sidebar="collapsed"] .credit-card { padding: 8px 0; background: transparent; border: 0; }
+    :root[data-sidebar="collapsed"] .credit-card-heading,
+    :root[data-sidebar="collapsed"] .credit-card-caption,
+    :root[data-sidebar="collapsed"] .credit-usage-row,
+    :root[data-sidebar="collapsed"] #credit-usage-meter,
+    :root[data-sidebar="collapsed"] .credit-renewal,
+    :root[data-sidebar="collapsed"] .credit-live-status,
+    :root[data-sidebar="collapsed"] .credit-plan-link { display: none; }
+    :root[data-sidebar="collapsed"] .credit-card-balance { flex-direction: column; gap: 5px; margin: 0; }
+    :root[data-sidebar="collapsed"] #credit-balance { font: 700 10px/1.4 'DM Sans', sans-serif; letter-spacing: 0; text-align: center; }
     :root[data-sidebar="collapsed"] { --sidebar-width: var(--sidebar-collapsed-width); }
     :root[data-sidebar="collapsed"] .sidebar-header { justify-content: center; padding: 0; cursor: pointer; }
     :root[data-sidebar="collapsed"] .sidebar .brand { gap: 0; }
@@ -293,7 +349,9 @@ body[data-page="discovery"] #discovery-panel-local { grid-template-columns: minm
 }
 @media (max-width: 640px) {
     .page-content { padding: 24px 16px; }
-    .topbar { height: 64px; padding: 0 16px; }
+    .topbar { height: auto; min-height: 64px; padding: 12px 16px; flex-wrap: wrap; gap: 12px; }
+    .topbar-right { flex: 1 1 100%; justify-content: space-between; gap: 12px; }
+    #account-plan-status { min-width: 0; overflow-wrap: anywhere; }
     .workspace-tag, .theme-setting > span { display: none; }
     .page-heading { align-items: flex-start; flex-direction: column; gap: 16px; }
     .page-heading h1 { font-size: 26px; }
@@ -328,6 +386,13 @@ body[data-page="discovery"] #discovery-panel-local { grid-template-columns: minm
 .auth-submit { margin-top: 20px; width: 100%; padding: 12px; font-size: 13px; }
 .auth-switch { text-align: center; color: var(--muted); font-size: 12px; margin: 20px 0 0; }
 .auth-switch a { color: var(--accent); font-weight: 650; }
+.auth-notice { background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); color: var(--accent); border-radius: 9px; padding: 11px 13px; font-size: 12px; font-weight: 550; margin: 0 0 18px; }
+.auth-label-row { display: flex; justify-content: space-between; align-items: baseline; margin-top: 9px; }
+.auth-label-row label { margin-top: 0; }
+.auth-label-row a { color: var(--accent); font-size: 12px; font-weight: 600; }
+.verify-banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); color: var(--text); border-radius: 12px; padding: 12px 16px; margin: 0 0 18px; font-size: 13px; }
+.verify-banner strong { color: var(--accent); }
+.verify-banner .secondary-button { white-space: nowrap; }
 
 /* --- Settings ------------------------------------------------------------- */
 .settings-grid { display: grid; gap: 22px; max-width: 760px; }
@@ -354,7 +419,9 @@ body[data-page="discovery"] #discovery-panel-local { grid-template-columns: minm
 .settings-section { font: 650 13px 'Manrope', sans-serif; margin: 12px 0 0; padding-top: 16px; border-top: 1px solid var(--border); }
 .settings-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
 .settings-danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 35%, transparent); }
-.settings-form button[disabled] { opacity: .55; cursor: progress; }
+.settings-form button[disabled], .settings-card button[disabled] { opacity: .55; cursor: progress; }
+.settings-grid-follow { margin-top: 22px; }
+.settings-card > .settings-section { margin-top: 22px; margin-bottom: 4px; }
 @media (max-width: 640px) { .settings-row-split { grid-template-columns: 1fr; } }
 
 /* --- Discovery outcome banner --------------------------------------------- */

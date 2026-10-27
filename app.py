@@ -24,6 +24,10 @@ else:
 SRC_DIR = os.path.join(BASE_DIR, 'src')
 sys.path.insert(0, SRC_DIR)
 
+# The desktop app serves 127.0.0.1 over plain HTTP; without this, an unset
+# APP_ENV would apply production rules (Secure cookies, mandatory secret key).
+os.environ['APP_ENV'] = 'desktop'
+
 import webview
 import requests as _req  # alias to avoid shadowing Flask's internal imports
 

@@ -11,7 +11,10 @@ from dotenv import load_dotenv
 from discovery_job_filters import matches_hiring_country, matches_hiring_role, resolve_hiring_country
 from discovery_job_contacts import find_company_contact, web_url
 from hiring_services import BUILTIN_SERVICES, JOB_SIGNAL_MAP, HiringService, matches_service_title
-from scrapingdog_client import fetch as scrapingdog_fetch
+from scrapingdog_client import (
+    SCRAPINGDOG_LINKEDIN_JOBS_ENDPOINT,
+    fetch as scrapingdog_fetch,
+)
 serpapi_fetch = scrapingdog_fetch
 
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -38,6 +41,46 @@ def enrich_company_contact(company_name: str, location: str) -> dict:
     except (requests.RequestException, ValueError, RuntimeError) as error:
         emit_ui_log(f"[ENRICHMENT ERROR] Company lookup failed for '{company_name}': {error}")
         raise
+
+
+def fetch_linkedin_jobs(role: str, country: str, page: int, log):
+    params = {
+        "api_key": SERPAPI_KEY,
+        "field": role,
+        "page": page,
+    }
+    if country:
+        params["location"] = country
+    return scrapingdog_fetch(
+        params,
+        timeout=30,
+        log=log,
+        label=f"LinkedIn Jobs '{role}' page {page}",
+        endpoint=SCRAPINGDOG_LINKEDIN_JOBS_ENDPOINT,
+    )
+
+
+def normalize_linkedin_job(job: dict) -> dict:
+    """Map Scrapingdog LinkedIn Jobs fields to the shared posting model."""
+    title = job.get("job_position") or job.get("title")
+    company = job.get("company_name")
+    location = job.get("job_location") or job.get("location")
+    description = job.get("job_description") or job.get("description")
+    posting_date = job.get("job_posting_date") or job.get("posted_date")
+    job_link = job.get("job_link") or job.get("job_url")
+    normalized = {
+        "title": title,
+        "company_name": company,
+        "location": location,
+        "description": description,
+        "via": "LinkedIn",
+        "job_id": job.get("job_id"),
+        "share_link": job_link,
+        "company_profile": job.get("company_profile") or job.get("company_url"),
+        "detected_extensions": {"posted_at": posting_date} if posting_date else {},
+        "apply_options": [{"title": "LinkedIn", "link": job_link}] if job_link else [],
+    }
+    return normalized
 
 
 def normalize_job_identity_part(value: str) -> str:
@@ -102,6 +145,7 @@ def deduplicate_job_leads(leads):
 
 
 def save_job_leads(leads, user_id):
+    from billing import insert_and_track
     from control_gate_api import emit_ui_log
     if user_id is None:
         raise ValueError("Job leads must belong to a signed-in account.")
@@ -168,7 +212,7 @@ def save_job_leads(leads, user_id):
     try:
         with psycopg2.connect(DB_DSN) as conn:
             with conn.cursor() as cur:
-                execute_values(cur, insert_query, data_tuples)
+                insert_and_track(cur, insert_query, data_tuples, executor=execute_values)
                 conn.commit()
                 emit_ui_log(f"💾 [PostgreSQL] Saved {len(data_tuples)} job board leads to job_leads table.")
     except Exception as e:
@@ -180,9 +224,8 @@ def save_job_leads(leads, user_id):
 
 def run_job_discovery(service_type, country="", pages_per_role=1, service_definition: HiringService | None = None, user_id=None):
     """
-    Scans Google Jobs via SerpApi to find companies actively hiring for roles
-    that signal they need outsourcing — video editing, BPO, VA, social media, etc.
-    A company posting these jobs is a warm international outsourcing prospect.
+    Combines Scrapingdog Google Jobs and LinkedIn Jobs results to find companies
+    actively hiring for roles that signal they need outsourcing.
     """
     from control_gate_api import emit_ui_log
 
@@ -207,7 +250,52 @@ def run_job_discovery(service_type, country="", pages_per_role=1, service_defini
         emit_ui_log("[JOB TARGETING] No country filter. Provider defaults may bias results; this is not a worldwide search.")
     all_leads = []
     errors = []
-    emit_ui_log(f"[JOB DEPTH] Up to {pages_per_role} page(s) per role / {len(job_roles) * pages_per_role} Google Jobs requests for this service; contact searches are additional.")
+    successful_pages = 0
+    per_provider_requests = len(job_roles) * pages_per_role
+    emit_ui_log(
+        f"[JOB DEPTH] Up to {pages_per_role} page(s) per role: "
+        f"{per_provider_requests} Google Jobs + {per_provider_requests} LinkedIn Jobs "
+        f"requests for this service; company contact searches are additional."
+    )
+
+    def capture_postings(postings, role, page_number, provider):
+        captured = 0
+        for posting in postings:
+            try:
+                if provider == "linkedin_jobs":
+                    posting = normalize_linkedin_job(posting)
+                lead = parse_job_posting(posting, service_type, role)
+            except (ValueError, TypeError, AttributeError) as error:
+                message = f"{provider}, {role}, page {page_number}: malformed posting ({error})"
+                errors.append(message)
+                emit_ui_log(f"[JOB DATA ERROR] {message}")
+                continue
+            relevant = (
+                matches_hiring_role(lead["job_title"], service_type) if service.builtin
+                else matches_service_title(lead["job_title"], service)
+            )
+            if not relevant:
+                emit_ui_log(f"[JOB TARGETING] Skipped '{lead['job_title']}': no title evidence for {service_type}.")
+                continue
+            if not matches_hiring_country(lead["location"], target_country):
+                emit_ui_log(f"[JOB TARGETING] Skipped '{lead['company_name']}' at '{lead['location']}': country mismatch or unknown eligibility.")
+                continue
+            provider_name = "LinkedIn Jobs" if provider == "linkedin_jobs" else "Google Jobs"
+            lead["job_details"]["search_providers"] = [provider_name]
+            if provider == "linkedin_jobs":
+                lead["job_details"]["linkedin_company_profile"] = (
+                    posting.get("company_profile") or posting.get("company_url")
+                )
+                lead["job_details"] = {
+                    key: value for key, value in lead["job_details"].items()
+                    if value not in (None, "")
+                }
+            all_leads.append(lead)
+            captured += 1
+        emit_ui_log(
+            f"  [{provider}, {role}, page {page_number}] Captured {captured} "
+            f"valid postings from {len(postings)} results before deduplication."
+        )
 
     for role in job_roles:
         query = f"{role} {target_country.name}" if target_country else role
@@ -237,30 +325,9 @@ def run_job_discovery(service_type, country="", pages_per_role=1, service_defini
                 jobs = data.get("jobs_results", [])
                 if not isinstance(jobs, list):
                     raise ValueError("Invalid Google Jobs results list")
+                successful_pages += 1
 
-                captured = 0
-                for job in jobs:
-                    try:
-                        lead = parse_job_posting(job, service_type, role)
-                    except (ValueError, TypeError, AttributeError) as error:
-                        message = f"{role}, page {page_number}: malformed posting ({error})"
-                        errors.append(message)
-                        emit_ui_log(f"[JOB DATA ERROR] {message}")
-                        continue
-                    relevant = (
-                        matches_hiring_role(lead["job_title"], service_type) if service.builtin
-                        else matches_service_title(lead["job_title"], service)
-                    )
-                    if not relevant:
-                        emit_ui_log(f"[JOB TARGETING] Skipped '{lead['job_title']}': no title evidence for {service_type}.")
-                        continue
-                    if not matches_hiring_country(lead["location"], target_country):
-                        emit_ui_log(f"[JOB TARGETING] Skipped '{lead['company_name']}' at '{lead['location']}': country mismatch or unknown eligibility.")
-                        continue
-                    all_leads.append(lead)
-                    captured += 1
-
-                emit_ui_log(f"  [{role}, page {page_number}] Captured {captured} valid postings from {len(jobs)} results before deduplication.")
+                capture_postings(jobs, role, page_number, "google_jobs")
                 if page_number == pages_per_role:
                     break
                 if "serpapi_pagination" in data and not isinstance(data["serpapi_pagination"], dict):
@@ -281,8 +348,42 @@ def run_job_discovery(service_type, country="", pages_per_role=1, service_defini
             emit_ui_log(f"❌ [JOB ENGINE ERROR] Query '{role}', page {page_number} failed: {e}")
             errors.append(f"{role}, page {page_number}: {e}")
 
+        for page_number in range(1, pages_per_role + 1):
+            try:
+                emit_ui_log(f"[LINKEDIN JOB PAGE] {role}: page {page_number}/{pages_per_role}")
+                response = fetch_linkedin_jobs(
+                    role, target_country.name if target_country else "", page_number, emit_ui_log
+                )
+                data = response.json()
+                if isinstance(data, list):
+                    jobs = data
+                elif isinstance(data, dict):
+                    if data.get("error"):
+                        raise RuntimeError(str(data["error"]))
+                    jobs = (
+                        data.get("jobs_results") or data.get("job_results")
+                        or data.get("jobs") or data.get("results") or data.get("data") or []
+                    )
+                else:
+                    raise ValueError("Invalid LinkedIn Jobs response")
+                if not isinstance(jobs, list):
+                    raise ValueError("Invalid LinkedIn Jobs results list")
+                successful_pages += 1
+                capture_postings(jobs, role, page_number, "linkedin_jobs")
+                if not jobs:
+                    emit_ui_log(f"[LINKEDIN JOB PAGE] {role}: no results on page {page_number}; search finished.")
+                    break
+            except Exception as error:
+                message = f"LinkedIn Jobs, {role}, page {page_number}: {error}"
+                errors.append(message)
+                emit_ui_log(f"❌ [LINKEDIN JOB ENGINE ERROR] {message}")
+                break
+
     if not all_leads:
         if errors:
+            if successful_pages:
+                from discovery_runs import DiscoveryPartialSuccess
+                raise DiscoveryPartialSuccess(errors, saved=0)
             raise RuntimeError(" | ".join(errors))
         emit_ui_log("[JOB ENGINE] No matching companies returned.")
         return 0

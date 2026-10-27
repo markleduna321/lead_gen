@@ -4,12 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="color-scheme" content="light dark">
-    <title>{{ 'Create your account' if mode == 'register' else 'Sign in' }} | AsuraTECH</title>
+    {% set titles = {'register': 'Create your account', 'forgot': 'Reset your password', 'reset': 'Choose a new password'} %}
+    <title>{{ titles.get(mode, 'Sign in') }} | AsuraTECH</title>
     <script src="{{ url_for('static', filename='workspace.js') }}"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="{{ url_for('static', filename='vendor/tailwindcss-browser-4.3.3/tailwind.js') }}"></script>
     <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+    {% if mode == 'reset' %}<script src="{{ url_for('static', filename='account_email.js') }}" defer></script>{% endif %}
 </head>
-<body data-page="auth" class="auth-body">
+<body data-page="auth" data-auth-mode="{{ mode }}" class="auth-body">
     <main class="auth-shell" id="main-content">
         <section class="auth-card">
             <a class="brand" href="/"><span class="brand-mark">A<span>.</span></span><span>AsuraTECH<small>LEAD WORKSPACE</small></span></a>
@@ -17,6 +19,12 @@
             {% if mode == 'register' %}
             <h1>Create your account</h1>
             <p class="auth-subtitle">Your leads, searches, and outreach stay private to you.</p>
+            {% elif mode == 'forgot' %}
+            <h1>Reset your password</h1>
+            <p class="auth-subtitle">Enter your account email and we'll send you a link to choose a new password.</p>
+            {% elif mode == 'reset' %}
+            <h1>Choose a new password</h1>
+            <p class="auth-subtitle">Resetting signs you out on every device.</p>
             {% else %}
             <h1>Welcome back</h1>
             <p class="auth-subtitle">Sign in to reach your lead workspace.</p>
@@ -25,9 +33,19 @@
             {% if error %}
             <p class="auth-error" role="alert">{{ error }}</p>
             {% endif %}
+            {% if notice %}
+            <p class="auth-notice" role="status">{{ notice }}</p>
+            {% endif %}
+            {% if mode == 'reset' %}
+            <p id="auth-link-error" class="auth-error" role="alert" hidden>Open the reset link from your email to continue, or <a href="{{ url_for('account.forgot_password') }}">request a new one</a>.</p>
+            {% endif %}
 
+            {% if not sent %}
             <form method="post" class="auth-form" autocomplete="on">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                {% if mode in ('login', 'register') %}
                 <input type="hidden" name="next" value="{{ next or '/' }}">
+                {% endif %}
 
                 {% if mode == 'register' %}
                 <label for="display_name">Your name <span class="auth-optional">(optional)</span></label>
@@ -35,14 +53,30 @@
                        autocomplete="name" value="{{ display_name or '' }}">
                 {% endif %}
 
+                {% if mode == 'reset' %}
+                <input type="hidden" id="reset-token" name="token" value="{{ token or '' }}">
+                <label for="password">New password</label>
+                <input id="password" name="password" type="password" required minlength="10"
+                       autocomplete="new-password" aria-describedby="password-hint" autofocus>
+                <small id="password-hint" class="auth-hint">Use at least 10 characters.</small>
+                <label for="confirm_password">Confirm new password</label>
+                <input id="confirm_password" name="confirm_password" type="password" required
+                       minlength="10" autocomplete="new-password">
+                {% else %}
                 <label for="email">Email address</label>
                 <input id="email" name="email" type="email" required maxlength="255"
                        autocomplete="email" value="{{ email or '' }}" autofocus>
+                {% endif %}
 
-                <label for="password">Password</label>
+                {% if mode in ('login', 'register') %}
+                <div class="auth-label-row">
+                    <label for="password">Password</label>
+                    {% if mode == 'login' %}<a href="{{ url_for('account.forgot_password') }}">Forgot password?</a>{% endif %}
+                </div>
                 <input id="password" name="password" type="password" required
                        autocomplete="{{ 'new-password' if mode == 'register' else 'current-password' }}"
                        {% if mode == 'register' %}minlength="10" aria-describedby="password-hint"{% endif %}>
+                {% endif %}
                 {% if mode == 'register' %}
                 <small id="password-hint" class="auth-hint">Use at least 10 characters.</small>
 
@@ -52,13 +86,16 @@
                 {% endif %}
 
                 <button type="submit" class="primary-button auth-submit">
-                    {{ 'Create account' if mode == 'register' else 'Sign in' }}
+                    {{ {'register': 'Create account', 'forgot': 'Send reset link', 'reset': 'Reset password'}.get(mode, 'Sign in') }}
                 </button>
             </form>
+            {% endif %}
 
             <p class="auth-switch">
                 {% if mode == 'register' %}
                 Already have an account? <a href="{{ url_for('sign_in') }}">Sign in</a>
+                {% elif mode in ('forgot', 'reset') %}
+                Remembered it? <a href="{{ url_for('sign_in') }}">Back to sign in</a>
                 {% else %}
                 New here? <a href="{{ url_for('register') }}">Create an account</a>
                 {% endif %}

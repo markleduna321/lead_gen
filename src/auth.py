@@ -2,13 +2,16 @@
 
 Passwords are hashed with Werkzeug (scrypt by default) and never stored or
 logged in clear text. Sign-in failures are deliberately indistinguishable from
-unknown-email failures so the form cannot be used to enumerate accounts.
+unknown-email failures, and sign-up conflicts use a message that does not
+confirm the address is registered.
+Repeated failures are throttled per email and network by the sign-in route
+(see rate_limit.py), never by locking the account itself.
 """
 
 import functools
 import re
 import unicodedata
-from datetime import datetime, timedelta, timezone
+from urllib.parse import urlsplit
 
 import psycopg2
 from flask import jsonify, redirect, request, session, url_for
@@ -16,19 +19,27 @@ from psycopg2.extras import RealDictCursor
 from werkzeug.security import check_password_hash, generate_password_hash
 
 SESSION_USER_KEY = "user_id"
-MAX_FAILED_LOGINS = 8
-LOCKOUT_MINUTES = 15
+# Raising users.session_version signs out every session issued before it.
+SESSION_VERSION_KEY = "session_version"
 MIN_PASSWORD_LENGTH = 10
 MAX_PASSWORD_LENGTH = 200
 
 # Paths reachable without a session. Everything else requires sign-in.
 PUBLIC_ENDPOINTS = frozenset({
     "home", "plans", "sign_in", "register", "static", "silence_favicon", "silence_chrome_devtools",
+    "csp_report",
+    "account.verify_email_page", "account.verify_email",
+    "account.forgot_password", "account.reset_password",
+    "teams.invitation_landing",
+    "purchases.paymongo_webhook",
 })
 
 _EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s.]+(\.[^@\s.]+)+$")
 
 GENERIC_SIGN_IN_ERROR = "That email and password combination is not recognized."
+# Deliberately does not say whether the address is registered.
+REGISTRATION_CONFLICT_ERROR = ("We couldn't create an account with that email. "
+                               "If it's yours, sign in or reset your password.")
 
 
 class AuthError(ValueError):
@@ -71,7 +82,9 @@ def validate_display_name(value: object) -> str | None:
     return cleaned or None
 
 
-def create_user(dsn: str, email: object, password: object, display_name: object = None) -> dict:
+def create_user(dsn: str, email: object, password: object, display_name: object = None,
+                network_hash: str | None = None) -> dict:
+    """Creates an unverified account. The free trial starts at email verification."""
     address = normalize_email(email)
     secret = validate_password(password)
     name = validate_display_name(display_name)
@@ -80,26 +93,24 @@ def create_user(dsn: str, email: object, password: object, display_name: object 
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    INSERT INTO users (email, email_key, password_hash, display_name)
-                    VALUES (%s, %s, %s, %s)
-                    RETURNING id, email, display_name, role;
+                    INSERT INTO users (email, email_key, password_hash, display_name, signup_network_hash)
+                    VALUES (%s, %s, %s, %s, %s)
+                    ON CONFLICT DO NOTHING
+                    RETURNING id, email, display_name, role, session_version;
                     """,
-                    (address, address.casefold(), generate_password_hash(secret), name),
+                    (address, address.casefold(), generate_password_hash(secret), name, network_hash),
                 )
                 created = cur.fetchone()
+                # A duplicate is handled without a database error, so the server
+                # never logs the failed statement (which carries the password hash).
+                if created is None:
+                    raise AuthError(REGISTRATION_CONFLICT_ERROR)
+                from billing import lock_wallet
+                lock_wallet(cur, created["id"])
             conn.commit()
     except psycopg2.errors.UniqueViolation as error:
-        raise AuthError("An account already exists for that email address.") from error
+        raise AuthError(REGISTRATION_CONFLICT_ERROR) from error
     return dict(created)
-
-
-def _lockout_remaining(locked_until) -> int:
-    if locked_until is None:
-        return 0
-    if locked_until.tzinfo is None:
-        locked_until = locked_until.replace(tzinfo=timezone.utc)
-    remaining = (locked_until - datetime.now(timezone.utc)).total_seconds()
-    return max(0, int(remaining // 60) + 1) if remaining > 0 else 0
 
 
 def authenticate(dsn: str, email: object, password: object) -> dict:
@@ -115,8 +126,7 @@ def authenticate(dsn: str, email: object, password: object) -> dict:
     with psycopg2.connect(dsn, cursor_factory=RealDictCursor) as conn:
         with conn.cursor() as cur:
             cur.execute(
-                """SELECT id, email, display_name, role, is_active, password_hash,
-                          failed_login_count, locked_until
+                """SELECT id, email, display_name, role, is_active, password_hash, session_version
                    FROM users WHERE email_key = %s;""",
                 (key,),
             )
@@ -127,37 +137,18 @@ def authenticate(dsn: str, email: object, password: object) -> dict:
                 check_password_hash(generate_password_hash("placeholder"), password)
                 raise AuthError(GENERIC_SIGN_IN_ERROR)
 
-            minutes = _lockout_remaining(user["locked_until"])
-            if minutes:
-                raise AuthError(
-                    f"Too many failed attempts. Try again in {minutes} minute(s)."
-                )
-
             if not check_password_hash(user["password_hash"], password):
-                attempts = user["failed_login_count"] + 1
-                locked = (
-                    datetime.now(timezone.utc) + timedelta(minutes=LOCKOUT_MINUTES)
-                    if attempts >= MAX_FAILED_LOGINS else None
-                )
-                cur.execute(
-                    "UPDATE users SET failed_login_count = %s, locked_until = %s WHERE id = %s;",
-                    (attempts, locked, user["id"]),
-                )
-                conn.commit()
                 raise AuthError(GENERIC_SIGN_IN_ERROR)
 
             if not user["is_active"]:
                 raise AuthError("That account has been deactivated.")
 
-            cur.execute(
-                """UPDATE users SET failed_login_count = 0, locked_until = NULL,
-                       last_login_at = NOW() WHERE id = %s;""",
-                (user["id"],),
-            )
+            cur.execute("UPDATE users SET last_login_at = NOW() WHERE id = %s;", (user["id"],))
         conn.commit()
     return {
         "id": user["id"], "email": user["email"],
         "display_name": user["display_name"], "role": user["role"],
+        "session_version": user["session_version"],
     }
 
 
@@ -167,7 +158,8 @@ def load_user(dsn: str, user_id: object) -> dict | None:
     with psycopg2.connect(dsn, cursor_factory=RealDictCursor) as conn:
         with conn.cursor() as cur:
             cur.execute(
-                """SELECT id, email, display_name, role FROM users
+                """SELECT id, email, display_name, role, session_version,
+                          email_verified_at IS NOT NULL AS email_verified FROM users
                    WHERE id = %s AND is_active;""",
                 (user_id,),
             )
@@ -175,10 +167,63 @@ def load_user(dsn: str, user_id: object) -> dict | None:
     return dict(user) if user else None
 
 
+def change_password(dsn: str, user_id: int, current: object, new: object, confirm: object) -> int:
+    """Replaces the password and returns the new session version.
+
+    Raising the version signs out every other session; the caller moves the
+    current session to the new version so this browser stays signed in.
+    """
+    if not isinstance(current, str) or not current:
+        raise AuthError("Enter your current password.")
+    secret = validate_password(new)
+    if new != confirm:
+        raise AuthError("Both new passwords must match.")
+    if new == current:
+        raise AuthError("Choose a password you are not already using.")
+    with psycopg2.connect(dsn, cursor_factory=RealDictCursor) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT password_hash FROM users WHERE id = %s AND is_active FOR UPDATE;",
+                        (user_id,))
+            user = cur.fetchone()
+            if user is None or not check_password_hash(user["password_hash"], current):
+                raise AuthError("Your current password is not correct.")
+            cur.execute(
+                """UPDATE users SET password_hash = %s, session_version = session_version + 1
+                   WHERE id = %s RETURNING session_version;""",
+                (generate_password_hash(secret), user_id),
+            )
+            version = cur.fetchone()["session_version"]
+        conn.commit()
+    return version
+
+
+def end_all_sessions(dsn: str, user_id: int) -> None:
+    with psycopg2.connect(dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE users SET session_version = session_version + 1 WHERE id = %s;",
+                        (user_id,))
+        conn.commit()
+
+
 def sign_in_session(user: dict) -> None:
     session.clear()
     session[SESSION_USER_KEY] = user["id"]
+    session[SESSION_VERSION_KEY] = user.get("session_version", 1)
     session.permanent = True
+
+
+def session_is_current(user: dict) -> bool:
+    """False once the account's sessions were revoked after this one began."""
+    version = user.get("session_version", 1)
+    stored = session.get(SESSION_VERSION_KEY)
+    if stored is None:
+        # Sessions issued before versioning existed are adopted, but only while
+        # the account has never revoked sessions; afterwards they predate it.
+        if version != 1:
+            return False
+        session[SESSION_VERSION_KEY] = version
+        return True
+    return stored == version
 
 
 def sign_out_session() -> None:
@@ -221,6 +266,12 @@ def safe_redirect_target(value: object, fallback: str = "/") -> str:
     """Only allow same-site relative paths, blocking open-redirect attempts."""
     if not isinstance(value, str) or not value.startswith("/") or value.startswith("//"):
         return fallback
-    if any(character.isspace() or ord(character) < 32 for character in value):
+    if any(character.isspace() or ord(character) < 32 or ord(character) == 127 for character in value):
+        return fallback
+    # Browsers read "\" as "/", so "/\evil.test" would be protocol-relative.
+    if "\\" in value or "%5c" in value.lower():
+        return fallback
+    parts = urlsplit(value)
+    if parts.scheme or parts.netloc:
         return fallback
     return value

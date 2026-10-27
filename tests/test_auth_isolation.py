@@ -21,10 +21,15 @@ class AuthCredentialTests(unittest.TestCase):
         cursor = database.__enter__.return_value.cursor.return_value.__enter__.return_value
         cursor.fetchone.return_value = {"id": 7, "email": "QA@Example.test",
                                         "display_name": None, "role": "member"}
-        with patch("psycopg2.connect", return_value=database):
-            auth.create_user("qa-only", "QA@Example.test", "correct-horse-battery")
+        with (patch("psycopg2.connect", return_value=database),
+              patch("billing.lock_wallet", return_value={"id": 8}) as wallet,
+              patch("billing.activate_wallet") as activate):
+            auth.create_user("qa-only", "QA@Example.test", "correct-horse-battery", network_hash="net")
+        wallet.assert_called_once_with(cursor, 7)
+        activate.assert_not_called()  # The trial starts at email verification.
         _, params = cursor.execute.call_args.args
-        address, key, stored_hash, _name = params
+        address, key, stored_hash, _name, network = params
+        self.assertEqual(network, "net")
         self.assertEqual(key, "qa@example.test", "email_key must be normalized for lookup")
         self.assertEqual(address, "QA@Example.test", "display casing is preserved")
         self.assertNotIn("correct-horse-battery", stored_hash)
@@ -52,7 +57,6 @@ class AuthCredentialTests(unittest.TestCase):
         cursor.fetchone.return_value = {
             "id": 1, "email": "qa@example.test", "display_name": None, "role": "member",
             "is_active": True, "password_hash": generate_password_hash("the-real-password"),
-            "failed_login_count": 0, "locked_until": None,
         }
         with patch("psycopg2.connect", return_value=database):
             with self.assertRaises(auth.AuthError) as wrong:
@@ -66,36 +70,47 @@ class AuthCredentialTests(unittest.TestCase):
                 auth.authenticate("qa-only", "not-an-email", "correct-horse-battery")
         self.assertEqual(str(malformed.exception), auth.GENERIC_SIGN_IN_ERROR)
 
-    def test_repeated_failures_lock_the_account(self):
+    def test_failed_passwords_never_lock_the_account_itself(self):
+        """Throttling is per email and network (rate_limit), so nobody can lock a real user out."""
         from werkzeug.security import generate_password_hash
         database = MagicMock()
         cursor = database.__enter__.return_value.cursor.return_value.__enter__.return_value
         cursor.fetchone.return_value = {
             "id": 1, "email": "qa@example.test", "display_name": None, "role": "member",
             "is_active": True, "password_hash": generate_password_hash("the-real-password"),
-            "failed_login_count": auth.MAX_FAILED_LOGINS - 1, "locked_until": None,
+            "session_version": 1,
         }
         with patch("psycopg2.connect", return_value=database):
-            with self.assertRaises(auth.AuthError):
-                auth.authenticate("qa-only", "qa@example.test", "a-wrong-password")
-        update = [call for call in cursor.execute.call_args_list
-                  if "failed_login_count = %s" in call.args[0]]
-        self.assertTrue(update, "the failed attempt must be recorded")
-        self.assertIsNotNone(update[-1].args[1][1], "the account must be locked out")
+            for _ in range(20):
+                with self.assertRaises(auth.AuthError) as wrong:
+                    auth.authenticate("qa-only", "qa@example.test", "a-wrong-password")
+                self.assertEqual(str(wrong.exception), auth.GENERIC_SIGN_IN_ERROR)
+            user = auth.authenticate("qa-only", "qa@example.test", "the-real-password")
+        self.assertEqual(user["id"], 1)
+        writes = [call.args[0] for call in cursor.execute.call_args_list if "UPDATE" in call.args[0]]
+        self.assertEqual(len(writes), 1, "only the successful sign-in is recorded")
+        self.assertNotIn("locked_until", writes[0])
 
     def test_redirect_targets_cannot_leave_the_site(self):
         for hostile in ["https://evil.test", "//evil.test", "http://evil.test/x",
-                        "/\n/evil.test", None, 7, "javascript:alert(1)"]:
+                        "/\n/evil.test", None, 7, "javascript:alert(1)",
+                        "/\\evil.test", "\\\\evil.test", "/\\/evil.test", "/%5Cevil.test",
+                        "/%5cevil.test", "/x\\y", "/\tevil.test", "/\x7f/evil.test",
+                        "https:evil.test", "/ /evil.test", ""]:
             with self.subTest(hostile=hostile):
                 self.assertEqual(auth.safe_redirect_target(hostile), "/")
-        self.assertEqual(auth.safe_redirect_target("/job-leads"), "/job-leads")
+        for safe in ["/job-leads", "/prospects?page=2&sort=score", "/billing#plans",
+                     "/teams/invite?token=abc%2Fdef"]:
+            with self.subTest(safe=safe):
+                self.assertEqual(auth.safe_redirect_target(safe), safe)
+        self.assertEqual(auth.safe_redirect_target("/\\evil.test", "/prospects"), "/prospects")
 
 
 class RouteGuardTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         with (
-            patch.dict(os.environ, {}, clear=True),
+            patch.dict(os.environ, {"APP_ENV": "local"}, clear=True),
             patch("dotenv.load_dotenv"),
             patch("psycopg2.connect", side_effect=AssertionError("Live database access is forbidden")),
             contextlib.redirect_stderr(io.StringIO()),

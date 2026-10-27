@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light dark">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>Verify your email | AsuraTECH</title>
+    <script src="{{ url_for('static', filename='workspace.js') }}"></script>
+    <script src="{{ url_for('static', filename='vendor/tailwindcss-browser-4.3.3/tailwind.js') }}"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+    <script src="{{ url_for('static', filename='account_email.js') }}" defer></script>
+</head>
+<body data-page="verify-email" class="auth-body">
+    <main class="auth-shell" id="main-content">
+        <section class="auth-card">
+            <a class="brand" href="/"><span class="brand-mark">A<span>.</span></span><span>AsuraTECH<small>LEAD WORKSPACE</small></span></a>
+            <h1>Verify your email</h1>
+            <p id="verify-status" class="auth-subtitle" role="status" aria-live="polite">Checking your link...</p>
+            <p id="verify-error" class="auth-error" role="alert" hidden></p>
+            <a id="verify-continue" class="primary-button auth-submit" href="/" hidden>Go to your workspace</a>
+            <p class="auth-switch"><a href="{{ url_for('sign_in') }}">Sign in</a></p>
+        </section>
+    </main>
+</body>
+</html>

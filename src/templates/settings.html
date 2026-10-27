@@ -27,7 +27,11 @@
                 </div>
                 <div>
                     <label for="smtp-port">Port</label>
-                    <input id="smtp-port" name="smtp_port" type="number" min="1" max="65535" value="587">
+                    <select id="smtp-port" name="smtp_port">
+                        <option value="587" selected>587</option>
+                        <option value="465">465</option>
+                        <option value="2525">2525</option>
+                    </select>
                 </div>
             </div>
             <div class="settings-row">
@@ -83,3 +87,49 @@
         </form>
     </div>
 </section>
+
+<section class="settings-grid settings-grid-follow" aria-labelledby="account-security-title">
+    <div class="settings-card">
+        <div class="settings-heading">
+            <div>
+                <h2 id="account-security-title">Account security</h2>
+                <p class="settings-subtitle">Change your password or sign out every device that uses this account.</p>
+            </div>
+        </div>
+
+        <p id="account-security-error" role="alert" class="settings-error hidden"></p>
+        <p id="account-security-notice" role="status" class="settings-notice hidden"></p>
+
+        <form id="password-change-form" class="settings-form" novalidate>
+            <input type="text" name="username" autocomplete="username" value="{{ current_user.email if current_user else '' }}" hidden>
+            <div class="settings-row">
+                <label for="current-password">Current password</label>
+                <input id="current-password" name="current_password" type="password" required
+                       maxlength="200" autocomplete="current-password">
+            </div>
+            <div class="settings-row settings-row-split">
+                <div>
+                    <label for="new-password">New password</label>
+                    <input id="new-password" name="new_password" type="password" required minlength="10"
+                           maxlength="200" autocomplete="new-password" aria-describedby="new-password-note">
+                </div>
+                <div>
+                    <label for="confirm-new-password">Confirm new password</label>
+                    <input id="confirm-new-password" name="confirm_password" type="password" required
+                           minlength="10" maxlength="200" autocomplete="new-password">
+                </div>
+            </div>
+            <small id="new-password-note" class="settings-hint">Use at least 10 characters. Your other devices will be signed out; this one stays signed in.</small>
+            <div class="settings-actions">
+                <button type="submit" id="btn-change-password" class="primary-button">Change password</button>
+            </div>
+        </form>
+
+        <h3 class="settings-section">Signed-in devices</h3>
+        <p class="settings-subtitle">Lost a device or signed in somewhere public? This signs out everywhere, including here.</p>
+        <div class="settings-actions">
+            <button type="button" id="btn-sign-out-everywhere" class="secondary-button settings-danger">Sign out of all devices</button>
+        </div>
+    </div>
+</section>
+<script src="{{ url_for('static', filename='account_security.js') }}"></script>

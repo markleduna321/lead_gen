@@ -3,6 +3,7 @@ import sys
 import uuid
 import psycopg2
 from psycopg2.extras import execute_values
+from billing import insert_and_track
 from dotenv import load_dotenv
 from discovery_filters import filter_business_metrics
 from discovery_industries import matching_industry_category
@@ -38,8 +39,9 @@ def save_yelp_leads(leads, user_id):
     try:
         with psycopg2.connect(DB_DSN) as conn:
             with conn.cursor() as cur:
-                execute_values(cur, insert_query,
-                               attach_owner(deduplicate_prospect_rows(leads, emit_ui_log), user_id))
+                insert_and_track(cur, insert_query,
+                                 attach_owner(deduplicate_prospect_rows(leads, emit_ui_log), user_id),
+                                 executor=execute_values)
                 conn.commit()
                 emit_ui_log(f"💾 [PostgreSQL] Ingested {len(leads)} Yelp leads into the database.")
     except Exception as e:

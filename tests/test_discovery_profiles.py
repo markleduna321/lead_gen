@@ -14,11 +14,16 @@ class DiscoveryProfileTests(unittest.TestCase):
             ("facebook", ["https://www.facebook.com/QA.Business/", "http://m.facebook.com/qa.business?ref=search"]),
             ("instagram", ["https://www.instagram.com/QA.Business/", "http://instagram.com/qa.business?igsh=tracking#bio"]),
             ("facebook", ["https://facebook.com/profile.php?id=123&ref=search", "https://m.facebook.com/people/QA/123/"]),
+            ("linkedin", ["https://www.linkedin.com/company/QA.Business/", "http://linkedin.com/company/qa.business?trk=search"]),
         ]:
             with self.subTest(source=source):
                 first = canonical_social_profile(source, variants[0])
                 self.assertEqual(first, canonical_social_profile(source, variants[1]))
-                self.assertNotEqual(first[0], canonical_social_profile(source, f"https://{source}.com/another.business")[0])
+                alternate = (
+                    "https://linkedin.com/company/another.business"
+                    if source == "linkedin" else f"https://{source}.com/another.business"
+                )
+                self.assertNotEqual(first[0], canonical_social_profile(source, alternate)[0])
         self.assertNotEqual(
             canonical_social_profile("facebook", "https://facebook.com/profile.php?id=123")[0],
             canonical_social_profile("facebook", "https://facebook.com/profile.php?id=456")[0],
@@ -32,6 +37,9 @@ class DiscoveryProfileTests(unittest.TestCase):
             ("facebook", "https://facebook.com/profile.php?ref=123"),
             ("facebook", "https://facebook.com.evil.test/qa"),
             ("facebook", "javascript:alert(1)"),
+            ("linkedin", "https://linkedin.com/company.evil.test/qa"),
+            ("linkedin", "https://linkedin.com/in/person"),
+            ("linkedin", "https://linkedin.com/company/qa/jobs"),
         ]:
             with self.subTest(url=url), self.assertRaises(ValueError):
                 canonical_social_profile(source, url)
@@ -52,11 +60,18 @@ class DiscoveryProfileTests(unittest.TestCase):
         for source, filename, worker_name, save_name in [
             ("facebook", "discovery_facebook.py", "run_facebook_discovery", "save_facebook_leads"),
             ("instagram", "discovery_instagram.py", "run_instagram_discovery", "save_instagram_leads"),
+            ("linkedin", "discovery_linkedin.py", "run_linkedin_discovery", "save_linkedin_leads"),
         ]:
             with self.subTest(source=source):
                 records = [
-                    {"title": "QA", "link": f"https://www.{source}.com/QA/", "snippet": "Dental Clinic and Cafe"},
-                    {"title": "QA", "link": f"https://{source}.com/qa?ref=tracking", "snippet": "Dental Clinic and Cafe"},
+                    {"title": "QA", "link": (
+                        "https://www.linkedin.com/company/QA/" if source == "linkedin"
+                        else f"https://www.{source}.com/QA/"
+                    ), "snippet": "Dental Clinic and Cafe"},
+                    {"title": "QA", "link": (
+                        "https://linkedin.com/company/qa?ref=tracking" if source == "linkedin"
+                        else f"https://{source}.com/qa?ref=tracking"
+                    ), "snippet": "Dental Clinic and Cafe"},
                 ]
                 response = Mock()
                 response.json.return_value = {"organic_results": records}
@@ -68,10 +83,13 @@ class DiscoveryProfileTests(unittest.TestCase):
                 crawl = Mock(return_value="qa@example.test")
                 namespace = {
                     "SERPAPI_KEY": "qa-only", "DB_DSN": "qa-only",
+                    "SCRAPINGDOG_KEY": "qa-only", "re": __import__("re"),
                     "requests": types.SimpleNamespace(get=Mock(return_value=response)),
+                    "scrapingdog_fetch": Mock(return_value=response),
                     "psycopg2": types.SimpleNamespace(Error=RuntimeError),
                     "canonical_social_profile": canonical_social_profile,
                     "load_existing_social_ids": Mock(side_effect=lambda *args: set(known_ids)),
+                    "matching_industry_category": lambda *args: args[0].get("title"),
                     save_name: save,
                 }
                 api = types.ModuleType("control_gate_api")
@@ -80,8 +98,9 @@ class DiscoveryProfileTests(unittest.TestCase):
                 hunter.attempt_domain_email_crawl = crawl
                 worker = load_function(filename, worker_name, namespace)
                 with patch.dict(sys.modules, {"control_gate_api": api, "email_hunter": hunter}):
-                    worker("Austin", "Dental Clinic")
-                    worker("Austin", "Cafe")
+                    user_id = {"user_id": QA_USER_ID} if source == "linkedin" else {}
+                    worker("Austin", "Dental Clinic", **user_id)
+                    worker("Austin", "Cafe", **user_id)
                 self.assertEqual(len(saved_rows), 1)
                 self.assertEqual(crawl.call_count, int(source == "instagram"))
                 self.assertIn("already discovered", api.emit_ui_log.call_args.args[0])

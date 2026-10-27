@@ -164,3 +164,8 @@
     .plans-intro .home-kicker { font-size: 7px; letter-spacing: 1.1px; }
     .plans-next h2 { font-size: 21px; }
 }
+.error-intro { padding-block: 40px 96px; }
+.error-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 16px 28px; margin-top: 32px; }
+.error-actions .home-sign-in { min-height: 44px; display: inline-flex; align-items: center; }
+.error-reference { font-size: 12px !important; margin: 0 !important; }
+.error-reference code { font: 600 12px ui-monospace, SFMono-Regular, Consolas, monospace; color: var(--text); letter-spacing: 1px; user-select: all; }

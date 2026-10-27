@@ -61,9 +61,11 @@ class SettingsValidationTests(unittest.TestCase):
         for payload, expected in [
             ({}, "sending email"),
             (dict(base, smtp_host=""), "Mail server is required"),
-            (dict(base, smtp_port=0), "between 1 and 65535"),
-            (dict(base, smtp_port="many"), "between 1 and 65535"),
-            (dict(base, smtp_port=True), "between 1 and 65535"),
+            (dict(base, smtp_port=0), "Port must be 587"),
+            (dict(base, smtp_port="many"), "Port must be 587"),
+            (dict(base, smtp_port=True), "Port must be 587"),
+            (dict(base, smtp_port=25), "Port must be 587"),
+            (dict(base, smtp_port=5432), "Port must be 587"),
             (dict(base, smtp_security="plaintext"), "starttls"),
             (dict(base, from_email="not-an-email"), "valid sending email"),
             (dict(base, smtp_host="smtp\n.test"), "control characters"),
@@ -79,6 +81,20 @@ class SettingsValidationTests(unittest.TestCase):
             user_email.validate_settings(payload, has_existing_password=False)
         kept = user_email.validate_settings(payload, has_existing_password=True)
         self.assertIsNone(kept["smtp_password"], "an unchanged password must not be re-encrypted")
+
+    def test_internal_mail_servers_are_rejected(self):
+        base = {"smtp_username": "qa@example.test", "smtp_password": "pw"}
+        for host in ["localhost", "127.0.0.1", "10.0.0.5", "192.168.1.10", "169.254.169.254",
+                     "[::1]", "::1", "db.internal", "printer.local", "mail", "smtp.example.test:25",
+                     "http://smtp.example.test", "user@smtp.example.test"]:
+            with self.subTest(host=host), self.assertRaisesRegex(user_email.EmailSettingsError,
+                                                                 "public mail server"):
+                user_email.validate_settings(dict(base, smtp_host=host))
+        for port in (465, 587, 2525, "2525"):
+            with self.subTest(port=port):
+                values = user_email.validate_settings(dict(base, smtp_host="SMTP.Gmail.com.", smtp_port=port))
+                self.assertEqual(values["smtp_host"], "smtp.gmail.com")
+                self.assertEqual(values["smtp_port"], int(port))
 
     def test_the_port_defaults_to_the_selected_security_mode(self):
         base = {"smtp_host": "smtp.example.test", "smtp_username": "qa@example.test",
@@ -124,14 +140,14 @@ class SendingTests(unittest.TestCase):
             patch.dict(os.environ, {"SMTP_ENCRYPTION_KEY": QA_KEY}),
             patch.object(user_email, "_load_raw", return_value=row_with_password("app pass-word")),
             patch.object(user_email, "_mark_verified") as verified,
-            patch("smtplib.SMTP", return_value=server) as smtp,
+            patch.object(user_email, "_PinnedSMTP", return_value=server) as smtp,
         ):
             server.__enter__.return_value = server
             user_email.send_email("qa-only", QA_USER_ID, "lead@example.test",
                                   "Subject here", "<p>body</p>")
         smtp.assert_called_once_with("smtp.example.test", 587, timeout=user_email.CONNECT_TIMEOUT)
-        # App passwords are routinely pasted with spaces or dashes.
-        server.login.assert_called_once_with("qa@example.test", "apppassword")
+        # Non-Gmail passwords are used exactly as saved, spaces and dashes included.
+        server.login.assert_called_once_with("qa@example.test", "app pass-word")
         sender, recipients, raw = server.sendmail.call_args.args
         self.assertEqual(sender, "qa@example.test")
         self.assertEqual(recipients, ["lead@example.test"])
@@ -146,8 +162,8 @@ class SendingTests(unittest.TestCase):
             patch.dict(os.environ, {"SMTP_ENCRYPTION_KEY": QA_KEY}),
             patch.object(user_email, "_load_raw", return_value=row),
             patch.object(user_email, "_mark_verified"),
-            patch("smtplib.SMTP_SSL", return_value=server) as smtp_ssl,
-            patch("smtplib.SMTP", side_effect=AssertionError("must not use plain SMTP")),
+            patch.object(user_email, "_PinnedSMTP_SSL", return_value=server) as smtp_ssl,
+            patch.object(user_email, "_PinnedSMTP", side_effect=AssertionError("must not use plain SMTP")),
         ):
             server.__enter__.return_value = server
             user_email.send_email("qa-only", QA_USER_ID, "lead@example.test", "s", "<p>b</p>")
@@ -165,24 +181,146 @@ class SendingTests(unittest.TestCase):
         with (
             patch.dict(os.environ, {"SMTP_ENCRYPTION_KEY": QA_KEY}),
             patch.object(user_email, "_load_raw", return_value=row_with_password("pw")),
-            patch("smtplib.SMTP", side_effect=smtplib.SMTPAuthenticationError(535, b"nope")),
+            patch.object(user_email, "_PinnedSMTP", side_effect=smtplib.SMTPAuthenticationError(535, b"nope")),
         ):
             with self.assertRaisesRegex(user_email.EmailSettingsError, "app password"):
                 user_email.send_email("qa-only", QA_USER_ID, "lead@example.test", "s", "b")
+        import socket
+        import ssl
+        import net_guard
+        cases = [
+            (OSError("Connection refused by 10.0.0.5:5432"), "Could not connect to your mail server"),
+            (socket.timeout("timed out after banner"), "did not respond in time"),
+            (OSError("Could not connect"), "Could not connect to your mail server"),
+            (ssl.SSLError("WRONG_VERSION_NUMBER"), "secure connection"),
+            (net_guard.UnresolvableHost("Could not resolve smtp.example.test."), "could not be found"),
+            (net_guard.UnsafeTarget("smtp.example.test resolves to a non-public address."), "not allowed"),
+            (smtplib.SMTPServerDisconnected("Connection unexpectedly closed: timed out"),
+             "Could not connect to your mail server"),
+            (smtplib.SMTPRecipientsRefused({"lead@example.test": (550, b"no")}), "refused the message"),
+        ]
+        for error, message in cases:
+            with (
+                self.subTest(error=repr(error)),
+                patch.dict(os.environ, {"SMTP_ENCRYPTION_KEY": QA_KEY}),
+                patch.object(user_email, "_load_raw", return_value=row_with_password("pw")),
+                patch.object(user_email, "_PinnedSMTP", side_effect=error),
+                contextlib.redirect_stderr(io.StringIO()) as log,
+            ):
+                with self.assertRaises(user_email.EmailSettingsError) as caught:
+                    user_email.send_email("qa-only", QA_USER_ID, "lead@example.test", "s", "b")
+                self.assertIn(message, str(caught.exception))
+                # Raw socket details stay in the server log only.
+                for detail in ("10.0.0.5", "5432", "banner", "WRONG_VERSION", "resolves", "unexpectedly"):
+                    self.assertNotIn(detail, str(caught.exception))
+                self.assertIn(type(error).__name__, log.getvalue())
+
+    def test_saved_settings_with_a_blocked_port_are_refused_before_connecting(self):
         with (
             patch.dict(os.environ, {"SMTP_ENCRYPTION_KEY": QA_KEY}),
-            patch.object(user_email, "_load_raw", return_value=row_with_password("pw")),
-            patch("smtplib.SMTP", side_effect=OSError("host unreachable")),
+            patch.object(user_email, "_load_raw", return_value=dict(row_with_password("pw"), smtp_port=5432)),
+            patch.object(user_email, "_PinnedSMTP", side_effect=AssertionError("must not connect")),
         ):
-            with self.assertRaisesRegex(user_email.EmailSettingsError, "could not be reached"):
+            with self.assertRaisesRegex(user_email.EmailSettingsError, "Update it in Settings"):
                 user_email.send_email("qa-only", QA_USER_ID, "lead@example.test", "s", "b")
+
+    def send(self, row, recipient="lead@example.test", subject="s"):
+        server = MagicMock()
+        server.__enter__.return_value = server
+        with (
+            patch.dict(os.environ, {"SMTP_ENCRYPTION_KEY": QA_KEY}),
+            patch.object(user_email, "_load_raw", return_value=row),
+            patch.object(user_email, "_mark_verified"),
+            patch.object(user_email, "_PinnedSMTP", return_value=server),
+        ):
+            user_email.send_email("qa-only", QA_USER_ID, recipient, subject, "<p>b</p>")
+        return server
+
+    def test_only_gmail_app_passwords_have_their_spaces_removed(self):
+        gmail = {"smtp_host": "smtp.gmail.com", "smtp_username": "qa@example.test"}
+        cases = [
+            (gmail, "abcd efgh ijkl mnop", "abcdefghijklmnop"),
+            (gmail, " abcd efgh ijkl mnop ", "abcdefghijklmnop"),
+            (gmail, "abcdefghijklmnop", "abcdefghijklmnop"),
+            (gmail, "my real pass-word", "my real pass-word"),
+            (gmail, "ABCD EFGH IJKL MNOP", "ABCD EFGH IJKL MNOP"),
+            ({}, "abcd efgh ijkl mnop", "abcd efgh ijkl mnop"),
+            ({}, " padded secret ", " padded secret "),
+        ]
+        for overrides, saved, expected in cases:
+            with self.subTest(host=overrides.get("smtp_host", "smtp.example.test"), saved=saved):
+                server = self.send(dict(row_with_password(saved), **overrides))
+                server.login.assert_called_once_with("qa@example.test", expected)
+
+    def test_headers_cannot_be_injected_through_name_or_subject(self):
+        row = dict(row_with_password("pw"), from_name='Evil" <x@evil.test>\r\nBcc: victim@example.test')
+        server = self.send(row, subject="Hello\r\nBcc: victim@example.test")
+        _, recipients, raw = server.sendmail.call_args.args
+        self.assertEqual(recipients, ["lead@example.test"])
+        headers = raw.split("\n\n", 1)[0]
+        self.assertNotRegex(headers, r"(?mi)^bcc:")
+        from_line = next(line for line in headers.splitlines() if line.startswith("From:"))
+        self.assertTrue(from_line.rstrip().endswith("<qa@example.test>"), from_line)
+        self.assertEqual(server.sendmail.call_args.args[0], "qa@example.test")
+
+    def test_non_ascii_sender_names_are_encoded(self):
+        server = self.send(dict(row_with_password("pw"), from_name="José Niño"))
+        raw = server.sendmail.call_args.args[2]
+        self.assertIn("=?utf-8?", raw)
+        self.assertIn("<qa@example.test>", raw)
+
+    def test_invalid_recipients_are_refused_before_loading_settings(self):
+        for recipient in [None, "", "  ", "not-an-email", "a@b", "a,b@example.test",
+                          "Name <a@example.test>", "a@example.test\r\nBcc: x@example.test", 42]:
+            with (self.subTest(recipient=recipient),
+                  patch.object(user_email, "_load_raw", side_effect=AssertionError("must not load"))):
+                with self.assertRaises(user_email.RecipientError):
+                    user_email.send_email("qa-only", QA_USER_ID, recipient, "s", "b")
+
+    def test_recipient_validation_messages(self):
+        with self.assertRaisesRegex(user_email.RecipientError, "Enter the prospect's email"):
+            user_email.validate_recipient("  ")
+        with self.assertRaisesRegex(user_email.RecipientError, "valid recipient"):
+            user_email.validate_recipient("nope")
+        self.assertEqual(user_email.validate_recipient("  Lead@Example.test "), "Lead@Example.test")
+
+
+class PinnedConnectionTests(unittest.TestCase):
+    def test_smtp_connections_only_reach_public_mail_ports(self):
+        import socket
+        import net_guard
+
+        def resolver(mapping):
+            def getaddrinfo(host, port, *args, **kwargs):
+                return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (mapping.get(host, host), port))]
+            return getaddrinfo
+
+        with patch("socket.getaddrinfo", resolver({"rebind.example.test": "127.0.0.1"})):
+            for cls, host, port in [(user_email._PinnedSMTP, "rebind.example.test", 587),
+                                    (user_email._PinnedSMTP, "127.0.0.1", 587),
+                                    (user_email._PinnedSMTP_SSL, "169.254.169.254", 465),
+                                    (user_email._PinnedSMTP, "smtp.example.test", 5432)]:
+                with self.subTest(host=host, port=port), self.assertRaises(net_guard.UnsafeTarget):
+                    cls(host, port, timeout=1)
+
+    def test_the_checked_ip_is_used_and_tls_keeps_the_host_name(self):
+        import socket
+        connected = MagicMock()
+        with patch("net_guard.connect_public", return_value=connected) as connect:
+            sock = user_email._PinnedSMTP._get_socket(MagicMock(), "smtp.example.test", 587, 5)
+        self.assertIs(sock, connected)
+        connect.assert_called_once_with("smtp.example.test", 587, allowed_ports=user_email.ALLOWED_PORTS,
+                                        timeout=5)
+        self.assertIn(user_email._PinnedSMTP, user_email._PinnedSMTP_SSL.__mro__)
+        self.assertLess(user_email._PinnedSMTP_SSL.__mro__.index(__import__("smtplib").SMTP_SSL),
+                        user_email._PinnedSMTP_SSL.__mro__.index(user_email._PinnedSMTP))
 
 
 class EmailSettingsRouteTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         with (
-            patch.dict(os.environ, {}, clear=True),
+            patch.dict(os.environ, {"APP_ENV": "local"}, clear=True),
             patch("dotenv.load_dotenv"),
             patch("psycopg2.connect", side_effect=AssertionError("Live database access is forbidden")),
             contextlib.redirect_stderr(io.StringIO()),
@@ -227,6 +365,54 @@ class EmailSettingsRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 409)
         # The dashboard keys off this code to offer the Settings page.
         self.assertEqual(response.json["code"], "email_not_configured")
+
+    def dispatch(self, payload, lead=None):
+        """Runs /api/dispatch against a fake prospects table; returns
+        (response, send_email mock, executed SQL)."""
+        lead = lead or {"business_name": "Acme <Co>", "status": "pending", "subject_line": "Hi"}
+        executed = []
+        cursor = MagicMock()
+        cursor.__enter__.return_value = cursor
+        cursor.execute.side_effect = lambda sql, params=None: executed.append((sql, params))
+        cursor.fetchone.return_value = lead
+        conn = MagicMock()
+        conn.__enter__.return_value = conn
+        conn.cursor.return_value = cursor
+        client = signed_in_client(self.module.app)
+        with (
+            patch.dict(os.environ, {"SMTP_ENCRYPTION_KEY": QA_KEY}),
+            patch.object(user_email, "_load_raw", return_value=row_with_password("pw")),
+            patch.object(user_email, "send_email") as send,
+            patch.object(self.module.psycopg2, "connect", return_value=conn),
+            patch("followup_scheduler.schedule_followup"),
+        ):
+            response = client.post("/api/dispatch/42", json=payload)
+        return response, send, executed
+
+    def test_dispatch_never_falls_back_to_the_sender_or_overwrites_the_prospect(self):
+        for destination in [None, "", "   ", "qa@", "a,b@example.test"]:
+            with self.subTest(destination=destination):
+                payload = {"final_pitch": "Hello"}
+                if destination is not None:
+                    payload["destination_email"] = destination
+                response, send, executed = self.dispatch(payload)
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(response.json["code"], "invalid_recipient")
+                send.assert_not_called()
+                self.assertFalse([sql for sql, _ in executed if sql.lstrip().upper().startswith("UPDATE")])
+
+    def test_dispatch_escapes_the_pitch_and_saves_the_recipient(self):
+        response, send, executed = self.dispatch({
+            "final_pitch": "Hi <b>team</b> & co\nSee https://x.test?a=1&b=2",
+            "destination_email": " lead@example.test ",
+        })
+        self.assertEqual(response.status_code, 200, response.json)
+        recipient, subject, body = send.call_args.args[2:5]
+        self.assertEqual(recipient, "lead@example.test")
+        self.assertIn("Hi &lt;b&gt;team&lt;/b&gt; &amp; co<br>See https://x.test?a=1&amp;b=2", body)
+        self.assertNotIn("<b>team</b>", body)
+        update = next(params for sql, params in executed if sql.lstrip().upper().startswith("UPDATE"))
+        self.assertEqual(update[1], "lead@example.test")
 
 
 if __name__ == "__main__":

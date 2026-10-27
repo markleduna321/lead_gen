@@ -21,13 +21,13 @@
             <span class="plans-announcement"><span aria-hidden="true"></span> Annual billing includes 2 months free</span>
         </section>
         <aside class="plans-trial" aria-labelledby="trial-title">
-            <div><p class="home-kicker">START WITH A LITTLE POSSIBILITY</p><h2 id="trial-title">Free Trial <span>&#8369;0 / 7 days</span></h2><p>30 lead credits &middot; 1 user &middot; 10 searches per day</p><p>Maps / Location Search + Site Email/Phone. No rollover; upgrade to access credit top-ups.</p></div>
+            <div><p class="home-kicker">START WITH A LITTLE POSSIBILITY</p><h2 id="trial-title">Free Trial <span>&#8369;0 / 7 days</span></h2><p>30 search credits &middot; 3 local industry searches before refunds &middot; 1 user</p><p>1 industry per submission &middot; 10 submissions per day, subject to balance.</p><p>Maps / Location Search + Site Email/Phone. No rollover; upgrade to access credit top-ups.</p></div>
             <a class="home-text-link" href="#plan-comparison">Compare all features <span aria-hidden="true">&darr;</span></a>
         </aside>
         {% set paid_plans = [
-            {'id': 'solo', 'name': 'Solo', 'index': '01 / INDEPENDENT', 'audience': 'For independent professionals building their own pipeline.', 'monthly': '999', 'annual': '9,990', 'equivalent': '832', 'credits': '750', 'seats': '1 user', 'searches': '50', 'rollover': '350', 'topup': '499', 'topup_credits': '350'},
-            {'id': 'team', 'name': 'Small Team', 'index': '02 / GROWING TOGETHER', 'audience': 'For small agencies and growing businesses reaching further.', 'monthly': '2,499', 'annual': '24,990', 'equivalent': '2,082', 'credits': '2,500', 'seats': 'Up to 4 users', 'searches': '200', 'rollover': '1,250', 'topup': '799', 'topup_credits': '750'},
-            {'id': 'enterprise', 'name': 'Enterprise', 'index': '03 / THINKING BIGGER', 'audience': 'For established organizations exploring their next market.', 'monthly': '5,999', 'annual': '59,990', 'equivalent': '4,999', 'credits': '7,500', 'seats': 'Up to 15 users', 'searches': '1,000', 'rollover': '3,500', 'topup': '1,499', 'topup_credits': '2,000'}
+            {'id': 'solo', 'name': 'Solo', 'index': '01 / INDEPENDENT', 'audience': 'For independent professionals building their own pipeline.', 'monthly': '999', 'annual': '9,990', 'equivalent': '832', 'credits': '750', 'industries': '3', 'industry_searches': '75', 'seats': '1 user', 'searches': '50', 'rollover': '350', 'topup': '499', 'topup_credits': '350'},
+            {'id': 'team', 'name': 'Small Team', 'index': '02 / GROWING TOGETHER', 'audience': 'For small agencies and growing businesses reaching further.', 'monthly': '2,499', 'annual': '24,990', 'equivalent': '2,082', 'credits': '2,500', 'industries': '5', 'industry_searches': '250', 'seats': 'Up to 4 users', 'searches': '200', 'rollover': '1,250', 'topup': '799', 'topup_credits': '750'},
+            {'id': 'enterprise', 'name': 'Enterprise', 'index': '03 / THINKING BIGGER', 'audience': 'For established organizations exploring their next market.', 'monthly': '5,999', 'annual': '59,990', 'equivalent': '4,999', 'credits': '7,500', 'industries': '10', 'industry_searches': '750', 'seats': 'Up to 15 users', 'searches': '1,000', 'rollover': '3,500', 'topup': '1,499', 'topup_credits': '2,000'}
         ] %}
         <section class="plans-grid" aria-label="Available plans">
             {% for plan in paid_plans %}
@@ -36,8 +36,16 @@
                 <h2 id="plan-{{ plan.id }}">{{ plan.name }}</h2>
                 <p class="plan-audience">{{ plan.audience }}</p>
                 <div class="plan-availability"><span>MONTHLY BILLING</span><strong>&#8369;{{ plan.monthly }}<small> / month</small></strong><p class="plan-annual">Or <b>&#8369;{{ plan.annual }} / year</b><br>Approx. &#8369;{{ plan.equivalent }}/mo, billed annually</p></div>
-                <div class="plan-fit"><p>{{ plan.credits }} lead credits / month</p><p>{{ plan.seats }}</p><p>{{ plan.searches }} searches / day</p><p>Rollover up to {{ plan.rollover }} credits</p></div>
+                <div class="plan-fit"><p>{{ plan.credits }} search credits / month</p><p>{{ plan.industry_searches }} local industry searches before refunds, if used only for local discovery</p><p>Up to {{ plan.industries }} industries per submission</p><p>{{ plan.seats }}</p><p>{{ plan.searches }} submissions / day, subject to balance</p><p>Rollover up to {{ plan.rollover }} credits</p></div>
+                {% if plan.id == 'solo' %}
+                <p>Google Maps and Yelp discovery. Upgrade to Small Team to unlock Facebook, Instagram, LinkedIn company pages, and Hiring Companies discovery.</p>
+                {% elif plan.id == 'team' %}
+                <p>All five local discovery sources and preset Hiring Companies services. Upgrade to Enterprise to add custom hiring services.</p>
+                {% else %}
+                <p>All five local discovery sources, preset Hiring Companies services, and custom hiring service creation.</p>
+                {% endif %}
                 <p class="plan-topup">Top-up: <b>&#8369;{{ plan.topup }} for {{ plan.topup_credits }} credits</b><br>Active subscribers only</p>
+                <a class="home-button" href="{{ url_for('purchases.billing_page') }}#buy-{{ 'small_team' if plan.id == 'team' else plan.id }}">Choose {{ plan.name }} <span aria-hidden="true">&rarr;</span></a>
                 <a class="home-text-link" href="#plan-comparison">Explore {{ plan.name }} features <span aria-hidden="true">&darr;</span></a>
             </article>
             {% endfor %}
@@ -45,16 +53,26 @@
         {% set comparison_rows = [
             ('Monthly Price', ['₱0 (7 Days)', '₱999 / month', '₱2,499 / month', '₱5,999 / month']),
             ('Annual Billing (2 Months Free)', ['Not available', '₱9,990 / year (approx. ₱832/mo)', '₱24,990 / year (approx. ₱2,082/mo)', '₱59,990 / year (approx. ₱4,999/mo)']),
-            ('Included Lead Credits', ['30 Lead Credits', '750 Lead Credits / mo', '2,500 Lead Credits / mo', '7,500 Lead Credits / mo']),
-            ('Price Per Lead to User', ['Free', '₱1.33 per lead', '₱1.00 per lead', '₱0.80 per lead']),
+            ('Included Search Credits', ['30 Search Credits / 7 days', '750 Search Credits / mo', '2,500 Search Credits / mo', '7,500 Search Credits / mo']),
+            ('Local Discovery Charge', ['10 credits / industry', '10 credits / industry', '10 credits / industry', '10 credits / industry']),
+            ('Local Industry Searches (Before Refunds; Local-Only Usage)', ['3 / trial', '75 / mo', '250 / mo', '750 / mo']),
+            ('Approx. Monthly Price per Local Industry Search', ['Free', '₱13.32', '₱10.00', '₱8.00']),
+            ('Max Industries per Submission', ['1', '3', '5', '10']),
+            ('Hiring Discovery Charge', ['Not included', 'Not included', '15 credits / role-page', '15 credits / role-page']),
+            ('Max Hiring Pages per Role', ['Not included', 'Not included', '3', '5']),
+            ('Zero-New-Lead Refund (Completed Search)', ['70% of search charge', '70% of search charge', '70% of search charge', '70% of search charge']),
             ('Team Seats', ['1 User', '1 User', 'Up to 4 Users', 'Up to 15 Users']),
-            ('Daily Search Cap (Anti-abuse)', ['10 searches / day', '50 searches / day', '200 searches / day', '1,000 searches / day']),
-            ('Channels Unlocked', ['Maps / Location Search + Site Email/Phone', 'Maps / Location Search + Website Email/Phone + Social Links', 'All in Solo + Job Postings + LinkedIn Dorks + Ad Pixel Check', 'All in Team + Bulk CSV Enrichment + Webhook/API Export']),
+            ('Daily Submission Cap (Subject to Credit Balance)', ['10 submissions / day', '50 submissions / day', '200 submissions / day', '1,000 submissions / day']),
+            ('Local Discovery Data Sources', ['Google Maps', 'Google Maps + Yelp', 'Google Maps + Yelp + Facebook + Instagram + LinkedIn company pages', 'Google Maps + Yelp + Facebook + Instagram + LinkedIn company pages']),
+            ('Hiring Companies Discovery', ['Not included', 'Upgrade to Small Team', 'Preset services', 'Preset + custom services']),
+            ('Add Custom Hiring Service', ['Not included', 'Not included', 'Upgrade to Enterprise', 'Included']),
+            ('AI Pitch Drafts', ['Upgrade to Solo', '1 credit / draft', '1 credit / draft', '1 credit / draft']),
+            ('Other Included Features', ['Site Email/Phone', 'Website Email/Phone', 'All in Solo + Ad Pixel Check', 'All in Team + Bulk CSV Enrichment + Webhook/API Export']),
             ('Max Credit Rollover', ['None', 'Up to 350 credits', 'Up to 1,250 credits', 'Up to 3,500 credits']),
             ('Credit Top-Up Pack (Active subs only)', ['Must upgrade', '₱499 for 350 credits', '₱799 for 750 credits', '₱1,499 for 2,000 credits'])
         ] %}
         <section id="plan-comparison" class="plans-comparison" aria-labelledby="comparison-title">
-            <div class="home-section-heading"><div><p class="home-kicker">THE DETAILS, SIDE BY SIDE</p><h2 id="comparison-title">Find your fit.</h2></div><p>All prices in Philippine pesos (PHP).<br>Annual equivalents and per-lead prices are rounded.</p></div>
+            <div class="home-section-heading"><div><p class="home-kicker">THE DETAILS, SIDE BY SIDE</p><h2 id="comparison-title">Find your fit.</h2></div><p>All prices in Philippine pesos (PHP).<br>Annual equivalents and per-industry prices are rounded.</p></div>
             <p id="comparison-help" class="plans-table-hint">On smaller screens, scroll the table horizontally to compare every plan.</p>
             <div class="plans-table-scroll" tabindex="0" role="region" aria-label="Plan feature comparison" aria-describedby="comparison-help">
                 <table class="plans-table">
@@ -68,9 +86,20 @@
                 </table>
             </div>
         </section>
+        <section class="plans-comparison" aria-labelledby="search-credit-rules">
+            <div class="home-section-heading"><div><p class="home-kicker">KNOW BEFORE YOU SEARCH</p><h2 id="search-credit-rules">How search credits work.</h2></div></div>
+            <p>Search credits pay for discovery work, not a guaranteed number of leads, emails, or phone numbers. They are separate from our provider's Scrapingdog API credits. Results depend on location, availability, filters, and businesses already saved.</p>
+            <p>Local discovery costs 10 credits per industry, covering the selected sources included in your plan. Three industries cost 30 credits, not 10. A submission is one accepted discovery run; daily caps apply to submissions across both discovery modes and do not replace credit charges.</p>
+            <p>Discovery access: Solo can select Google Maps and Yelp only. Facebook, Instagram, and LinkedIn company-page options remain visible but locked, with an Upgrade to Small Team prompt. Hiring Companies discovery also remains visible but locked for Solo, with the same upgrade prompt. Small Team can search the preset hiring services; Add Service remains visible but locked with an Upgrade to Enterprise prompt. Enterprise can create and search custom hiring services.</p>
+            <p>Small Team and Enterprise members share the owner's search credit balance and daily submission cap. Each account keeps its leads and outreach mailbox private. The owner occupies one seat; pending email invitations reserve seats until accepted, revoked, or expired.</p>
+            <p>Hiring discovery on Small Team and Enterprise costs 15 credits per role-page: one role searched on both Google Jobs and LinkedIn Jobs for one page each, including company-contact lookups. A four-role service costs 60 credits at one page per role, 180 at three pages, or 300 at five pages (Enterprise only). Local and hiring discovery share the same credit balance.</p>
+            <p>AI pitch drafts on Solo, Small Team, and Enterprise cost 1 credit each, including regenerations, from the same shared balance. If the AI service fails, the credit is refunded automatically. The Free Trial covers discovery only.</p>
+            <p>For a completed search with zero new leads, 70% of the search charge is refunded as search credits, not cash; 30% covers processing. For example, a 10-credit search receives 7 credits back (net cost: 3); a 15-credit search receives 10.5 back (net cost: 4.5). Refunds apply when the whole completed submission produces zero new leads, not to individual empty sources or industries within a submission that produces new leads.</p>
+            <p>Validation failures and wholly failed provider searches are not charged. Completed searches with zero new leads follow the 70% refund policy instead. The applicable charge and refund policy will be shown before submission.</p>
+        </section>
         <aside class="plans-disclaimer" aria-label="Plan availability">
             <span class="plans-disclaimer-icon" aria-hidden="true">i</span>
-            <p>Published plan details are a preview of the planned offering. Subscription checkout, trial activation, credit limits, top-ups, and shared team access are not enabled by this page. Creating an account does not activate a plan or a timed trial.</p>
+            <p>Owners can purchase monthly or annual plans and active-plan credit top-ups through PayMongo QR Ph hosted checkout when payments are configured. These are one-time payments with no automatic renewal; access is granted only after verified payment confirmation. Active paid-plan changes require support. New accounts receive a 7-day free trial with 30 search credits once they verify their email (one trial per network). API export, customer export webhooks, bulk CSV enrichment, and Ad Pixel Check remain planned features.</p>
         </aside>
         <section class="plans-next" aria-labelledby="plans-next-title">
             <div><p class="home-kicker">IN THE MEANTIME</p><h2 id="plans-next-title">Get to know your next workspace.</h2><p>See how discovery and thoughtful outreach come together.</p></div>

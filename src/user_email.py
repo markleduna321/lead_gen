@@ -9,18 +9,37 @@ The key lives in SMTP_ENCRYPTION_KEY and is never stored in the database.
 """
 
 import os
+import re
 import smtplib
+import socket
 import ssl
+import sys
 import unicodedata
 from email.header import Header
 from email.mime.text import MIMEText
+from email.utils import formataddr
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
+import net_guard
+
 SECURITY_MODES = ("starttls", "ssl")
 DEFAULT_PORTS = {"starttls": 587, "ssl": 465}
+ALLOWED_PORTS = frozenset({465, 587, 2525})
 CONNECT_TIMEOUT = 15
+BLOCKED_HOST_SUFFIXES = (".localhost", ".local", ".internal", ".lan", ".home.arpa")
+PORT_MESSAGE = "Port must be 587 or 2525 (STARTTLS) or 465 (SSL/TLS)."
+HOST_MESSAGE = "Enter your provider's public mail server name, for example smtp.gmail.com."
+CONNECT_MESSAGES = {
+    "not_found": "Your mail server could not be found. Check the server name.",
+    "not_allowed": "That mail server address is not allowed. " + HOST_MESSAGE,
+    "timeout": "Your mail server did not respond in time. Check the server name and port.",
+    "tls": "A secure connection to your mail server failed. Use SSL/TLS with port 465, "
+           "or STARTTLS with port 587 or 2525.",
+    "rejected": "Your mail server refused the message. Check the sending address and recipient.",
+    "unreachable": "Could not connect to your mail server. Check the server name, port and security setting.",
+}
 
 
 class EmailSettingsError(ValueError):
@@ -29,6 +48,46 @@ class EmailSettingsError(ValueError):
 
 class EmailNotConfigured(EmailSettingsError):
     """The account has not set up a sending mailbox yet."""
+
+
+class RecipientError(ValueError):
+    """The recipient address is missing or unusable."""
+
+
+# Address syntax characters that would let one "address" smuggle extra
+# recipients or display names into the To header.
+_RECIPIENT_SPECIALS = set('<>()[],;:"\\')
+GMAIL_HOSTS = frozenset({"smtp.gmail.com", "smtp.googlemail.com"})
+_GMAIL_APP_PASSWORD = re.compile(r"[a-z]{4}(?: ?[a-z]{4}){3}")
+
+
+def validate_recipient(value: object) -> str:
+    from auth import AuthError, normalize_email
+    if value is None or (isinstance(value, str) and not value.strip()):
+        raise RecipientError("Enter the prospect's email address before sending.")
+    try:
+        address = normalize_email(value)
+    except AuthError:
+        raise RecipientError("Enter a valid recipient email address.") from None
+    if _RECIPIENT_SPECIALS & set(address):
+        raise RecipientError("Enter a valid recipient email address.")
+    return address
+
+
+def smtp_login_password(host: str, password: str) -> str:
+    """Gmail shows app passwords as "abcd efgh ijkl mnop"; only that exact shape
+    is unspaced. Every other password is used exactly as saved."""
+    if (host or "").lower() in GMAIL_HOSTS:
+        candidate = password.strip()
+        if _GMAIL_APP_PASSWORD.fullmatch(candidate):
+            return candidate.replace(" ", "")
+    return password
+
+
+def _from_header(display: str, sender: str) -> str:
+    name = " ".join("".join(ch for ch in (display or "")
+                            if not unicodedata.category(ch).startswith("C")).split())
+    return formataddr((name or sender, sender), charset="utf-8")
 
 
 def _fernet():
@@ -78,6 +137,20 @@ def _text(value: object, label: str, maximum: int, required: bool = True) -> str
     return cleaned
 
 
+def _smtp_host(value: object) -> str:
+    host = _text(value, "Mail server", 255).lower().rstrip(".")
+    if (" " in host or "/" in host or ":" in host or "@" in host or "." not in host
+            or host == "localhost" or host.endswith(BLOCKED_HOST_SUFFIXES)):
+        raise EmailSettingsError(HOST_MESSAGE)
+    try:
+        public = net_guard.is_public_ip(host)
+    except ValueError:
+        public = True  # a host name; resolved and re-checked at connect time
+    if not public:
+        raise EmailSettingsError(HOST_MESSAGE)
+    return host
+
+
 def validate_settings(data: object, has_existing_password: bool = False) -> dict:
     """Validates a settings payload.
 
@@ -94,8 +167,8 @@ def validate_settings(data: object, has_existing_password: bool = False) -> dict
     port = data.get("smtp_port", DEFAULT_PORTS[security])
     if isinstance(port, str) and port.strip().isdigit():
         port = int(port.strip())
-    if not isinstance(port, int) or isinstance(port, bool) or not 1 <= port <= 65535:
-        raise EmailSettingsError("Port must be a whole number between 1 and 65535.")
+    if not isinstance(port, int) or isinstance(port, bool) or port not in ALLOWED_PORTS:
+        raise EmailSettingsError(PORT_MESSAGE)
 
     from auth import normalize_email, AuthError
     try:
@@ -114,7 +187,7 @@ def validate_settings(data: object, has_existing_password: bool = False) -> dict
         raise EmailSettingsError("Mail password must be 512 characters or fewer.")
 
     return {
-        "smtp_host": _text(data.get("smtp_host"), "Mail server", 255),
+        "smtp_host": _smtp_host(data.get("smtp_host")),
         "smtp_port": port,
         "smtp_security": security,
         "smtp_username": _text(data.get("smtp_username"), "Mail username", 255),
@@ -297,13 +370,31 @@ def build_signature(dsn: str, user_id: int) -> str:
             """
 
 
+class _PinnedSMTP(smtplib.SMTP):
+    """Connects only to public addresses on mail ports, pinned to the IP that was checked.
+
+    TLS (STARTTLS or implicit) still verifies the certificate against the
+    configured host name, because smtplib keeps it in ``self._host``.
+    """
+
+    def _get_socket(self, host, port, timeout):
+        return net_guard.connect_public(host, port, allowed_ports=ALLOWED_PORTS,
+                                        timeout=timeout or CONNECT_TIMEOUT)
+
+
+class _PinnedSMTP_SSL(smtplib.SMTP_SSL, _PinnedSMTP):
+    pass
+
+
 def _connect(row: dict, password: str):
     host, port = row["smtp_host"], row["smtp_port"]
+    if port not in ALLOWED_PORTS:
+        raise EmailSettingsError(PORT_MESSAGE + " Update it in Settings.")
     if row["smtp_security"] == "ssl":
-        server = smtplib.SMTP_SSL(host, port, timeout=CONNECT_TIMEOUT,
-                                  context=ssl.create_default_context())
+        server = _PinnedSMTP_SSL(host, port, timeout=CONNECT_TIMEOUT,
+                                 context=ssl.create_default_context())
     else:
-        server = smtplib.SMTP(host, port, timeout=CONNECT_TIMEOUT)
+        server = _PinnedSMTP(host, port, timeout=CONNECT_TIMEOUT)
         server.ehlo()
         server.starttls(context=ssl.create_default_context())
         server.ehlo()
@@ -311,22 +402,38 @@ def _connect(row: dict, password: str):
     return server
 
 
+def _connect_failure(error: BaseException) -> str:
+    if isinstance(error, net_guard.UnresolvableHost):
+        return "not_found"
+    if isinstance(error, net_guard.UnsafeTarget):
+        return "not_allowed"
+    if isinstance(error, (smtplib.SMTPRecipientsRefused, smtplib.SMTPSenderRefused,
+                          smtplib.SMTPDataError)):
+        return "rejected"
+    if isinstance(error, (ssl.SSLError, ssl.CertificateError, smtplib.SMTPNotSupportedError)):
+        return "tls"
+    if isinstance(error, (socket.timeout, TimeoutError)):
+        return "timeout"
+    if isinstance(error, OSError) and isinstance(error.__cause__, (socket.timeout, TimeoutError)):
+        return "timeout"
+    return "unreachable"
+
+
 def send_email(dsn: str, user_id: int, recipient: str, subject: str,
                html_body: str, mark_verified: bool = True) -> dict:
     """Sends one message using the owning account's own mailbox."""
+    recipient = validate_recipient(recipient)
     row = _load_raw(dsn, user_id)
     if row is None:
         raise EmailNotConfigured(
             "Set up your sending email in Settings before sending outreach."
         )
-    # App passwords are commonly copied with spacing or dashes.
-    password = decrypt_secret(row["smtp_password_encrypted"]).replace(" ", "").replace("-", "").strip()
+    password = smtp_login_password(row["smtp_host"], decrypt_secret(row["smtp_password_encrypted"]))
     sender = row["from_email"]
-    display = row["from_name"] or sender
 
     message = MIMEText(html_body, "html", "utf-8")
-    message["Subject"] = Header(subject, "utf-8")
-    message["From"] = f'"{display}" <{sender}>'
+    message["Subject"] = Header(" ".join((subject or "").split()), "utf-8")
+    message["From"] = _from_header(row["from_name"], sender)
     message["To"] = recipient
     message["Reply-To"] = sender
 
@@ -338,8 +445,13 @@ def send_email(dsn: str, user_id: int, recipient: str, subject: str,
             "Your mail server rejected those credentials. If your provider uses "
             "two-factor authentication, use an app password."
         ) from error
-    except (smtplib.SMTPException, OSError, ssl.SSLError) as error:
-        raise EmailSettingsError(f"Your mail server could not be reached: {error}") from error
+    except (smtplib.SMTPException, OSError, ValueError) as error:
+        if isinstance(error, EmailSettingsError):
+            raise
+        category = _connect_failure(error)
+        print(f"[SMTP] user {user_id} via {row['smtp_host']}:{row['smtp_port']} failed "
+              f"({category}): {type(error).__name__}: {error}", file=sys.stderr)
+        raise EmailSettingsError(CONNECT_MESSAGES[category]) from error
 
     if mark_verified and row["verified_at"] is None:
         _mark_verified(dsn, user_id)

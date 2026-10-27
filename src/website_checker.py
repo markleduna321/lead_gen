@@ -4,6 +4,8 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
 
+import net_guard
+
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 load_dotenv(os.path.join(base_dir, ".env"))
 
@@ -19,6 +21,10 @@ def check_website_quality(url: str) -> dict:
     """
     if not url or not str(url).startswith("http"):
         return {"score": None, "error": "Invalid or missing URL"}
+    try:
+        net_guard.check_url(url)
+    except net_guard.UnsafeTarget as error:
+        return {"score": None, "error": str(error)}
 
     params = {
         "url": url,

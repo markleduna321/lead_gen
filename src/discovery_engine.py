@@ -3,6 +3,7 @@ import sys
 import uuid
 import psycopg2
 from psycopg2.extras import execute_values
+from billing import insert_and_track
 from dotenv import load_dotenv
 from email_hunter import attempt_domain_email_crawl
 from screenshot_agent import capture_business_site_snapshot
@@ -56,7 +57,8 @@ def save_leads_to_db(leads, user_id):
     try:
         with psycopg2.connect(DB_DSN) as conn:
             with conn.cursor() as cur:
-                execute_values(cur, insert_query, deduplicate_prospect_rows(data_tuples, emit_ui_log))
+                insert_and_track(cur, insert_query, deduplicate_prospect_rows(data_tuples, emit_ui_log),
+                                 executor=execute_values)
                 conn.commit()
                 emit_ui_log("💾 [PostgreSQL] Live Synchronization complete. Saved fresh rows to DB.")
     except Exception as e:

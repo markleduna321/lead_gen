@@ -1,0 +1,64 @@
+{% extends 'base.html' %}
+{% set page = 'user-management' %}
+{% set page_title = 'User Management' %}
+{% set page_eyebrow = 'GROW YOUR TEAM, TOGETHER' %}
+{% set page_description = 'Invite teammates, manage seats, and share your search credit balance. Each account keeps its leads private.' %}
+{% block content %}
+<section aria-label="User management">
+    <p id="team-message" class="settings-notice" role="status" hidden></p>
+    <div class="settings-heading">
+        <div><h2>{{ team.plan }} team</h2><p class="settings-subtitle">You are the owner. Active members and pending invitations each occupy one seat.</p></div>
+        <span class="settings-badge settings-badge-on">Owner</span>
+    </div>
+    <div class="metric-grid" aria-label="Team seat and credit usage">
+        {% for label, value, note in [
+            ('Plan seats', team.seats, 'Includes your owner seat'),
+            ('Active members', team.members|length, 'Each account keeps its leads private'),
+            ('Available seats', team.available, 'Pending invitations reserve seats'),
+            ('Shared search credits', team.balance, 'One balance for all team members')
+        ] %}
+        <article class="metric-card"><p class="metric-label">{{ label }}</p><strong class="metric-value">{{ value }}</strong><p class="metric-note">{{ note }}</p></article>
+        {% endfor %}
+    </div>
+    <div class="overview-grid">
+        <section class="panel" aria-labelledby="team-members-title">
+            <div class="panel-heading"><h2 id="team-members-title">Team members</h2></div>
+            <div class="overflow-x-auto">
+                <table class="overview-table">
+                    <thead><tr><th scope="col">Account</th><th scope="col">Role</th><th scope="col">Actions</th></tr></thead>
+                    <tbody>{% for member in team.members %}
+                        <tr><td>{{ member.display_name or member.email }}<small>{{ member.email }}</small></td><td>{{ member.team_role|title }}</td>
+                        <td>{% if member.team_role != 'owner' %}<button type="button" class="secondary-button" data-remove-member="{{ member.id }}">Remove member</button>{% else %}Owner seat{% endif %}</td></tr>
+                    {% endfor %}</tbody>
+                </table>
+            </div>
+            <p class="settings-hint">Removing a member releases their seat, stops access to your credits, and leaves their private leads intact. Members with running searches cannot be removed until settlement.</p>
+        </section>
+        <section class="panel" aria-labelledby="invite-member-title">
+            <div class="panel-heading"><h2 id="invite-member-title">Invite a team member</h2></div>
+            <form id="team-invite-form" class="settings-form" aria-describedby="team-invite-note">
+                <div class="settings-row"><label for="team-invite-email">Member email address</label><input id="team-invite-email" type="email" required maxlength="255" autocomplete="email" {% if team.available <= 0 %}disabled{% endif %}></div>
+                <button type="submit" class="primary-button" {% if team.available <= 0 %}disabled{% endif %}>Send invitation</button>
+            </form>
+            <p id="team-invite-note" class="settings-hint">Invitations are sent by system email and expire in 7 days. A pending invitation reserves one seat; acceptance converts it into membership. The recipient must sign in with the invited email address.</p>
+            {% if team.available <= 0 %}<p class="settings-error">All seats are occupied or reserved. Revoke an invitation or remove a member before inviting someone else.</p>{% endif %}
+        </section>
+        <section class="panel" aria-labelledby="pending-invitations-title">
+            <div class="panel-heading"><h2 id="pending-invitations-title">Pending invitations</h2></div>
+            {% if team.invitations %}
+            <div class="overflow-x-auto"><table class="overview-table">
+                <thead><tr><th scope="col">Email</th><th scope="col">Expires (UTC)</th><th scope="col">Actions</th></tr></thead>
+                <tbody>{% for invitation in team.invitations %}<tr><td>{{ invitation.email }}</td><td>{{ invitation.expires_at }}</td><td><button type="button" class="secondary-button" data-revoke-invite="{{ invitation.id }}">Revoke invitation</button></td></tr>{% endfor %}</tbody>
+            </table></div>
+            {% else %}<p class="settings-subtitle">No pending invitations.</p>{% endif %}
+        </section>
+        <section class="panel" aria-labelledby="shared-wallet-title">
+            <div class="panel-heading"><h2 id="shared-wallet-title">One team, one credit balance</h2></div>
+            <p class="settings-subtitle">Every member's local or hiring discovery uses the owner's balance. Reservations prevent simultaneous searches from overspending. Refunds return to the same shared wallet.</p>
+            <p class="settings-hint">Search results, custom service definitions, and outreach mailbox settings remain private to each account. Daily submission caps apply to the whole team, using UTC.</p>
+            <a class="secondary-button" href="{{ url_for('plans') }}">Compare plans</a>
+        </section>
+    </div>
+</section>
+<script src="{{ url_for('static', filename='team.js') }}" defer></script>
+{% endblock %}
