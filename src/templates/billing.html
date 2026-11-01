@@ -10,7 +10,7 @@
     <button id="billing-start-trial" type="button" class="primary-button">Start free trial</button>
 </section>
 {% if not billing.ready %}
-<p class="settings-error" role="alert">Payments are not configured yet. Contact support before purchasing. No payment will be taken here.</p>
+<p class="settings-error" role="alert">Payments are not configured yet. <a href="{{ url_for('support_page') }}">Contact support</a> before purchasing. No payment will be taken here.</p>
 {% elif not billing.livemode %}
 <p class="settings-notice">PayMongo test mode. No real money is collected. Test confirmations activate access only in this configured application environment.</p>
 {% endif %}
@@ -44,7 +44,7 @@
         </article>
         {% endfor %}
     </div>
-    <p class="settings-hint">Existing paid-plan changes are handled by support; self-service renewals open after expiry. A trial upgrade starts immediately after confirmed payment and replaces unused trial credits. Pending plan purchases pause discovery until completed or cancelled.</p>
+    <p class="settings-hint">Existing paid-plan changes are handled by <a href="{{ url_for('support_page') }}">support</a>; self-service renewals open after expiry. A trial upgrade starts immediately after confirmed payment and replaces unused trial credits. Pending plan purchases pause discovery until completed or cancelled.</p>
 </section>
 <section class="panel billing-topup" aria-labelledby="billing-topup-title">
     <div><p class="eyebrow">KEEP YOUR MOMENTUM</p><h2 id="billing-topup-title">Add search credits.</h2><p id="billing-topup-description" class="settings-subtitle">Available to active paid account owners.</p><p class="settings-hint">Top-ups go into the shared wallet. Unused top-up credits are subject to your plan's rollover cap at renewal.</p></div>
@@ -55,7 +55,7 @@
     <p class="settings-hint">A return from checkout does not prove payment. Access and credits are granted only after PayMongo confirmation. Closing checkout does not cancel a payable order; use Cancel below to expire it safely.</p>
     <div class="billing-history-scroll"><table class="overview-table billing-history"><thead><tr><th scope="col">Purchase / reference</th><th scope="col">Date</th><th scope="col">Total</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead><tbody id="billing-orders"></tbody></table></div>
     <p id="billing-empty" class="settings-subtitle" hidden>No purchases yet. Your next chapter starts above.</p>
-    <p class="settings-hint">Showing the latest 25 purchases. For cash refunds, payment disputes, plan changes, or an order marked “Review”, contact support with your order reference. Discovery credit refunds are separate from cash refunds.</p>
+    <p class="settings-hint">Showing the latest 25 purchases. For cash refunds, payment disputes, plan changes, or an order marked “Review”, <a href="{{ url_for('support_page') }}">contact support</a> with your order reference. Discovery credit refunds are separate from cash refunds. See the <a href="{{ url_for('refund_policy') }}">Refund Policy</a>.</p>
 </section>
 <script id="billing-data" type="application/json">{{ billing | tojson }}</script>
 <script id="billing-prices" type="application/json">{{ prices_json | tojson }}</script>

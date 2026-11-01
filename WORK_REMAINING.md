@@ -3,7 +3,7 @@
 > **Companion document:** [WORK_DONE.md](./WORK_DONE.md) records everything finished so far.
 > **Master plan:** [SYSTEM_REVIEW_PLAN.md](./SYSTEM_REVIEW_PLAN.md) holds each item's finding codes (NV-, CP-, PR-, FL-, UI-, AX-) and full context. Mark items ✅ there as they're finished, and move a summary to [WORK_DONE.md](./WORK_DONE.md).
 
-Last updated: 2026-10-27. **Next item: Milestone A2.**
+Last updated: 2026-11-01. **Next item: Milestone A3.**
 
 ## How to resume
 
@@ -19,7 +19,7 @@ Suggested prompt when resuming: *"Continue the system review fixes from WORK_REM
 
 ## Milestone A: Trust, legal & broken paths (P0)
 
-- [ ] **A2** Add Terms, Privacy, Refund Policy and Contact/Support pages, linked from every footer, Billing and Register (NV-02). The Privacy page should mention the hashed sign-up network used for trials (T9).
+- [x] **A2** Added Terms, Privacy, Refund Policy and Contact/Support pages; linked them from public/workspace footers, Billing and Register. Privacy explains the keyed sign-up network hash used for trial eligibility (NV-02).
 - [ ] **A3** Remove provider names, request counts and provider costs from the customer UI; describe cost in site credits only (CP-01).
 - [ ] **A4** Mark unreleased features as "Coming soon" in the pricing table, or remove them (CP-02).
 - [ ] **A5b** Fix the invitation hand-off: keep the token through sign-in and registration, disable Accept when there's no token, and use the public layout when signed out (FL-07, FL-08, FL-09).
@@ -68,6 +68,7 @@ See "Verification for every milestone" in [SYSTEM_REVIEW_PLAN.md](./SYSTEM_REVIE
 ## Deployment follow-ups for the owner (not code)
 
 - [ ] Rotate `FLASK_SECRET_KEY` (signs everyone out once).
+- [ ] Configure a real support contact and have the policy text reviewed for the operating business and jurisdiction before launch. The support page currently notes that no direct support email is configured.
 - [ ] Create the R2 bucket, set the `R2_*` variables, and run `python -B src/manage_screenshots.py upload-legacy`.
 - [ ] Purge `static/screenshots` from git history after committing.
 - [ ] In production set:

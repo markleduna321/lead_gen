@@ -53,6 +53,6 @@
         </section>
         <section class="home-bottom-cta home-container" aria-labelledby="cta-title"><div class="home-cta-rings" aria-hidden="true"></div><div><p class="home-kicker">YOUR NEXT CHAPTER STARTS HERE</p><h2 id="cta-title">Less noise.<br>More <em>opportunity.</em></h2><p>Give your next great connection a place to begin.</p></div><a class="home-button" href="{{ url_for('register') }}">Create your workspace {{ arrow() }}</a></section>
     </main>
-    <footer class="home-footer home-container"><a class="brand" href="/"><span class="brand-mark">A<span>.</span></span><span>AsuraTECH<small>LEAD WORKSPACE</small></span></a><p>A little clarity. A lot of possibility.</p><div><a href="{{ url_for('sign_in') }}">Sign in</a><a href="{{ url_for('register') }}">Create account {{ arrow() }}</a></div></footer>
+    {% include "public_footer.html" %}
 </body>
 </html>

@@ -15,6 +15,7 @@ instead of failing on an unexpected HTML response.
 | `/register` | Create an account (open registration) |
 | `/login` | Sign in |
 | `/logout` | Sign out (POST) |
+| `/terms`, `/privacy`, `/refund-policy`, `/support` | Public service policies and support information |
 | `/api/session` | The signed-in account, or `null` |
 
 Prospects, job leads, and custom hiring services all belong to the account that
@@ -24,6 +25,12 @@ job posting: uniqueness is per-user (`(user_id, google_place_id)` and
 website checks, follow-up sweeps, and discovery de-duplication are all scoped
 to the signed-in account, and discovery runs and their logs are visible only to
 their owner. One account's search never blocks another's.
+
+The public policy pages explain account terms, privacy practices (including
+the keyed sign-up network hash used for trial eligibility), and the distinction
+between discovery-credit adjustments and cash refunds. Configure a real support
+contact for a deployment before launch; the support page states when no direct
+support email has been configured.
 
 ### Dependencies
 

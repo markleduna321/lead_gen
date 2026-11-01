@@ -653,6 +653,30 @@ def plans():
     return render_template('plans.html')
 
 
+def render_public_policy(page, title):
+    return render_template('legal.html', policy_page=page, policy_title=title)
+
+
+@app.route('/terms', methods=['GET'])
+def terms():
+    return render_public_policy('terms', 'Terms of Service')
+
+
+@app.route('/privacy', methods=['GET'])
+def privacy():
+    return render_public_policy('privacy', 'Privacy Policy')
+
+
+@app.route('/refund-policy', methods=['GET'])
+def refund_policy():
+    return render_public_policy('refunds', 'Refund Policy')
+
+
+@app.route('/support', methods=['GET'])
+def support_page():
+    return render_public_policy('support', 'Contact & Support')
+
+
 @app.route('/overview', defaults={'page': 'overview'}, methods=['GET'])
 @app.route('/prospects', defaults={'page': 'prospects'}, methods=['GET'])
 @app.route('/job-leads', defaults={'page': 'jobs'}, methods=['GET'])

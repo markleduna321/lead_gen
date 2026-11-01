@@ -137,7 +137,7 @@ class RouteGuardTests(unittest.TestCase):
 
     def test_sign_in_and_register_pages_stay_public(self):
         client = self.module.app.test_client()
-        for path in ["/login", "/register"]:
+        for path in ["/login", "/register", "/terms", "/privacy", "/refund-policy", "/support"]:
             with self.subTest(path=path):
                 self.assertEqual(client.get(path).status_code, 200)
 

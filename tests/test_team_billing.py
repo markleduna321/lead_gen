@@ -220,6 +220,8 @@ class TeamBillingIntegrationTests(unittest.TestCase):
         self.assertIn("PayMongo test mode", response.text)
         self.assertIn("QR Ph", response.text)
         self.assertIn('data-buy-plan="solo"', response.text)
+        self.assertIn('href="/support"', response.text)
+        self.assertIn('href="/refund-policy"', response.text)
         with patch.dict(os.environ, {"PAYMONGO_SECRET_KEY": ""}):
             self.assertIn("Payments are not configured", client.get("/billing").text)
             result = client.post("/api/billing/checkout", json={"kind": "plan", "plan_id": "solo"})

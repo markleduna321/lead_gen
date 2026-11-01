@@ -52,6 +52,8 @@ class DashboardPagesTests(unittest.TestCase):
                     self.assertIn('id="sidebar-credits"', html)
                     self.assertIn('id="credit-usage-meter"', html)
                     self.assertIn('aria-label="Search credits used this cycle"', html)
+                    for path in ("/terms", "/privacy", "/refund-policy", "/support"):
+                        self.assertIn(f'href="{path}"', html)
 
     def test_overview_and_discovery_have_dedicated_content(self):
         overview = self.client.get("/").get_data(as_text=True)
@@ -95,6 +97,38 @@ class DashboardPagesTests(unittest.TestCase):
         self.assertIn('data-page="home"', response.get_data(as_text=True))
         with client.session_transaction() as session:
             self.assertNotIn("user_id", session)
+
+    def test_public_legal_pages_and_registration_links(self):
+        client = self.module.app.test_client()
+        pages = [
+            ("/terms", "Terms of Service"),
+            ("/privacy", "Privacy Policy"),
+            ("/refund-policy", "Refund Policy"),
+            ("/support", "Contact &amp; Support"),
+        ]
+        for path, title in pages:
+            with self.subTest(path=path):
+                response = client.get(path)
+                self.assertEqual(response.status_code, 200)
+                html = response.get_data(as_text=True)
+                self.assertIn(f"<title>{title} | AsuraTECH</title>", html)
+                for linked_path in ("/terms", "/privacy", "/refund-policy", "/support"):
+                    self.assertIn(f'href="{linked_path}"', html)
+
+        privacy = client.get("/privacy").get_data(as_text=True)
+        self.assertIn("keyed hash", privacy)
+        self.assertIn("not the raw address", privacy)
+        self.assertIn("IPv6 addresses are grouped by their /64 network", privacy)
+        self.assertIn("retained to prevent repeated trial claims", privacy)
+        support = client.get("/support").get_data(as_text=True)
+        self.assertIn("A direct support email has not been configured", support)
+
+        registration = client.get("/register")
+        self.assertEqual(registration.status_code, 200)
+        register_html = registration.get_data(as_text=True)
+        self.assertIn('href="/terms"', register_html)
+        self.assertIn('href="/privacy"', register_html)
+        self.assertIn('href="/support"', register_html)
 
     def test_plans_are_on_a_separate_public_page_linking_to_private_checkout(self):
         clients = [self.module.app.test_client(), signed_in_client(self.module.app)]

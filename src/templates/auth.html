@@ -100,6 +100,9 @@
                 New here? <a href="{{ url_for('register') }}">Create an account</a>
                 {% endif %}
             </p>
+            {% if mode == 'register' %}
+            <p class="auth-legal">By creating an account, you agree to the <a href="{{ url_for('terms') }}">Terms of Service</a> and acknowledge the <a href="{{ url_for('privacy') }}">Privacy Policy</a>. Need help? Visit <a href="{{ url_for('support_page') }}">Contact &amp; Support</a>.</p>
+            {% endif %}
         </section>
     </main>
 </body>

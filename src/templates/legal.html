@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light dark">
+    <meta name="description" content="{{ policy_title }} for AsuraTECH Lead Workspace.">
+    <title>{{ policy_title }} | AsuraTECH</title>
+    <script src="{{ url_for('static', filename='workspace.js') }}"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='home.css') }}">
+</head>
+<body data-page="legal" class="home-body">
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    {% include "public_nav.html" %}
+    <main id="main-content" class="legal-main home-container">
+        <article class="legal-card" aria-labelledby="legal-title">
+            <p class="home-kicker"><span></span> ASURATECH LEAD WORKSPACE</p>
+            <h1 id="legal-title">{{ policy_title }}</h1>
+            <p class="legal-updated">Last updated: November 1, 2026</p>
+
+            {% if policy_page == 'terms' %}
+            <section>
+                <h2>Using the service</h2>
+                <p>AsuraTECH Lead Workspace helps you discover business and hiring information, organize leads, and prepare outreach. You are responsible for your account, the instructions you submit, and how you use information from the service. Use the service lawfully, protect your sign-in details, and do not disrupt or attempt to access another account.</p>
+            </section>
+            <section>
+                <h2>Accounts and trials</h2>
+                <p>Keep your account information accurate and tell us if you believe someone else has accessed your account. Email verification is required to start a trial. A trial provides 30 search credits for 7 days and is limited to one claim per account and sign-up network. Trial availability and features may be subject to the limits shown on the <a href="{{ url_for('plans') }}">Plans &amp; Pricing</a> page.</p>
+            </section>
+            <section>
+                <h2>Plans, credits, and payments</h2>
+                <p>Plan features, prices, credit limits, and payment terms are shown on the Plans &amp; Pricing and Billing pages. Plan and top-up purchases are one-time payments and do not automatically renew. Access or credits are provided after payment confirmation. Search credits are service units, are not cash, and cannot be transferred except where the service provides shared team use.</p>
+                <p>Credit refunds for discovery and requests for cash refunds are different processes. See the <a href="{{ url_for('refund_policy') }}">Refund Policy</a> for details. Nothing in these terms limits rights that cannot be waived under applicable law.</p>
+            </section>
+            <section>
+                <h2>Search results and outreach</h2>
+                <p>Business listings, contact details, job postings, and other search results may be incomplete, out of date, or inaccurate. Review information before relying on it. You are responsible for ensuring that any outreach you send complies with applicable privacy, marketing, and anti-spam requirements.</p>
+            </section>
+            <section>
+                <h2>Availability and changes</h2>
+                <p>We may update, suspend, or discontinue parts of the service to maintain or improve it. We will not use this statement to remove rights that apply to you under mandatory law. Questions about these terms can be raised through the <a href="{{ url_for('support_page') }}">Contact &amp; Support</a> page.</p>
+            </section>
+
+            {% elif policy_page == 'privacy' %}
+            <section>
+                <h2>Information used to provide the service</h2>
+                <p>The service processes account details such as your name and email address, authentication data, search settings and results, saved lead information, and settings you choose to provide. It also processes technical and account activity needed to operate the service, protect accounts, and troubleshoot problems.</p>
+            </section>
+            <section>
+                <h2>Trial eligibility network hash</h2>
+                <p>To enforce the one-trial-per-network limit, when an account is verified the service derives a keyed hash from the sign-up network identifier. IPv4 addresses are matched individually; IPv6 addresses are grouped by their /64 network. The trial-eligibility record stores the keyed hash, not the raw address, and is retained to prevent repeated trial claims. Local and desktop installations skip this check, and invited team members are exempt.</p>
+            </section>
+            <section>
+                <h2>How information is used and shared</h2>
+                <p>Information is used to authenticate you, provide discovery and workspace features, manage plans and credits, send account messages, prevent abuse, and maintain the service. Relevant information may be processed by service providers that support hosting, search, email, payments, storage, or optional AI features. Payment details entered in hosted checkout are handled by the payment provider; the workspace uses payment confirmations to update account access.</p>
+                <p>We do not describe search results as verified facts. Do not enter sensitive personal information into search fields or outreach tools unless you have a lawful basis to do so.</p>
+            </section>
+            <section>
+                <h2>Retention and your choices</h2>
+                <p>Account, workspace, payment-record, and security information is kept as needed to provide the service, maintain records, prevent abuse, and meet applicable obligations. The trial-eligibility hash is retained for the trial-prevention purpose described above. You can ask the service operator about access, correction, or deletion of account information through the <a href="{{ url_for('support_page') }}">Contact &amp; Support</a> page. Some records may need to be retained where required or permitted by law.</p>
+            </section>
+            <section>
+                <h2>Security and updates</h2>
+                <p>Safeguards are used to protect account and workspace information, but no online service can guarantee absolute security. This policy may be updated as the service changes. The current version and its update date are shown on this page.</p>
+            </section>
+
+            {% elif policy_page == 'refunds' %}
+            <section>
+                <h2>One-time purchases</h2>
+                <p>Plan and credit-pack purchases are one-time payments; they do not automatically renew. Access and credits are applied after payment is confirmed. If a purchase is pending, marked for review, or does not match your account, keep the order reference and contact the service operator before making another payment.</p>
+            </section>
+            <section>
+                <h2>Discovery credit refunds</h2>
+                <p>Discovery credit adjustments are not cash refunds. A completed search with no new leads returns 70% of its search charge as credits. A submission where every search fails is fully refunded in credits. The applicable charge and adjustment depend on the submission outcome and are recorded in the workspace.</p>
+            </section>
+            <section>
+                <h2>Cash refund and payment requests</h2>
+                <p>Cash refunds, payment disputes, invoices or tax receipts, and related account adjustments are reviewed by the service operator; they are not processed automatically in the workspace. A request is not a guarantee of approval. Include the order reference and a brief description when contacting the operator. Do not send full card or payment credentials.</p>
+            </section>
+            <section>
+                <h2>Applicable rights</h2>
+                <p>This policy does not limit any refund or consumer rights that cannot be excluded under applicable law. For help with an order, visit <a href="{{ url_for('support_page') }}">Contact &amp; Support</a> and include its reference.</p>
+            </section>
+
+            {% else %}
+            <section>
+                <h2>Account and workspace help</h2>
+                <p>For account access, email verification, or workspace questions, use the support channel provided by the person or organization that gave you access. If you are part of a team, your team owner or administrator may be able to help.</p>
+            </section>
+            <section>
+                <h2>Billing and payment questions</h2>
+                <p>For a payment or purchase review, keep the order reference shown in Billing &amp; Plans and provide it to the service operator through your established support channel. Do not send full card or payment credentials.</p>
+                <p>A direct support email has not been configured for this deployment. If you cannot identify a support channel, contact the organization that provided your account.</p>
+            </section>
+            <section>
+                <h2>Related information</h2>
+                <p>Read the <a href="{{ url_for('refund_policy') }}">Refund Policy</a>, <a href="{{ url_for('terms') }}">Terms of Service</a>, and <a href="{{ url_for('privacy') }}">Privacy Policy</a>.</p>
+            </section>
+            {% endif %}
+        </article>
+    </main>
+    {% include "public_footer.html" %}
+</body>
+</html>

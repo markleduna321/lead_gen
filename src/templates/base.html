@@ -89,7 +89,15 @@
             </div>
             {% block content %}{% endblock %}
         </main>
-        <footer class="workspace-footer"><span>AsuraTECH Lead Workspace</span><span>Focus on the right opportunities.</span></footer>
+        <footer class="workspace-footer">
+            <span>AsuraTECH Lead Workspace</span>
+            <nav aria-label="Policies and support">
+                <a href="{{ url_for('terms') }}">Terms</a>
+                <a href="{{ url_for('privacy') }}">Privacy</a>
+                <a href="{{ url_for('refund_policy') }}">Refunds</a>
+                <a href="{{ url_for('support_page') }}">Support</a>
+            </nav>
+        </footer>
     </div>
 </body>
 </html>

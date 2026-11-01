@@ -26,7 +26,8 @@ MAX_PASSWORD_LENGTH = 200
 
 # Paths reachable without a session. Everything else requires sign-in.
 PUBLIC_ENDPOINTS = frozenset({
-    "home", "plans", "sign_in", "register", "static", "silence_favicon", "silence_chrome_devtools",
+    "home", "plans", "terms", "privacy", "refund_policy", "support_page",
+    "sign_in", "register", "static", "silence_favicon", "silence_chrome_devtools",
     "csp_report",
     "account.verify_email_page", "account.verify_email",
     "account.forgot_password", "account.reset_password",

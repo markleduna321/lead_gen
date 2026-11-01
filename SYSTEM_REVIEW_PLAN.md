@@ -306,7 +306,7 @@ T9. The IP-based free-trial protection plan (already agreed), together with emai
 
 ### Milestone A: Trust, legal & broken paths (P0)
 1. ✅ **Done in S8.** Add proper 404/405/500 handlers: an HTML error page for browsers and JSON for `/api/*`, with no exception text in responses (NV-01).
-2. Add Terms, Privacy, Refund Policy, and Contact/Support pages, and link them from every footer, the Billing page, and the registration page (NV-02).
+2. ✅ **Done in A2.** Added public Terms, Privacy, Refund Policy, and Contact/Support pages; linked them from public and workspace footers, Billing, and registration. The Privacy Policy explains the keyed sign-up network hash used for trial eligibility (NV-02).
 3. Remove provider names, provider request counts, and provider credit costs from customer UI; describe cost only in site credits (CP-01).
 4. Mark unreleased features as "Coming soon" in the pricing table, or remove them (CP-02).
 5a. ✅ **Done in S9/S11.** Store and compare `locked_until` as `timestamptz`, with a migration (FL-01).

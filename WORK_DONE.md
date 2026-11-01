@@ -3,7 +3,7 @@
 > **Companion document:** [WORK_REMAINING.md](./WORK_REMAINING.md) lists what is still to do and how to resume.
 > **Master plan:** [SYSTEM_REVIEW_PLAN.md](./SYSTEM_REVIEW_PLAN.md) holds the full findings (Phases 1–3) and the implementation plan. Items marked ✅ there are done.
 
-Last updated: 2026-10-27. Nothing has been committed yet; all changes are in the working tree.
+Last updated: 2026-11-01. Nothing has been committed yet; all changes are in the working tree.
 
 ## Status at a glance
 
@@ -11,12 +11,12 @@ Last updated: 2026-10-27. Nothing has been committed yet; all changes are in the
 | --- | --- |
 | S: Security hotfix (S1–S11) | ✅ Done |
 | T: Hardening (T1–T9) | ✅ Done |
-| A: Trust, legal & broken paths | Partly done (A1, A5a, A5c) |
+| A: Trust, legal & broken paths | Partly done (A1, A2, A5a, A5c) |
 | B: Conversion & navigation | Partly done (10d, 10e) |
 | C: Visual system & accessibility | Not started |
 | D: Copy polish & consistency | Not started |
 
-Latest test run: **350 Python tests (including the PostgreSQL integration tests) and 81 JS tests pass.**
+Latest test run: **351 Python tests (including the PostgreSQL integration tests) and 81 JS tests pass.**
 
 ## How each fix was done
 
@@ -78,5 +78,6 @@ For every item: plan and clarifying questions first, then the change, tests (uni
 - **A1** (error pages): done in S8.
 - **A5a** (`locked_until` time zone): done in S9/S11.
 - **A5c** (password reset, change password, email verification): done in T3 and T9.
+- **A2** (public policies and support): added `/terms`, `/privacy`, `/refund-policy`, and `/support`; linked them from public and workspace footers, Billing, and registration. The Privacy Policy explains the keyed trial-network hash. Because the operator details and support address were not provided, policy copy avoids inventing them and the Support page says no direct email is configured.
 - **B10d** (escaping `innerHTML`): done in S1.
 - **B10e** (generic auth messages, rate limits): done in S9 and T8.

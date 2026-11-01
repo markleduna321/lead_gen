@@ -106,10 +106,6 @@
             <a class="home-button" href="{{ url_for('home') }}#platform">Explore the platform <span aria-hidden="true">&rarr;</span></a>
         </section>
     </main>
-    <footer class="home-footer home-container">
-        <a class="brand" href="{{ url_for('home') }}"><span class="brand-mark">A<span>.</span></span><span>AsuraTECH<small>LEAD WORKSPACE</small></span></a>
-        <p>A little clarity. A lot of possibility.</p>
-        <div><a href="{{ url_for('home') }}">Back to home</a><a href="{{ url_for('register') }}">Create account <span aria-hidden="true">&rarr;</span></a></div>
-    </footer>
+    {% include "public_footer.html" %}
 </body>
 </html>
