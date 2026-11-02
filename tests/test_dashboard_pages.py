@@ -98,6 +98,37 @@ class DashboardPagesTests(unittest.TestCase):
         with client.session_transaction() as session:
             self.assertNotIn("user_id", session)
 
+    def test_signed_out_invitation_uses_public_layout_and_authentication_return_path(self):
+        from flask import render_template
+
+        client = self.module.app.test_client()
+        response = client.get("/team-invitation")
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn('<body data-page="team-invitation" class="home-body">', html)
+        self.assertIn('aria-label="Main navigation"', html)
+        self.assertIn('aria-label="Policies and support"', html)
+        self.assertNotIn('id="sidebar"', html)
+        self.assertNotIn('id="sidebar-credits"', html)
+        self.assertIn('href="/login?next=/team-invitation"', html)
+        self.assertIn('href="/register?next=/team-invitation"', html)
+
+        login = client.get("/login?next=%2Fteam-invitation").get_data(as_text=True)
+        register = client.get("/register?next=%2Fteam-invitation").get_data(as_text=True)
+        self.assertIn('href="/register?next=/team-invitation"', login)
+        self.assertIn('href="/login?next=/team-invitation"', register)
+
+        with (
+            self.module.app.test_request_context("/team-invitation"),
+            patch.object(self.module, "signed_in_user", return_value={"id": 1}),
+        ):
+            signed_in_html = render_template(
+                "team_invitation.html", page="team-invitation", page_title="Team Invitation",
+                page_eyebrow="YOUR NEXT CHAPTER, TOGETHER",
+                page_description="Join a team while keeping your leads private.",
+            )
+        self.assertIn('id="accept-team-invitation" type="button" class="primary-button" disabled', signed_in_html)
+
     def test_public_legal_pages_and_registration_links(self):
         client = self.module.app.test_client()
         pages = [
@@ -143,7 +174,8 @@ class DashboardPagesTests(unittest.TestCase):
                     for key, name in [('solo', 'Solo'), ('team', 'Small Team'), ('enterprise', 'Enterprise')]:
                         self.assertIn(f'<h2 id="plan-{key}">{name}</h2>', html)
                     self.assertEqual(html.count('class="plan-availability"'), 3)
-                    self.assertNotIn('Coming soon', html)
+                    for unreleased_feature in ("Ad Pixel Check", "Bulk CSV Enrichment", "Webhook/API Export"):
+                        self.assertNotIn(unreleased_feature, html)
                     self.assertIn('id="trial-title"', html)
                     self.assertIn('Best Value', html)
                     self.assertIn('href="/plans" aria-current="page"', html)
@@ -188,7 +220,7 @@ class DashboardPagesTests(unittest.TestCase):
             ['Hiring Companies Discovery', 'Not included', 'Upgrade to Small Team', 'Preset services', 'Preset + custom services'],
             ['Add Custom Hiring Service', 'Not included', 'Not included', 'Upgrade to Enterprise', 'Included'],
             ['AI Pitch Drafts', 'Upgrade to Solo', *['1 credit / draft'] * 3],
-            ['Other Included Features', 'Site Email/Phone', 'Website Email/Phone', 'All in Solo + Ad Pixel Check', 'All in Team + Bulk CSV Enrichment + Webhook/API Export'],
+            ['Other Included Features', 'Site Email/Phone', 'Website Email/Phone', 'Website Email/Phone', 'Website Email/Phone'],
             ['Max Credit Rollover', 'None', 'Up to 350 credits', 'Up to 1,250 credits', 'Up to 3,500 credits'],
             ['Credit Top-Up Pack (Active subs only)', 'Must upgrade', '₱499 for 350 credits', '₱799 for 750 credits', '₱1,499 for 2,000 credits'],
         ])
@@ -210,6 +242,9 @@ class DashboardPagesTests(unittest.TestCase):
     def test_search_credit_policy_discloses_charges_refunds_and_preview_status(self):
         response = self.module.app.test_client().get("/plans")
         html = unescape(response.get_data(as_text=True))
+        self.assertNotIn("Scrapingdog", html)
+        for unreleased_feature in ("Ad Pixel Check", "Bulk CSV Enrichment", "Webhook/API Export"):
+            self.assertNotIn(unreleased_feature, html)
         for expected in [
             "Search credits pay for discovery work, not a guaranteed number of leads",
             "Three industries cost 30 credits, not 10.",
@@ -219,7 +254,7 @@ class DashboardPagesTests(unittest.TestCase):
             "7 credits back (net cost: 3)",
             "10.5 back (net cost: 4.5)",
             "the whole completed submission produces zero new leads",
-            "Validation failures and wholly failed provider searches are not charged.",
+            "Validation failures and searches that fail before returning results are not charged.",
             "PayMongo QR Ph hosted checkout when payments are configured",
             "one-time payments with no automatic renewal",
             "Solo can select Google Maps and Yelp only.",
@@ -241,6 +276,15 @@ class DashboardPagesTests(unittest.TestCase):
         self.assertIn("Upgrade to Small Team to unlock Facebook, Instagram, LinkedIn company pages", cards[0])
         self.assertIn("Upgrade to Enterprise to add custom hiring services.", cards[1])
         self.assertIn("custom hiring service creation.", cards[2])
+
+    def test_customer_discovery_copy_hides_provider_costs_and_request_details(self):
+        response = self.client.get("/discovery")
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        for internal_detail in ("Scrapingdog", "API requests", "API credits", "indexed by Google via"):
+            with self.subTest(internal_detail=internal_detail):
+                self.assertNotIn(internal_detail, html)
+        self.assertIn("More pages use more search credits", html)
 
     def test_user_management_renders_live_team_data_without_exposing_owner_actions_to_members(self):
         from flask import render_template

@@ -87,6 +87,8 @@
 .home-footer { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding-block: 48px; }
 .home-footer .brand { font-size: 16px; }.home-footer .brand-mark { width: 32px; height: 32px; line-height: 32px; border-radius: 9px; }.home-footer .brand small { font-size: 7px; }
 .home-footer p { color: var(--subtle); font-size: 11px; }.home-footer > div, .legal-footer-links { display: flex; flex-wrap: wrap; gap: 16px; }.home-footer > div a, .legal-footer-links a { display: inline-flex; align-items: center; gap: 9px; font-size: 11px; color: var(--muted); min-height: 44px; }
+.public-page-main { max-width: 860px; padding-block: 64px 32px; }
+.public-page-main > .settings-card { max-width: 760px; margin-inline: auto; }
 .legal-main { padding-block: 64px 32px; }
 .legal-card { max-width: 820px; margin: 0 auto; padding: clamp(24px, 5vw, 56px); border: 1px solid var(--border); border-radius: 18px; background: var(--surface); box-shadow: var(--shadow); }
 .legal-card > .home-kicker { margin: 0 0 16px; }

@@ -210,7 +210,8 @@ test('public LinkedIn company search is selectable and clearly scoped', () => {
     assert.match(html, /name="scan-source" value="linkedin"[\s>]/);
     assert.doesNotMatch(html, /name="scan-source" value="linkedin" disabled/);
     assert.match(html, /LinkedIn Companies/);
-    assert.match(html, /public LinkedIn company pages indexed by Google via Scrapingdog/);
+    assert.match(html, /Searches public LinkedIn company pages\./);
+    assert.doesNotMatch(html, /Scrapingdog|indexed by Google via/);
     assert.match(html, /does not access LinkedIn accounts or private profiles/);
 });
 
@@ -517,19 +518,19 @@ test('hiring discovery uses only job fields and separate results', async () => {
 test('hiring depth shows a credit budget, preserves selection and sends explicit opt-in', async () => {
     const { context, element, checked, requests } = setup();
     context.setDiscoveryMode('jobs');
-    assert.match(element('job-search-budget').innerText, /4 Google Jobs \+ 4 LinkedIn Jobs API requests; 8 total/);
+    assert.match(element('job-search-budget').innerText, /Hiring search estimate: 60 search credits/);
     checked['job-service'] = ['video_editing', 'virtual_assistant'];
     element('job-pages-input').value = '5';
     context.updateHiringSearchBudget();
-    assert.match(element('job-search-budget').innerText, /40 Google Jobs \+ 40 LinkedIn Jobs API requests; 80 total/);
-    assert.match(element('job-search-budget').innerText, /plus company-contact searches/);
+    assert.match(element('job-search-budget').innerText, /Hiring search estimate: 600 search credits/);
+    assert.match(element('job-search-budget').innerText, /including company-contact lookups/);
     context.setDiscoveryMode('local');
     context.setDiscoveryMode('jobs');
     assert.equal(element('job-pages-input').value, '5');
     await context.submitActiveDiscovery();
     assert.equal(JSON.parse(requests[0].options.body).pages_per_role, 5);
     assert.match(html, /<option value="1" selected>1 page \(default\)<\/option>/);
-    assert.match(html, /More pages can consume paid API credits/);
+    assert.match(html, /More pages use more search credits/);
     assert.match(html, /id="discovery-panel-jobs"[^>]*onchange="updateHiringSearchBudget\(\)"/);
 });
 
@@ -574,11 +575,11 @@ test('saved service is selected immediately and drives exact role budget, filter
     assert.equal(label.children[0].checked, true);
     assert.equal(context.hiringServiceLabel(customService.id), 'Bookkeeping');
     context.setDiscoveryMode('jobs');
-    assert.match(element('job-search-budget').innerText, /6 Google Jobs \+ 6 LinkedIn Jobs API requests; 12 total/);
+    assert.match(element('job-search-budget').innerText, /Hiring search estimate: 90 search credits/);
     checked['job-service'] = [];
     element('job-pages-input').value = '3';
     context.updateHiringSearchBudget();
-    assert.match(element('job-search-budget').innerText, /6 Google Jobs \+ 6 LinkedIn Jobs API requests; 12 total/);
+    assert.match(element('job-search-budget').innerText, /Hiring search estimate: 90 search credits/);
     await context.submitActiveDiscovery();
     assert.deepEqual(JSON.parse(requests[1].options.body), {
         service_types: [customService.id], country: '', pages_per_role: 3

@@ -307,10 +307,10 @@ T9. The IP-based free-trial protection plan (already agreed), together with emai
 ### Milestone A: Trust, legal & broken paths (P0)
 1. ✅ **Done in S8.** Add proper 404/405/500 handlers: an HTML error page for browsers and JSON for `/api/*`, with no exception text in responses (NV-01).
 2. ✅ **Done in A2.** Added public Terms, Privacy, Refund Policy, and Contact/Support pages; linked them from public and workspace footers, Billing, and registration. The Privacy Policy explains the keyed sign-up network hash used for trial eligibility (NV-02).
-3. Remove provider names, provider request counts, and provider credit costs from customer UI; describe cost only in site credits (CP-01).
-4. Mark unreleased features as "Coming soon" in the pricing table, or remove them (CP-02).
+3. ✅ **Done in A3.** Removed vendor names, upstream request counts, and provider-credit costs from customer discovery and pricing copy. The hiring estimate now shows only site search credits based on selected roles and page depth (CP-01).
+4. ✅ **Done in A4.** Removed unreleased Ad Pixel Check, bulk CSV enrichment, and webhook/API export from plan comparisons and removed the planned-features upsell disclaimer (CP-02).
 5a. ✅ **Done in S9/S11.** Store and compare `locked_until` as `timestamptz`, with a migration (FL-01).
-5b. Fix the invitation hand-off: keep the token through sign-in and registration (for example, in `sessionStorage`, or move it to a one-time server-side lookup), disable Accept when there's no token, and use the public layout when signed out (FL-07, FL-08, FL-09).
+5b. ✅ **Done in A5b.** Keep the invitation token in the current tab through sign-in/registration, keep Accept disabled without it, use the public layout when signed out, and tell invitees to request a resend when the invitation is invalid or expired (FL-07, FL-08, FL-09).
 5c. Add password reset by email and a change-password page; send email verification together with the IP-based trial plan (FL-03).
 
 ### Milestone B: Conversion & navigation (P1)

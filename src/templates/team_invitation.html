@@ -1,4 +1,4 @@
-{% extends 'base.html' %}
+{% extends 'base.html' if current_user else 'public_page.html' %}
 {% set page = 'team-invitation' %}
 {% set page_title = 'Team Invitation' %}
 {% set page_eyebrow = 'YOUR NEXT CHAPTER, TOGETHER' %}
@@ -9,9 +9,9 @@
     <p class="settings-subtitle">Use the same email address that received the invitation. Accepting does not move your private leads or transfer an existing credit balance. Joining closes your personal free trial and discards its remaining credits; you will use the team's shared wallet instead.</p>
     <p id="team-message" class="settings-notice" role="status" hidden></p>
     {% if current_user %}
-    <button id="accept-team-invitation" type="button" class="primary-button">Accept invitation</button>
+    <button id="accept-team-invitation" type="button" class="primary-button" disabled>Accept invitation</button>
     {% else %}
-    <p>Sign in or create an account before accepting.</p>
+    <p>Open the invitation link in this browser. You can sign in or create an account before accepting; the invitation will be kept during that step.</p>
     <a class="secondary-button" href="{{ url_for('sign_in', next='/team-invitation') }}">Sign in</a>
     <a class="secondary-button" href="{{ url_for('register', next='/team-invitation') }}">Create account</a>
     {% endif %}

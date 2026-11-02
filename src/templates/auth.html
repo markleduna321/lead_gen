@@ -93,11 +93,11 @@
 
             <p class="auth-switch">
                 {% if mode == 'register' %}
-                Already have an account? <a href="{{ url_for('sign_in') }}">Sign in</a>
+                Already have an account? <a href="{{ url_for('sign_in', next=next) }}">Sign in</a>
                 {% elif mode in ('forgot', 'reset') %}
                 Remembered it? <a href="{{ url_for('sign_in') }}">Back to sign in</a>
                 {% else %}
-                New here? <a href="{{ url_for('register') }}">Create an account</a>
+                New here? <a href="{{ url_for('register', next=next) }}">Create an account</a>
                 {% endif %}
             </p>
             {% if mode == 'register' %}

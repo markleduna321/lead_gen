@@ -292,7 +292,7 @@
                                 LinkedIn Companies</label>
                         </div>
                         <p id="linkedin-source-note" class="text-xs text-slate-400 mt-1">
-                            Searches public LinkedIn company pages indexed by Google via Scrapingdog; it does not access LinkedIn accounts or private profiles.
+                            Searches public LinkedIn company pages. It does not access LinkedIn accounts or private profiles.
                         </p>
                     </div>
 
@@ -453,7 +453,7 @@
                     <option value="5">5 pages (maximum)</option>
                 </select>
                 <p id="job-search-budget" aria-live="polite" class="text-[11px] text-amber-400 mt-2"></p>
-                <p class="text-[11px] text-slate-400 mt-1">Up to 10 postings per page before filtering. More pages can consume paid API credits and do not guarantee more matching leads. Company-contact searches use additional credits. Stops early when no next page is available.</p>
+                <p class="text-[11px] text-slate-400 mt-1">The estimate above is based on your selected roles and page depth. More pages use more search credits; results are not guaranteed and searches stop when no more results are available.</p>
             </div>
             </div>
             <p id="discovery-error" role="alert" class="hidden text-sm text-red-400"></p>
@@ -1888,7 +1888,7 @@
             const roles = definitions.reduce((count, service) => count + service.roles.length, 0);
             const pages = Number(document.getElementById('job-pages-input').value);
             document.getElementById('job-search-budget').innerText = [1, 2, 3, 5].includes(pages)
-                ? `Up to ${roles * pages} pages from each provider (${roles * pages} Google Jobs + ${roles * pages} LinkedIn Jobs API requests; ${roles * pages * 2} total), plus company-contact searches. Job-search requests use 5 Scrapingdog credits each.`
+                ? `Hiring search estimate: ${roles * pages * 15} search credits for the selected roles and page depth, including company-contact lookups.`
                 : 'Choose 1, 2, 3, or 5 pages per role.';
         }
 

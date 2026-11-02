@@ -16,7 +16,11 @@
             body: body === undefined ? undefined : JSON.stringify(body)
         });
         const data = await response.json();
-        if (!response.ok || data.status !== 'success') throw new Error(data.message || 'The operation failed.');
+        if (!response.ok || data.status !== 'success') {
+            const error = new Error(data.message || 'The operation failed.');
+            error.code = data.code;
+            throw error;
+        }
         return data;
     }
     async function action(work) {
@@ -29,7 +33,11 @@
         try {
             await work();
         } catch (error) {
-            message(`${error.message} Reload to check the outcome before retrying.`, true);
+            if (document.body.dataset.page === 'team-invitation' && error.code === 'invalid_invite') {
+                message('This invitation is invalid or expired. Ask the team owner to send you a new invitation.', true);
+            } else {
+                message(`${error.message} Reload to check the outcome before retrying.`, true);
+            }
         } finally {
             working = false;
             document.querySelectorAll('button, input').forEach(element => {
@@ -56,7 +64,8 @@
         });
     });
     if (document.body.dataset.page === 'team-invitation') {
-        let token;
+        let token = null;
+        let storageFailed = false;
         try {
             if (window.location.hash) {
                 sessionStorage.setItem('team-invitation', window.location.hash.slice(1));
@@ -64,12 +73,13 @@
             }
             token = sessionStorage.getItem('team-invitation');
         } catch (error) {
+            storageFailed = true;
             message('Your browser could not retain the invitation. Allow session storage and reopen the email link.', true);
         }
         const accept = document.getElementById('accept-team-invitation');
         if (accept) {
             accept.disabled = !token;
-            if (!token) message('Open the invitation link from your email to continue.', true);
+            if (!token && !storageFailed) message('Open the invitation link from your email to continue.', true);
             accept.addEventListener('click', () => action(async () => {
                 await mutate('/api/team/accept', 'POST', {token});
                 sessionStorage.removeItem('team-invitation');

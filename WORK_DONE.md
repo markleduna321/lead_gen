@@ -3,7 +3,7 @@
 > **Companion document:** [WORK_REMAINING.md](./WORK_REMAINING.md) lists what is still to do and how to resume.
 > **Master plan:** [SYSTEM_REVIEW_PLAN.md](./SYSTEM_REVIEW_PLAN.md) holds the full findings (Phases 1–3) and the implementation plan. Items marked ✅ there are done.
 
-Last updated: 2026-11-01. Nothing has been committed yet; all changes are in the working tree.
+Last updated: 2026-11-02. Nothing has been committed yet; all changes are in the working tree.
 
 ## Status at a glance
 
@@ -11,12 +11,12 @@ Last updated: 2026-11-01. Nothing has been committed yet; all changes are in the
 | --- | --- |
 | S: Security hotfix (S1–S11) | ✅ Done |
 | T: Hardening (T1–T9) | ✅ Done |
-| A: Trust, legal & broken paths | Partly done (A1, A2, A5a, A5c) |
+| A: Trust, legal & broken paths | ✅ Done |
 | B: Conversion & navigation | Partly done (10d, 10e) |
 | C: Visual system & accessibility | Not started |
 | D: Copy polish & consistency | Not started |
 
-Latest test run: **351 Python tests (including the PostgreSQL integration tests) and 81 JS tests pass.**
+Latest test run: **353 Python tests (including the PostgreSQL integration tests) and 83 JS tests pass.**
 
 ## How each fix was done
 
@@ -79,5 +79,8 @@ For every item: plan and clarifying questions first, then the change, tests (uni
 - **A5a** (`locked_until` time zone): done in S9/S11.
 - **A5c** (password reset, change password, email verification): done in T3 and T9.
 - **A2** (public policies and support): added `/terms`, `/privacy`, `/refund-policy`, and `/support`; linked them from public and workspace footers, Billing, and registration. The Privacy Policy explains the keyed trial-network hash. Because the operator details and support address were not provided, policy copy avoids inventing them and the Support page says no direct email is configured.
+- **A3** (provider internals in customer copy): removed the search vendor name, upstream request counts, and vendor-credit costs from discovery and pricing UI. The hiring estimate now reports only site search credits based on selected roles and page depth.
+- **A4** (unreleased plan features): removed Ad Pixel Check, bulk CSV enrichment, and webhook/API export from the public plan comparison and removed the stale planned-features disclaimer.
+- **A5b** (team invitation hand-off): keep the email-link token in tab-scoped storage through sign-in/registration; preserve `next` between auth pages; disable acceptance until a token is available; show the public layout while signed out; and give an actionable resend message for expired/invalid invitations.
 - **B10d** (escaping `innerHTML`): done in S1.
 - **B10e** (generic auth messages, rate limits): done in S9 and T8.

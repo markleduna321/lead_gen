@@ -6,7 +6,7 @@ const vm = require('node:vm');
 
 const source = fs.readFileSync(path.join(__dirname, '..', 'static', 'team.js'), 'utf8');
 
-function setup({storage = new Map(), token = '', signedIn = true, fail = false} = {}) {
+function setup({storage = new Map(), token = '', signedIn = true, fail = false, storageFails = false} = {}) {
     const notice = {hidden: true, textContent: ''};
     const accept = {
         disabled: false, hidden: false, dataset: {}, listeners: {},
@@ -22,8 +22,14 @@ function setup({storage = new Map(), token = '', signedIn = true, fail = false} 
         window,
         history: {replaceState() { window.location.hash = ''; }},
         sessionStorage: {
-            getItem: key => storage.get(key),
-            setItem: (key, value) => storage.set(key, value),
+            getItem: key => {
+                if (storageFails) throw new Error('Storage disabled');
+                return storage.get(key);
+            },
+            setItem: (key, value) => {
+                if (storageFails) throw new Error('Storage disabled');
+                storage.set(key, value);
+            },
             removeItem: key => storage.delete(key)
         },
         document: {
@@ -39,7 +45,7 @@ function setup({storage = new Map(), token = '', signedIn = true, fail = false} 
         async fetch(url, options) {
             calls.push({url, options});
             return {ok: !fail, json: async () => fail
-                ? {status: 'error', message: 'Invitation expired'}
+                ? {status: 'error', code: 'invalid_invite', message: 'Invitation is invalid or expired.'}
                 : {status: 'success'}};
         }
     });
@@ -68,8 +74,22 @@ test('Failed acceptance retains the token and restores controls without claiming
     assert.equal(member.accept.disabled, false);
     assert.equal(member.accept.hidden, false);
     assert.equal(member.storage.get('team-invitation'), 'private-email-token');
-    assert.match(member.notice.textContent, /Invitation expired/);
+    assert.match(member.notice.textContent, /Ask the team owner to send you a new invitation/);
+    assert.doesNotMatch(member.notice.textContent, /Reload to check the outcome/);
     assert.equal(member.notice.className, 'settings-error');
     assert.equal(member.refreshes(), 0);
     assert.equal(setup().accept.disabled, true);
+});
+
+test('Missing invitation stays disabled and directs the invitee to open their email link', () => {
+    const member = setup();
+    assert.equal(member.accept.disabled, true);
+    assert.match(member.notice.textContent, /Open the invitation link from your email/);
+});
+
+test('Storage failures preserve actionable instructions and keep acceptance disabled', () => {
+    const member = setup({token: 'private-email-token', storageFails: true});
+    assert.equal(member.accept.disabled, true);
+    assert.match(member.notice.textContent, /could not retain the invitation/);
+    assert.doesNotMatch(member.notice.textContent, /Open the invitation link from your email/);
 });

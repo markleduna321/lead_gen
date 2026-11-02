@@ -351,6 +351,11 @@ logs. Recipients sign in/register with the invited address. Unassigned zero-bala
 joining closes the trial and discards its remaining credits without transferring
 them into the team wallet. Existing paid subscriptions/teams must be
 resolved first. Downgrades with excess members/invitations are rejected.
+The invitation page keeps the email-link token in the current browser tab
+through sign-in or registration, then removes it after successful acceptance.
+The signed-out page uses the public layout; if the token is missing or expired,
+the invitee is asked to reopen the email link or request a resend from the team
+owner.
 
 System mail (team invitations, email verification and password resets) uses
 **Resend SMTP over TLS**, separate from user outreach:

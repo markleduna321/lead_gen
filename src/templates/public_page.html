@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light dark">
+    <title>{{ page_title }} | AsuraTECH</title>
+    <script src="{{ url_for('static', filename='workspace.js') }}"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='home.css') }}">
+</head>
+<body data-page="{{ page }}" class="home-body">
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    {% include "public_nav.html" %}
+    <main id="main-content" class="public-page-main home-container">
+        {% block content %}{% endblock %}
+    </main>
+    {% include "public_footer.html" %}
+</body>
+</html>
