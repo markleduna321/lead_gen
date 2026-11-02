@@ -314,13 +314,13 @@ T9. The IP-based free-trial protection plan (already agreed), together with emai
 5c. Add password reset by email and a change-password page; send email verification together with the IP-based trial plan (FL-03).
 
 ### Milestone B: Conversion & navigation (P1)
-5. Preserve purchase intent: send anonymous plan CTAs to `/register?next=/billing?plan=solo`, pass `next` between login and register, and pre-select the plan on Billing (NV-03, PR-04).
+5. ✅ **Done in B5/B10a.** Anonymous paid-plan CTAs carry the selected plan and Billing anchor through registration; sign-in/register links preserve `next`; Billing validates, preselects, and highlights the selected plan. Added a Free Trial CTA that returns new visitors to the trial offer on Billing (NV-03, PR-04, FL-06, FL-17).
 6. Render styled upgrade/permission pages for 403s on HTML routes, and point upgrade links to `/billing` (NV-04, NV-05).
 7. Show a live search cost next to the discovery submit button; limit pages-per-role options by plan (PR-02, PR-03).
 8. Generate the public pricing table from `plans.py`/`payments.PRICES` (PR-01).
 9. Make copy plan-aware: say "your credits" for Trial and Solo, "shared credits" for teams; fix the "1 industries" grammar (CP-06, CP-07).
 10. Update home copy for 5 sources, LinkedIn Jobs, and the free-trial CTA (CP-05).
-10a. Carry `next` between login and register, and pre-select and highlight the plan on Billing (FL-06, FL-17).
+10a. ✅ **Done in B5/B10a.** Carry `next` both ways between login and registration, and preselect/highlight the chosen plan on Billing (FL-06, FL-17).
 10b. Show plan limits in the discovery form (industry counter, disable extra boxes); no default industry; resolve the location before the confirm, with a busy state; replace `confirm()` with an in-page cost summary (FL-10–FL-12, PR-02).
 10c. Clear outcome messages: say "no credits charged" when nothing was charged, hide internal log phrasing, and show visible errors for every failed action (FL-13, FL-15).
 10d. Escape all user and scraped values inserted with `innerHTML`, starting with the custom business type (FL-14; full sweep in Phase 3).

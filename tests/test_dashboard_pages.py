@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 import sys
 import types
+from urllib.parse import parse_qs, urlsplit
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -187,9 +188,45 @@ class DashboardPagesTests(unittest.TestCase):
                         self.assertIn(f'value="{preference}"', html)
                     self.assertNotIn('globe/globe.js', html)
                     self.assertNotIn('type="submit"', html)
-                    self.assertIn('href="/billing#buy-solo"', html)
+                    self.assertIn('data-plan-cta="solo"', html)
                     self.assertNotIn('$', html)
                     self.assertIn('New accounts receive a 7-day free trial with 30 search credits once they verify their email (one trial per network).', html)
+
+    def test_plan_calls_to_action_preserve_intent_for_anonymous_and_signed_in_visitors(self):
+        anon_html = self.module.app.test_client().get("/plans").get_data(as_text=True)
+        signed_html = self.client.get("/plans").get_data(as_text=True)
+        for plan_id in ("solo", "small_team", "enterprise"):
+            pattern = rf'<a class="home-button" href="([^"]+)" data-plan-cta="{plan_id}">'
+            anonymous_href = re.search(pattern, anon_html).group(1)
+            anonymous_url = urlsplit(anonymous_href)
+            self.assertEqual(anonymous_url.path, "/register")
+            self.assertEqual(parse_qs(anonymous_url.query)["next"][0],
+                             f"/billing?plan={plan_id}#buy-{plan_id}")
+
+            signed_href = re.search(pattern, signed_html).group(1)
+            signed_url = urlsplit(signed_href)
+            self.assertEqual(signed_url.path, "/billing")
+            self.assertEqual(parse_qs(signed_url.query)["plan"][0], plan_id)
+            self.assertEqual(signed_url.fragment, f"buy-{plan_id}")
+
+        trial_pattern = r'<a class="home-button" href="([^"]+)" data-plan-cta="trial">'
+        anonymous_trial = urlsplit(re.search(trial_pattern, anon_html).group(1))
+        self.assertEqual(anonymous_trial.path, "/register")
+        self.assertEqual(parse_qs(anonymous_trial.query)["next"][0], "/billing#billing-trial-offer")
+        signed_trial = urlsplit(re.search(trial_pattern, signed_html).group(1))
+        self.assertEqual(signed_trial.path, "/billing")
+        self.assertEqual(signed_trial.fragment, "billing-trial-offer")
+
+        target = "/billing?plan=solo#buy-solo"
+        auth_next = self.module.app.test_client()
+        login = auth_next.get("/login", query_string={"next": target}).get_data(as_text=True)
+        register = auth_next.get("/register", query_string={"next": target}).get_data(as_text=True)
+        register_href = re.search(r'<a href="([^"]+)">Create an account</a>', login).group(1)
+        sign_in_href = re.search(r'<a href="([^"]+)">Sign in</a>', register).group(1)
+        self.assertEqual(parse_qs(urlsplit(register_href).query)["next"][0], target)
+        self.assertEqual(parse_qs(urlsplit(sign_in_href).query)["next"][0], target)
+        self.assertIn(f'name="next" value="{target}"', login)
+        self.assertIn(f'name="next" value="{target}"', register)
 
     def test_plan_comparison_matches_published_offering(self):
         response = self.module.app.test_client().get("/plans")

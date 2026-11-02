@@ -289,6 +289,8 @@ Overview; `/overview` also opens it directly and requires authentication.
 
 The public navigation links to a separate **Plans & Pricing** page at `/plans`,
 available with or without signing in and using the same saved theme preference.
+Its plan buttons keep the selected plan through registration/sign-in and
+highlight that plan on Billing; the Free Trial button returns to the trial offer.
 It displays a 7-day free trial (30 credits) and Solo (PHP 999/month), Small Team
 (PHP 2,499/month, Best Value), and Enterprise (PHP 5,999/month). Annual totals
 include two months free; the comparison table lists credits, seats, daily search

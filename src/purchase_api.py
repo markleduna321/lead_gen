@@ -20,8 +20,13 @@ def billing_page():
     state = payments.overview(dsn(), user_id())
     prices_json = {plan: {str(key): value for key, value in price.items()}
                    for plan, price in payments.PRICES.items()}
+    selected_plan = request.args.get("plan", "")
+    if selected_plan == "team":
+        selected_plan = "small_team"
+    if selected_plan not in payments.PRICES:
+        selected_plan = None
     return render_template("billing.html", billing=state, prices=payments.PRICES,
-                           prices_json=prices_json, plans=PLANS)
+                           prices_json=prices_json, plans=PLANS, selected_plan=selected_plan)
 
 
 @bp.route("/api/billing")

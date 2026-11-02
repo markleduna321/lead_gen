@@ -3,7 +3,7 @@
 > **Companion document:** [WORK_DONE.md](./WORK_DONE.md) records everything finished so far.
 > **Master plan:** [SYSTEM_REVIEW_PLAN.md](./SYSTEM_REVIEW_PLAN.md) holds each item's finding codes (NV-, CP-, PR-, FL-, UI-, AX-) and full context. Mark items ✅ there as they're finished, and move a summary to [WORK_DONE.md](./WORK_DONE.md).
 
-Last updated: 2026-11-02. **Next item: Milestone B5 / B10a.**
+Last updated: 2026-11-02. **Next item: Milestone B6.**
 
 ## How to resume
 
@@ -26,7 +26,7 @@ Suggested prompt when resuming: *"Continue the system review fixes from WORK_REM
 
 ## Milestone B: Conversion & navigation (P1)
 
-- [ ] **B5 / B10a** Preserve purchase intent: anonymous plan CTAs go to `/register?next=/billing?plan=...`, `next` is carried between login and register, and the plan is pre-selected and highlighted on Billing (NV-03, PR-04, FL-06, FL-17).
+- [x] **B5 / B10a** Anonymous plan CTAs now preserve the plan and Billing anchor through registration; `next` is carried between login and registration; Billing validates, preselects, and highlights the plan. Added a Free Trial CTA that returns visitors to the Billing trial offer (NV-03, PR-04, FL-06, FL-17).
 - [ ] **B6** Styled upgrade/permission pages for 403s on HTML routes; upgrade links go to `/billing` (NV-04, NV-05).
 - [ ] **B7 / B10b** Show live search cost next to the discovery submit button and limit pages-per-role by plan. Show plan limits in the form (industry counter, disabled extra boxes), use no default industry, resolve the location before the confirm step, and replace `confirm()` with an in-page cost summary (PR-02, PR-03, FL-10–FL-12).
 - [ ] **B8** Generate the public pricing table from `plans.py` / `payments.PRICES` (PR-01).

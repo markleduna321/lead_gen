@@ -5,7 +5,7 @@
 {% set page_description = 'Choose your plan, replenish shared credits, and keep every payment in view.' %}
 {% block content %}
 <div id="billing-message" class="queue-notice" role="status" hidden></div>
-<section id="billing-trial-offer" class="panel billing-topup" {% if not billing.can_start_trial %}hidden{% endif %}>
+<section id="billing-trial-offer" class="panel billing-topup{% if selected_plan == 'trial' %} billing-plan-selected{% endif %}" {% if not billing.can_start_trial %}hidden{% endif %}>
     <div><h2>Start your free trial</h2><p class="settings-subtitle">7 days, 30 search credits, Google Maps discovery. No payment required.</p><p class="settings-hint">One trial per account and per network. Your trial starts when you select the button.</p></div>
     <button id="billing-start-trial" type="button" class="primary-button">Start free trial</button>
 </section>
@@ -24,10 +24,10 @@
         <label class="billing-period" for="billing-months">Billing period<select id="billing-months"><option value="1">Monthly</option><option value="12">Annual · 2 months free</option></select></label>
     </div>
     <p class="settings-hint">Pay securely with QR Ph on PayMongo's hosted checkout. Published prices are the checkout totals; we do not add gateway fees. Annual plans receive credits monthly, not all at once.</p>
-    <div class="billing-plan-grid">
+    <div id="billing-plan-grid" class="billing-plan-grid" data-selected-plan="{{ selected_plan or '' }}">
         {% for plan_id, price in prices.items() %}
         {% set plan = plans[plan_id] %}
-        <article id="buy-{{ plan_id }}" class="billing-plan panel{% if plan_id == 'small_team' %} billing-plan-featured{% endif %}">
+        <article id="buy-{{ plan_id }}" class="billing-plan panel{% if plan_id == 'small_team' %} billing-plan-featured{% endif %}{% if selected_plan == plan_id %} billing-plan-selected{% endif %}" data-selected-plan="{{ 'true' if selected_plan == plan_id else 'false' }}">
             <div class="billing-plan-title"><h3>{{ plan.name }}</h3>{% if plan_id == 'small_team' %}<span class="settings-badge settings-badge-on">Best value</span>{% endif %}</div>
             <p class="billing-price" data-price-plan="{{ plan_id }}">&#8369;{{ '{:,.0f}'.format(price[1] / 100) }}<small> / month</small></p>
             <p class="settings-hint" data-price-note="{{ plan_id }}">One-time monthly payment</p>

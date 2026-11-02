@@ -21,7 +21,10 @@
             <span class="plans-announcement"><span aria-hidden="true"></span> Annual billing includes 2 months free</span>
         </section>
         <aside class="plans-trial" aria-labelledby="trial-title">
-            <div><p class="home-kicker">START WITH A LITTLE POSSIBILITY</p><h2 id="trial-title">Free Trial <span>&#8369;0 / 7 days</span></h2><p>30 search credits &middot; 3 local industry searches before refunds &middot; 1 user</p><p>1 industry per submission &middot; 10 submissions per day, subject to balance.</p><p>Maps / Location Search + Site Email/Phone. No rollover; upgrade to access credit top-ups.</p></div>
+            <div><p class="home-kicker">START WITH A LITTLE POSSIBILITY</p><h2 id="trial-title">Free Trial <span>&#8369;0 / 7 days</span></h2><p>30 search credits &middot; 3 local industry searches before refunds &middot; 1 user</p><p>1 industry per submission &middot; 10 submissions per day, subject to balance.</p><p>Maps / Location Search + Site Email/Phone. No rollover; upgrade to access credit top-ups.</p>
+                {% set trial_target = url_for('purchases.billing_page') ~ '#billing-trial-offer' %}
+                <a class="home-button" href="{{ trial_target if current_user else url_for('register', next=trial_target) }}" data-plan-cta="trial">Start free trial <span aria-hidden="true">&rarr;</span></a>
+            </div>
             <a class="home-text-link" href="#plan-comparison">Compare all features <span aria-hidden="true">&darr;</span></a>
         </aside>
         {% set paid_plans = [
@@ -45,7 +48,9 @@
                 <p>All five local discovery sources, preset Hiring Companies services, and custom hiring service creation.</p>
                 {% endif %}
                 <p class="plan-topup">Top-up: <b>&#8369;{{ plan.topup }} for {{ plan.topup_credits }} credits</b><br>Active subscribers only</p>
-                <a class="home-button" href="{{ url_for('purchases.billing_page') }}#buy-{{ 'small_team' if plan.id == 'team' else plan.id }}">Choose {{ plan.name }} <span aria-hidden="true">&rarr;</span></a>
+                {% set billing_plan_id = 'small_team' if plan.id == 'team' else plan.id %}
+                {% set billing_target = url_for('purchases.billing_page', plan=billing_plan_id) ~ '#buy-' ~ billing_plan_id %}
+                <a class="home-button" href="{{ url_for('purchases.billing_page', plan=billing_plan_id) ~ '#buy-' ~ billing_plan_id if current_user else url_for('register', next=billing_target) }}" data-plan-cta="{{ billing_plan_id }}">Choose {{ plan.name }} <span aria-hidden="true">&rarr;</span></a>
                 <a class="home-text-link" href="#plan-comparison">Explore {{ plan.name }} features <span aria-hidden="true">&darr;</span></a>
             </article>
             {% endfor %}
