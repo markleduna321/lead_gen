@@ -172,7 +172,7 @@ class DashboardPagesTests(unittest.TestCase):
                     html = response.get_data(as_text=True)
                     self.assertIn('<title>Plans &amp; Pricing | AsuraTECH</title>', html)
                     self.assertIn('data-page="plans"', html)
-                    for key, name in [('solo', 'Solo'), ('team', 'Small Team'), ('enterprise', 'Enterprise')]:
+                    for key, name in [('solo', 'Solo'), ('small_team', 'Small Team'), ('enterprise', 'Enterprise')]:
                         self.assertIn(f'<h2 id="plan-{key}">{name}</h2>', html)
                     self.assertEqual(html.count('class="plan-availability"'), 3)
                     for unreleased_feature in ("Ad Pixel Check", "Bulk CSV Enrichment", "Webhook/API Export"):
@@ -276,6 +276,57 @@ class DashboardPagesTests(unittest.TestCase):
                 with self.subTest(expected=expected):
                     self.assertIn(expected, card)
 
+    def test_public_pricing_tracks_plan_capabilities_and_checkout_prices(self):
+        from dataclasses import replace
+        import payments
+        import plans
+
+        updated_solo = replace(
+            plans.PLANS["solo"], credits=900, seats=2, industries=4,
+            daily=77, rollover=425,
+        )
+        updated_prices = {
+            **payments.PRICES["solo"],
+            1: 123400,
+            12: 1234000,
+            "topup": 23400,
+            "pack": 120,
+        }
+        with (
+            patch.dict(plans.PLANS, {"solo": updated_solo}),
+            patch.dict(payments.PRICES, {"solo": updated_prices}),
+        ):
+            response = self.module.app.test_client().get("/plans")
+
+        self.assertEqual(response.status_code, 200)
+        html = unescape(response.get_data(as_text=True))
+        card = re.search(
+            r'<article class="plan-card[^"]*" aria-labelledby="plan-solo">(.*?)</article>',
+            html, re.S,
+        ).group(1)
+        for expected in [
+            "₱1,234<small> / month",
+            "₱12,340 / year",
+            "₱1,028/mo",
+            "900 search credits / month",
+            "90 local industry searches",
+            "Up to 4 industries per submission",
+            "Up to 2 users",
+            "77 submissions / day",
+            "Rollover up to 425 credits",
+            "₱234 for 120 credits",
+        ]:
+            with self.subTest(expected=expected):
+                self.assertIn(expected, card)
+        self.assertIn("₱1,234 / month", html)
+        self.assertIn("₱13.71", html)
+        self.assertIn("90 / mo", html)
+        self.assertIn("Up to 2 Users", html)
+        self.assertIn(
+            'content="Compare AsuraTECH\'s 7-day free trial, Solo at PHP 1,234/month,',
+            html,
+        )
+
     def test_search_credit_policy_discloses_charges_refunds_and_preview_status(self):
         response = self.module.app.test_client().get("/plans")
         html = unescape(response.get_data(as_text=True))
@@ -284,12 +335,11 @@ class DashboardPagesTests(unittest.TestCase):
             self.assertNotIn(unreleased_feature, html)
         for expected in [
             "Search credits pay for discovery work, not a guaranteed number of leads",
-            "Three industries cost 30 credits, not 10.",
+            "Each selected industry adds its own charge.",
             "Local and hiring discovery share the same credit balance.",
-            "60 credits at one page per role, 180 at three pages, or 300 at five pages",
+            "The total charge scales with selected roles and page depth",
             "70% of the search charge is refunded as search credits, not cash",
-            "7 credits back (net cost: 3)",
-            "10.5 back (net cost: 4.5)",
+            "30% covers processing.",
             "the whole completed submission produces zero new leads",
             "Validation failures and searches that fail before returning results are not charged.",
             "PayMongo QR Ph hosted checkout when payments are configured",

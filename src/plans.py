@@ -31,6 +31,7 @@ LOCAL_PRICE = Decimal("10")
 HIRING_PRICE = Decimal("15")
 PITCH_PRICE = Decimal("1")
 ZERO_RESULT_REFUND = Decimal("0.70")
+TRIAL_DAYS = 7
 MAX_INDUSTRY_LENGTH = 60
 
 

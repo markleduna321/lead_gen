@@ -12,7 +12,9 @@ import uuid
 import psycopg2
 from psycopg2.extras import Json, RealDictCursor, execute_values
 
-from plans import PITCH_PRICE, PLANS, PlanError, ZERO_RESULT_REFUND, capabilities, quote_search
+from plans import (
+    PITCH_PRICE, PLANS, TRIAL_DAYS, PlanError, ZERO_RESULT_REFUND, capabilities, quote_search,
+)
 
 CONTEXT = threading.local()
 SCHEMA = """
@@ -139,7 +141,7 @@ def ledger(cur, wallet, actor, key, amount, reason):
 
 def activate_wallet(cur, wallet, actor, plan_id, months, event_key, reason, discard_trial=False):
     now = datetime.now(timezone.utc)
-    end = now + timedelta(days=7) if plan_id == "trial" else now
+    end = now + timedelta(days=TRIAL_DAYS) if plan_id == "trial" else now
     if plan_id != "trial":
         for _ in range(months):
             end = add_month(end)

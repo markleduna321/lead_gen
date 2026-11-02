@@ -16,7 +16,9 @@ from dotenv import load_dotenv
 import app_env
 import log_redact
 from discovery_runs import DiscoveryBusyError, LocalDiscoveryRuns
-from plans import PlanError
+from plans import (
+    HIRING_PRICE, LOCAL_PRICE, PITCH_PRICE, PLANS, TRIAL_DAYS, ZERO_RESULT_REFUND, PlanError,
+)
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 log_redact.install()
@@ -652,7 +654,163 @@ def home():
 
 @app.route('/plans', methods=['GET'])
 def plans():
-    return render_template('plans.html')
+    import payments
+
+    def format_pesos(centavos):
+        pesos, remainder = divmod(centavos, 100)
+        return f"{pesos:,}" if remainder == 0 else f"{pesos:,}.{remainder:02d}"
+
+    trial = PLANS["trial"]
+    trial_industry_searches = int(trial.credits / LOCAL_PRICE)
+    annual_free_months = (
+        12 * payments.PRICES["solo"][1] - payments.PRICES["solo"][12]
+    ) // payments.PRICES["solo"][1]
+    plan_descriptions = {
+        "solo": ("01 / INDEPENDENT",
+                 "For independent professionals building their own pipeline."),
+        "small_team": ("02 / GROWING TOGETHER",
+                       "For small agencies and growing businesses reaching further."),
+        "enterprise": ("03 / THINKING BIGGER",
+                       "For established organizations exploring their next market."),
+    }
+    source_names = {
+        "google": "Google Maps",
+        "yelp": "Yelp",
+        "facebook": "Facebook",
+        "instagram": "Instagram",
+        "linkedin": "LinkedIn company pages",
+    }
+    paid_plans = []
+    for plan_id, (index, audience) in plan_descriptions.items():
+        plan = PLANS[plan_id]
+        prices = payments.PRICES[plan_id]
+        local_searches = int(plan.credits / LOCAL_PRICE)
+        paid_plans.append({
+            "id": plan_id,
+            "name": plan.name,
+            "index": index,
+            "audience": audience,
+            "monthly": format_pesos(prices[1]),
+            "annual": format_pesos(prices[12]),
+            "equivalent": f"{prices[12] // 1200:,}",
+            "credits": f"{plan.credits:,}",
+            "industries": plan.industries,
+            "industry_searches": f"{local_searches:,}",
+            "seats": "1 user" if plan.seats == 1 else f"Up to {plan.seats:,} users",
+            "searches": f"{plan.daily:,}",
+            "rollover": f"{plan.rollover:,}",
+            "topup": format_pesos(prices["topup"]),
+            "topup_credits": f"{prices['pack']:,}",
+        })
+
+    plans_by_id = {plan_id: PLANS[plan_id] for plan_id in ("trial", *plan_descriptions)}
+    column_ids = ("trial", *plan_descriptions)
+
+    def local_sources(plan):
+        return " + ".join(source_names[source] for source in plan.sources)
+
+    comparison_rows = [
+        ("Monthly Price", ["₱0 (7 Days)"] + [
+            f"₱{plan['monthly']} / month" for plan in paid_plans
+        ]),
+        (f"Annual Billing ({annual_free_months} Months Free)", ["Not available"] + [
+            f"₱{plan['annual']} / year (approx. ₱{plan['equivalent']}/mo)"
+            for plan in paid_plans
+        ]),
+        ("Included Search Credits", [
+            f"{trial.credits:,} Search Credits / {TRIAL_DAYS} days"
+        ] + [
+            f"{plan['credits']} Search Credits / mo" for plan in paid_plans
+        ]),
+        ("Local Discovery Charge", [
+            f"{LOCAL_PRICE:g} credits / industry" for _ in column_ids
+        ]),
+        ("Local Industry Searches (Before Refunds; Local-Only Usage)", [
+            f"{trial_industry_searches:,} / trial"
+        ] + [f"{plan['industry_searches']} / mo" for plan in paid_plans]),
+        ("Approx. Monthly Price per Local Industry Search", ["Free"] + [
+            f"₱{(payments.PRICES[plan_id][1] / (100 * int(PLANS[plan_id].credits / LOCAL_PRICE))):.2f}"
+            for plan_id in plan_descriptions
+        ]),
+        ("Max Industries per Submission", [
+            str(plans_by_id[plan_id].industries) for plan_id in column_ids
+        ]),
+        ("Hiring Discovery Charge", [
+            f"{HIRING_PRICE:g} credits / role-page" if plans_by_id[plan_id].hiring_pages
+            else "Not included" for plan_id in column_ids
+        ]),
+        ("Max Hiring Pages per Role", [
+            str(plans_by_id[plan_id].hiring_pages) if plans_by_id[plan_id].hiring_pages
+            else "Not included" for plan_id in column_ids
+        ]),
+        ("Zero-New-Lead Refund (Completed Search)", [
+            f"{ZERO_RESULT_REFUND:.0%} of search charge" for _ in column_ids
+        ]),
+        ("Team Seats", [
+            f"{'Up to ' if plans_by_id[plan_id].seats > 1 else ''}"
+            f"{plans_by_id[plan_id].seats} {'Users' if plans_by_id[plan_id].seats > 1 else 'User'}"
+            for plan_id in column_ids
+        ]),
+        ("Daily Submission Cap (Subject to Credit Balance)", [
+            f"{plans_by_id[plan_id].daily:,} submissions / day" for plan_id in column_ids
+        ]),
+        ("Local Discovery Data Sources", [
+            local_sources(plans_by_id[plan_id]) for plan_id in column_ids
+        ]),
+        ("Hiring Companies Discovery", [
+            "Upgrade to Small Team" if plan_id == "solo" and not plans_by_id[plan_id].hiring_pages
+            else ("Preset + custom services" if plans_by_id[plan_id].custom_services
+                  else "Preset services" if plans_by_id[plan_id].hiring_pages
+                  else "Not included")
+            for plan_id in column_ids
+        ]),
+        ("Add Custom Hiring Service", [
+            "Included" if plans_by_id[plan_id].custom_services
+            else "Upgrade to Enterprise" if plans_by_id[plan_id].hiring_pages
+            else "Not included" for plan_id in column_ids
+        ]),
+        ("AI Pitch Drafts", [
+            f"{PITCH_PRICE:g} credit / draft" if plans_by_id[plan_id].ai_drafts
+            else "Upgrade to Solo" for plan_id in column_ids
+        ]),
+        ("Other Included Features", [
+            "Site Email/Phone" if plan_id == "trial" else "Website Email/Phone"
+            for plan_id in column_ids
+        ]),
+        ("Max Credit Rollover", [
+            f"Up to {plans_by_id[plan_id].rollover:,} credits"
+            if plans_by_id[plan_id].rollover else "None"
+            for plan_id in column_ids
+        ]),
+        ("Credit Top-Up Pack (Active subs only)", ["Must upgrade"] + [
+            f"₱{plan['topup']} for {plan['topup_credits']} credits" for plan in paid_plans
+        ]),
+    ]
+    return render_template(
+        'plans.html',
+        trial_plan=trial,
+        trial_days=TRIAL_DAYS,
+        trial_industry_searches=trial_industry_searches,
+        paid_plans=paid_plans,
+        comparison_rows=comparison_rows,
+        comparison_plans=[
+            {"id": plan_id, "name": PLANS[plan_id].name} for plan_id in column_ids
+        ],
+        local_price=LOCAL_PRICE,
+        hiring_price=HIRING_PRICE,
+        pitch_price=PITCH_PRICE,
+        refund_percent=ZERO_RESULT_REFUND * 100,
+        retained_percent=(1 - ZERO_RESULT_REFUND) * 100,
+        annual_free_months=annual_free_months,
+        pricing_description=(
+            f"Compare AsuraTECH's {TRIAL_DAYS}-day free trial, "
+            + ", ".join(
+                f"{plan['name']} at PHP {plan['monthly']}/month"
+                for plan in paid_plans
+            )
+            + "."
+        ),
+    )
 
 
 def render_public_policy(page, title):
