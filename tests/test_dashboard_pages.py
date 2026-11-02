@@ -71,6 +71,43 @@ class DashboardPagesTests(unittest.TestCase):
                 self.assertEqual(response.status_code, 200)
                 response.close()
 
+    def test_type_scale_sets_a_12px_floor_and_readable_controls(self):
+        repository = Path(__file__).resolve().parents[1]
+        dashboard_css = (repository / "static" / "dashboard.css").read_text(encoding="utf-8")
+        home_css = (repository / "static" / "home.css").read_text(encoding="utf-8")
+        dashboard_html = (repository / "src" / "templates" / "dashboard.html").read_text(encoding="utf-8")
+
+        for token, size in (
+            ("--type-caption", "12px"),
+            ("--type-ui", "13px"),
+            ("--type-body-small", "14px"),
+            ("--type-body", "16px"),
+            ("--type-title-small", "18px"),
+            ("--type-title", "22px"),
+            ("--type-heading", "28px"),
+            ("--type-display", "36px"),
+        ):
+            with self.subTest(token=token):
+                self.assertIn(f"{token}: {size};", dashboard_css)
+
+        for stylesheet in (dashboard_css, home_css):
+            declarations = re.findall(r"\bfont(?:-size)?:\s*([^;}]+)", stylesheet)
+            for declaration in declarations:
+                for size in re.findall(r"(?<![\w.-])(\d+(?:\.\d+)?)px", declaration):
+                    self.assertGreaterEqual(float(size), 12)
+
+        for selector in (".nav-link", ".primary-button, .secondary-button"):
+            self.assertRegex(
+                dashboard_css,
+                re.escape(selector) + r" \{[^}]*font-size: var\(--type-body-small\)",
+            )
+        for selector in (".home-nav-links a, .home-sign-in", ".home-button", ".home-nav-cta"):
+            self.assertRegex(
+                home_css,
+                re.escape(selector) + r" \{[^}]*font-size: var\(--type-body-small\)",
+            )
+        self.assertNotIn("text-[10px]", dashboard_html)
+
     def test_public_home_is_available_without_database_access(self):
         with patch("psycopg2.connect", side_effect=AssertionError("Unexpected database access")):
             response = self.module.app.test_client().get("/")

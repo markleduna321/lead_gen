@@ -3,7 +3,7 @@
 > **Companion document:** [WORK_DONE.md](./WORK_DONE.md) records everything finished so far.
 > **Master plan:** [SYSTEM_REVIEW_PLAN.md](./SYSTEM_REVIEW_PLAN.md) holds each item's finding codes (NV-, CP-, PR-, FL-, UI-, AX-) and full context. Mark items ✅ there as they're finished, and move a summary to [WORK_DONE.md](./WORK_DONE.md).
 
-Last updated: 2026-11-02. **Next item: Milestone B10c.**
+Last updated: 2026-11-02. **Next item: C12.**
 
 ## How to resume
 
@@ -32,12 +32,12 @@ Suggested prompt when resuming: *"Continue the system review fixes from WORK_REM
 - [x] **B8** Generate public plan cards and comparison rows from `plans.py` / `payments.PRICES`, use canonical plan IDs, and derive pricing copy from server-owned prices (PR-01).
 - [x] **B9** Use personal-balance wording for Trial/Solo, shared-balance wording for team plans, and singular "industry" when the cap is one across discovery and plan copy (CP-06, CP-07).
 - [x] **B10** Home copy names all 5 local sources, both Google Jobs and LinkedIn Jobs, links to plans, and promotes the 7-day/30-credit trial after email verification (CP-05).
-- [ ] **B10c** Clear outcome messages ("no credits charged"), hide internal log phrasing, and show visible errors for every failed action (FL-13, FL-15).
+- [x] **B10c** Report no-result/no-charge outcomes clearly, replace raw worker/provider logs with customer progress, and show visible/retry-aware errors for email updates, archiving, and message sending (FL-13, FL-15).
 - [x] B10d: done in S1. B10e: done in S9/T8.
 
 ## Milestone C: Visual system & accessibility (P1–P2)
 
-- [ ] **C11** Type scale; minimum 12px text, 13–14px buttons and nav (UI-01, UI-04).
+- [x] **C11** Shared type scale; minimum 12px text and 14px buttons/navigation across public and workspace pages (UI-01, UI-04).
 - [ ] **C12** Darken light-theme `--subtle` (about `#6b7a83`) and `--muted` (about `#5a6c76`) for AA contrast (UI-02).
 - [ ] **C13** Replace the runtime Tailwind browser build with component classes or a build-time compile (UI-03).
 - [ ] **C14** Fonts: already self-hosted in T1; still reduce to 3 weights per family and preload (UI-05).

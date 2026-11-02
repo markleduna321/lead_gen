@@ -322,12 +322,12 @@ T9. The IP-based free-trial protection plan (already agreed), together with emai
 10. ✅ **Done in B10.** Name all five local sources and both job boards on the home page; add plans/pricing and free-trial CTAs that accurately state email verification starts the trial (CP-05).
 10a. ✅ **Done in B5/B10a.** Carry `next` both ways between login and registration, and preselect/highlight the chosen plan on Billing (FL-06, FL-17).
 10b. Show plan limits in the discovery form (industry counter, disable extra boxes); no default industry; resolve the location before the confirm, with a busy state; replace `confirm()` with an in-page cost summary (FL-10–FL-12, PR-02).
-10c. Clear outcome messages: say "no credits charged" when nothing was charged, hide internal log phrasing, and show visible errors for every failed action (FL-13, FL-15).
+10c. ✅ **Done in B10c.** Report zero-result/no-charge outcomes, keep worker/provider logs out of the customer progress display, and show actionable error notices for email updates, archiving, and message sending (FL-13, FL-15).
 10d. Escape all user and scraped values inserted with `innerHTML`, starting with the custom business type (FL-14; full sweep in Phase 3).
 10e. Use generic auth messages for lockout and registration conflicts, plus per-IP and per-account rate limiting (FL-02; details in Phase 3).
 
 ### Milestone C: Visual system & accessibility (P1–P2)
-11. Define a type scale (12 / 13 / 14 / 16 / 18 / 22 / 28 / 36 / clamp hero), raise all text to at least 12px and buttons and nav to at least 13–14px, and remove one-off sizes (UI-01, UI-04).
+11. ✅ **Done in C11.** Define a shared type scale (12 / 13 / 14 / 16 / 18 / 22 / 28 / 36 / clamp hero), raise all text to at least 12px and buttons/navigation to 14px (UI-01, UI-04).
 12. Darken light-theme `--subtle` (about `#6b7a83`, ≥4.5:1) and `--muted` (about `#5a6c76`) (UI-02).
 13. Replace the runtime Tailwind CDN with token-based component classes (or a build-time Tailwind compile), and remove the attribute-selector remapping (UI-03).
 14. Self-host or `preconnect`/`preload` fonts and reduce weights to 3 per family (UI-05).

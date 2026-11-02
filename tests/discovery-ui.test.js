@@ -25,6 +25,7 @@ function setup(page = 'prospects') {
             const classes = new Set();
             elements.set(id, {
                 value: '', innerText: '', textContent: '', dataset: {}, attributes: {}, children: [],
+                style: {},
                 classList: {
                     add: value => classes.add(value),
                     remove: value => classes.delete(value),
@@ -194,7 +195,7 @@ test('Rejected maintenance jobs show the server reason and re-enable the button'
     assert.equal(button.textContent, 'Check follow-ups');
 });
 
-test('completed searches preserve credit settlement across the results redirect', () => {
+test('completed searches preserve customer-facing credit settlement across the results redirect', () => {
     const { context, element } = setup();
     const stored = new Map();
     context.sessionStorage = {
@@ -202,11 +203,20 @@ test('completed searches preserve credit settlement across the results redirect'
         getItem(key) { return stored.get(key); },
         removeItem(key) { stored.delete(key); }
     };
-    context.rememberDiscoveryOutcome(8, [], ' New leads: 0. Search credits charged: 3.00; refunded: 7.00.');
+    context.rememberDiscoveryOutcome(8, [], ' Search credits charged: 3.00; refunded: 7.00.');
     context.showDiscoveryOutcome();
     assert.equal(element('queue-notice').innerText,
-        'Search finished. 8 leads saved. New leads: 0. Search credits charged: 3.00; refunded: 7.00.');
+        'Search finished. 8 leads saved. Search credits charged: 3.00; refunded: 7.00.');
     assert.equal(stored.size, 0);
+});
+
+test('zero-lead outcome explicitly says no search credits were charged', () => {
+    const { context, element } = setup();
+    const stored = sessionStorageStub();
+    context.sessionStorage = stored;
+    context.rememberDiscoveryOutcome(0, [], '', true);
+    context.showDiscoveryOutcome();
+    assert.equal(element('queue-notice').innerText, 'No leads found. No search credits were charged.');
 });
 
 test('hiring guidance explains strict targeting without promising global coverage', () => {
@@ -247,6 +257,50 @@ test('prospect details distinguish business websites from social profiles', () =
     vm.runInContext("currentLeads[0].source_platform = 'instagram'; currentLeads[0].rating = 0; currentLeads[0].review_count = 0;", context);
     context.toggleProfileModal(true);
     assert.equal(element('profile-rating').innerText, 'Not available');
+});
+
+test('email update failures are shown and preserve the open editor for retry', async () => {
+    const { context, element, requests } = setup();
+    const notices = [];
+    context.showQueueNotice = (message, isError) => notices.push({message, isError});
+    context.fetch = async (url, options) => {
+        requests.push({url, options});
+        return {ok: false, json: async () => ({
+            status: 'error', message: 'Email address is invalid.'
+        })};
+    };
+    vm.runInContext("selectedLeadId = 42;", context);
+    element('profile-email-input').value = 'bad-address';
+    await context.saveProfileEmailUpdates();
+    assert.equal(requests[0].url, '/api/prospect/update-email/42');
+    assert.deepEqual(notices, [{
+        message: 'Email address is invalid. Your change may not have been saved; check the record before retrying.',
+        isError: true
+    }]);
+    assert.equal(element('profile-modal').classList.contains('hidden'), false);
+
+    vm.runInContext("activeQueueView = 'jobs';", context);
+    element('job-modal-email-input').value = 'bad-address';
+    await context.saveJobEmailUpdate();
+    assert.equal(requests[1].url, '/api/job-leads/42/update-email');
+    assert.equal(notices.length, 2);
+    assert.equal(notices[1].isError, true);
+});
+
+test('archive and send network failures provide visible feedback', async () => {
+    const { context, element } = setup();
+    const notices = [], toasts = [];
+    context.showQueueNotice = (message, isError) => notices.push({message, isError});
+    context.showToast = message => toasts.push(message);
+    vm.runInContext("selectedLeadId = 42;", context);
+    context.fetch = async () => { throw new Error('Offline'); };
+    await context.archiveLead();
+    assert.equal(notices[0].isError, true);
+    assert.match(notices[0].message, /Offline.*Refresh before retrying/);
+
+    element('btn-send').innerText = 'Approve & Send';
+    await context.dispatchLead();
+    assert.deepEqual(toasts, ['Your message could not be sent. Check your connection and try again.']);
 });
 
 test('tabs preserve form values and support keyboard navigation', () => {
@@ -916,12 +970,16 @@ test('local polling ignores completion-looking log text while status is running'
     assert.equal(timers.size, 1);
 });
 
-test('failed runs unlock without success refresh and show partial-save warning', async () => {
+test('failed zero-result runs show no-charge guidance and keep worker logs private', async () => {
     const { context, element } = pollingSetup({
-        state: 'failed', total: 2, completed: 2, errors: ['Yelp / Cafe: quota exceeded'], logs: []
+        state: 'failed', total: 2, completed: 2, saved: 0, net_charge: '0.00',
+        credit_refund: '0.00', new_leads: 0,
+        errors: ['Yelp / Cafe: quota exceeded'], logs: ['Handshake network drop', '[PROVIDER RETRY]']
     });
     await context.pollLocalDiscoveryRun('qa-run');
-    assert.match(element('discovery-error').innerText, /Some leads may have been saved.*quota exceeded/);
+    assert.equal(element('discovery-error').innerText,
+        'No leads found. No search credits were charged. Some search steps could not be completed.');
+    assert.doesNotMatch(element('terminal-stream-log').innerText, /Handshake|PROVIDER RETRY|quota exceeded/);
     assert.equal(vm.runInContext('isWorking', context), false);
     assert.equal(element('loading-overlay').classList.contains('hidden'), true);
     assert.equal(context.queueRefreshed, undefined);
@@ -983,11 +1041,14 @@ test('hiring status polls its own endpoint and redirects to Job Leads only on su
 
 test('hiring failures and stop-waiting keep the user on the form with correct result guidance', async () => {
     const { context, element } = pollingSetup({
-        state: 'failed', total: 2, completed: 2, errors: ['video_editing: quota exceeded'], logs: []
+        state: 'failed', total: 2, completed: 2, saved: 2, net_charge: '12.00',
+        credit_refund: '0.00', errors: ['video_editing: quota exceeded'], logs: []
     });
     vm.runInContext("discoveryResultsView = 'jobs';", context);
     await context.pollLocalDiscoveryRun('qa-run');
-    assert.match(element('discovery-error').innerText, /quota exceeded/);
+    assert.match(element('discovery-error').innerText,
+        /2 leads saved.*Search credits charged: 12.00; refunded: 0.00/);
+    assert.doesNotMatch(element('discovery-error').innerText, /quota exceeded/);
     assert.equal(context.queueRefreshed, undefined);
     context.stopWaitingForLocalDiscovery();
     assert.match(element('discovery-error').innerText, /Job Leads/);
@@ -1015,8 +1076,8 @@ test('a run that saved leads despite warnings is reported as success, not failur
     assert.equal(element('discovery-error').innerText, '', 'no failure message should be shown');
     const notice = element('queue-notice');
     assert.match(notice.innerText, /12 leads saved/);
-    assert.match(notice.innerText, /1 step had problems/);
-    assert.match(notice.innerText, /Contact page timed out/);
+    assert.match(notice.innerText, /Some search details could not be collected/);
+    assert.doesNotMatch(notice.innerText, /Contact page timed out/);
     assert.equal(notice.classList.contains('queue-notice-warn'), true);
 });
 

@@ -12,7 +12,7 @@ Last updated: 2026-11-02. Nothing has been committed yet; all changes are in the
 | S: Security hotfix (S1–S11) | ✅ Done |
 | T: Hardening (T1–T9) | ✅ Done |
 | A: Trust, legal & broken paths | ✅ Done |
-| B: Conversion & navigation | Partly done (B5–B10/B10a/b, 10d, 10e) |
+| B: Conversion & navigation | Partly done (B5–B10/B10a/b/c, 10d, 10e) |
 | C: Visual system & accessibility | Not started |
 | D: Copy polish & consistency | Not started |
 
@@ -88,5 +88,7 @@ For every item: plan and clarifying questions first, then the change, tests (uni
 - **B8** (pricing drift): generate public plan cards, comparison rows, and pricing metadata from `plans.py` and `payments.PRICES`; use canonical plan IDs and server-owned charge/refund rates in the pricing explanation. A source-mutation regression verifies that published values change with the underlying plan and checkout data.
 - **B9** (plan-aware credit copy): Trial/Solo now refer to the user's balance, while Small Team/Enterprise identify the shared balance in discovery, sidebar, Billing, and top-up copy. Singular industry wording is used for one-industry limits; tests cover both account types.
 - **B10** (home marketing copy): name Google Maps, Yelp, Facebook, Instagram, and LinkedIn company pages; identify Google Jobs and LinkedIn Jobs; add a plans link and a free-trial CTA to registration, with trial timing tied to email verification.
+- **B10c** (discovery outcomes and action errors): explicitly say when zero leads were found and no credits were charged; show only customer-facing progress instead of worker/provider logs; hide raw provider errors in failure notices; make email-update, archive, and send failures visible with retry guidance.
+- **C11** (typography): added a shared 12/13/14/16/18/22/28/36px scale, raised smaller text to 12px, and set navigation and action controls to 14px. The dashboard page suite and all 92 JavaScript tests pass.
 - **B10d** (escaping `innerHTML`): done in S1.
 - **B10e** (generic auth messages, rate limits): done in S9 and T8.

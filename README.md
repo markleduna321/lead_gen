@@ -321,6 +321,11 @@ The discovery form shows a live cost estimate, the account's industry and hiring
 depth limits, and disables selections beyond those limits. No industry is
 preselected. Local locations are resolved before the server quote and inline
 cost confirmation; the server's quote remains authoritative before search.
+Discovery results report when no leads were found and no credits were charged.
+Provider and worker logs stay out of the customer progress display; failed
+email updates, archiving, and message sending show an actionable notice.
+Public and workspace pages use a shared type scale with a 12px text floor and
+14px navigation and action controls.
 Owners can buy plans and top-ups through PayMongo QR Ph hosted checkout when
 configured. Verified payments activate purchases automatically; a new account
 starts its 7-day free trial with 30 credits when it verifies its email (one
