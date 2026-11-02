@@ -12,7 +12,7 @@ Last updated: 2026-11-02. Nothing has been committed yet; all changes are in the
 | S: Security hotfix (S1–S11) | ✅ Done |
 | T: Hardening (T1–T9) | ✅ Done |
 | A: Trust, legal & broken paths | ✅ Done |
-| B: Conversion & navigation | Partly done (B5–B8/B10a/b, 10d, 10e) |
+| B: Conversion & navigation | Partly done (B5–B9/B10a/b, 10d, 10e) |
 | C: Visual system & accessibility | Not started |
 | D: Copy polish & consistency | Not started |
 
@@ -86,5 +86,6 @@ For every item: plan and clarifying questions first, then the change, tests (uni
 - **B6** (plan permissions): browser-side 403 plan/permission denials render the styled error page with Billing/workspace links; API denials stay JSON; discovery upgrade prompts link to `/billing`.
 - **B7/B10b** (discovery cost and plan limits): use server-provided prices for live estimates; display and enforce industry/depth limits in the form, default to no selected industry, resolve local location before quoting, and confirm the server quote in-page instead of `confirm()`.
 - **B8** (pricing drift): generate public plan cards, comparison rows, and pricing metadata from `plans.py` and `payments.PRICES`; use canonical plan IDs and server-owned charge/refund rates in the pricing explanation. A source-mutation regression verifies that published values change with the underlying plan and checkout data.
+- **B9** (plan-aware credit copy): Trial/Solo now refer to the user's balance, while Small Team/Enterprise identify the shared balance in discovery, sidebar, Billing, and top-up copy. Singular industry wording is used for one-industry limits; tests cover both account types.
 - **B10d** (escaping `innerHTML`): done in S1.
 - **B10e** (generic auth messages, rate limits): done in S9 and T8.

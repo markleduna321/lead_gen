@@ -7,6 +7,7 @@
     const status = document.getElementById('account-plan-status');
     const creditCard = document.getElementById('sidebar-credits');
     const formatCredits = value => new Intl.NumberFormat(undefined, {maximumFractionDigits: 2}).format(Number(value));
+    const hasSharedCredits = () => ['small_team', 'enterprise'].includes(account.plan.id);
     function renderCredits() {
         if (!creditCard) return;
         const usage = account.usage;
@@ -26,8 +27,11 @@
         document.getElementById('credit-renewal').textContent = !account.plan.active
             ? 'Activate a plan to start searching'
             : `${usage.next_event === 'refresh' ? 'Credits refresh' : 'Plan expires'} ${date}`;
-        document.getElementById('credit-live-status').textContent = account.plan.active
-            ? 'Live shared wallet · includes reservations' : 'No active subscription';
+        const liveStatus = document.getElementById('credit-live-status');
+        if (!account.plan.active) liveStatus.textContent = 'No active subscription';
+        else liveStatus.textContent = hasSharedCredits()
+            ? 'Live shared wallet · includes reservations'
+            : 'Your live balance · includes reservations';
         const link = document.getElementById('credit-plan-link');
         link.textContent = !account.plan.active ? 'Choose a plan'
             : account.plan.id === 'enterprise' ? 'View plan details'
@@ -135,7 +139,8 @@
             local: Number(account.plan.local_price),
             hiring: Number(account.plan.hiring_price)
         };
-        status.textContent = `${account.plan.name} · ${account.balance} shared search credits`;
+        status.textContent = `${account.plan.name} · ${account.balance} `
+            + `${hasSharedCredits() ? 'shared search credits' : 'of your search credits'}`;
         status.setAttribute('role', 'status');
         renderCredits();
         const navigation = document.getElementById('nav-user-management');
@@ -177,7 +182,9 @@
             const industryWord = account.plan.industries === 1 ? 'industry' : 'industries';
             if (info) info.textContent = `Local discovery: ${formatCredits(account.plan.local_price)} credits per industry; maximum ${account.plan.industries} ${industryWord}. `
                 + `Hiring: ${formatCredits(account.plan.hiring_price)} credits per role-page. Completed zero-new-lead submissions receive a 70% credit refund. `
-                + 'All members share the owner balance and daily cap. Leads remain private.';
+                + (hasSharedCredits()
+                    ? 'All members share the owner balance and daily cap. Leads remain private.'
+                    : 'Your credits are yours to use. Your leads remain private.');
             window.applyAccountCapabilities();
         } catch (error) {
             status.textContent = `Plan unavailable: ${error.message}`;
@@ -223,11 +230,15 @@
             const data = await response.json();
             if (!response.ok || data.status !== 'success') throw new Error(data.message || 'Search quote failed.');
             const quote = data.quote;
-            if (!quote.sufficient) throw new Error(`This search costs ${quote.charge} credits; the shared balance is ${quote.balance}.`);
+            if (!quote.sufficient) throw new Error(
+                `This search costs ${quote.charge} credits; `
+                + `${hasSharedCredits() ? 'the shared balance' : 'your balance'} is ${quote.balance}.`
+            );
             const confirmation = document.getElementById('search-cost-confirmation');
             const summary = document.getElementById('search-cost-summary');
             if (!confirmation || !summary) throw new Error('Search confirmation is unavailable. Reload before trying again.');
-            summary.textContent = `This search will reserve ${quote.charge} search credits from your shared balance of ${quote.balance}. `
+            summary.textContent = `This search will reserve ${quote.charge} search credits from `
+                + `${hasSharedCredits() ? 'your shared balance' : 'your balance'} of ${quote.balance}. `
                 + `${quote.policy} Zero-new-lead refund: ${quote.zero_result_refund} credits.`;
             confirmation.classList.remove('hidden');
             lockSearchControls();

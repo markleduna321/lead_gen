@@ -123,6 +123,10 @@ async function setup({team = false, enterprise = false, trial = false, fail = fa
 
 test('Solo keeps source and hiring upgrade controls visible but locked, with no owner navigation', async () => {
     const ui = await setup();
+    assert.match(ui.ids.get('account-plan-status').textContent, /750 of your search credits$/);
+    assert.doesNotMatch(ui.ids.get('account-plan-status').textContent, /shared/);
+    assert.match(ui.ids.get('plan-discovery-policy').textContent, /Your credits are yours to use/);
+    assert.match(ui.ids.get('plan-discovery-policy').textContent, /maximum 3 industries/);
     assert.deepEqual(ui.sources.map(input => input.disabled), [false, false, true, true, true]);
     assert.equal(ui.editor.disabled, true);
     assert.equal(ui.custom.disabled, true);
@@ -145,6 +149,9 @@ test('Solo keeps source and hiring upgrade controls visible but locked, with no 
 
 test('Small Team owner sees management, preset hiring and locked custom editor; Enterprise unlocks it', async () => {
     const ui = await setup({team: true});
+    assert.match(ui.ids.get('account-plan-status').textContent, /750 shared search credits$/);
+    assert.match(ui.ids.get('plan-discovery-policy').textContent, /All members share the owner balance/);
+    assert.match(ui.ids.get('plan-discovery-policy').textContent, /maximum 5 industries/);
     assert.equal(ui.ids.get('nav-user-management').hidden, false);
     assert.equal(ui.sources.some(input => input.disabled), false);
     assert.equal(ui.editor.disabled, true);
@@ -162,6 +169,8 @@ test('Small Team owner sees management, preset hiring and locked custom editor; 
 
 test('Trial industry limits use singular copy and allow one selection', async () => {
     const ui = await setup({trial: true});
+    assert.match(ui.ids.get('account-plan-status').textContent, /750 of your search credits$/);
+    assert.match(ui.ids.get('plan-discovery-policy').textContent, /maximum 1 industry\./);
     assert.equal(ui.ids.get('industry-limit-status').textContent, '0 of 1 industry selected');
     assert.match(ui.ids.get('discovery-search-estimate').textContent, /Choose up to 1 industry/);
     ui.industries[0].checked = true;
@@ -177,7 +186,7 @@ test('Search confirmation uses an in-page server quote, CSRF, refund disclosure 
     assert.equal(ui.ids.get('search-cost-confirmation').classList.contains('hidden'), false);
     const quote = ui.calls.find(call => call.url === '/api/discovery/quote');
     assert.equal(quote.options.headers['X-CSRF-Token'], 'csrf-token');
-    assert.match(ui.ids.get('search-cost-summary').textContent, /30 search credits from your shared balance of 750/);
+    assert.match(ui.ids.get('search-cost-summary').textContent, /30 search credits from your balance of 750/);
     assert.match(ui.ids.get('search-cost-summary').textContent, /21.00 credits/);
     assert.equal(ui.ids.get('btn-discovery-submit').disabled, true);
     ui.ids.get('search-cost-continue').click();
@@ -192,6 +201,15 @@ test('Search confirmation uses an in-page server quote, CSRF, refund disclosure 
     assert.deepEqual(ui.prompts, []);
     ui.window.completePaidSearchRequest();
     assert.equal(ui.storage.size, 0);
+});
+
+test('Team search confirmation explains that the quoted charge uses the shared balance', async () => {
+    const ui = await setup({team: true});
+    const pending = ui.window.preparePaidSearch('/api/trigger/discover', {categories: ['Cafe']});
+    await new Promise(resolve => setImmediate(resolve));
+    assert.match(ui.ids.get('search-cost-summary').textContent, /from your shared balance of 750/);
+    ui.ids.get('search-cost-cancel').click();
+    assert.equal(await pending, false);
 });
 
 test('Cancelling the in-page search cost confirmation prevents the search', async () => {
@@ -221,7 +239,7 @@ test('Balance refresh shows settled credits and reports refresh failures explici
             plan: {name: 'Solo', active: true, custom_services: false, hiring_pages: 0}}
     })});
     await ui.window.refreshAccountPlan();
-    assert.match(ui.ids.get('account-plan-status').textContent, /747.00 shared search credits/);
+    assert.match(ui.ids.get('account-plan-status').textContent, /747.00 of your search credits$/);
     ui.context.fetch = async () => { throw new Error('Database offline'); };
     await ui.window.refreshAccountPlan();
     assert.match(ui.ids.get('account-plan-status').textContent, /Balance refresh failed: Database offline/);
@@ -236,6 +254,7 @@ test('Sidebar renders real balance, usage percentage, expiry and upgrade link', 
     assert.equal(ui.ids.get('credit-usage-meter').value, 25);
     assert.equal(ui.ids.get('credit-ring-value').attributes['stroke-dasharray'], '75 100');
     assert.match(ui.ids.get('credit-renewal').textContent, /Plan expires/);
+    assert.equal(ui.ids.get('credit-live-status').textContent, 'Your live balance · includes reservations');
     assert.equal(ui.ids.get('credit-plan-link').textContent, 'Upgrade plan');
     assert.equal(ui.ids.get('credit-plan-link').href, '/billing');
     assert.equal(ui.ids.get('nav-billing').hidden, false);
@@ -245,6 +264,11 @@ test('Sidebar renders real balance, usage percentage, expiry and upgrade link', 
     assert.equal(ui.ids.get('sidebar-credits').dataset.state, 'error');
     assert.match(ui.ids.get('credit-live-status').textContent, /Wallet unavailable: Offline/);
     assert.equal(ui.ids.get('credit-balance').textContent, '750');
+});
+
+test('Team sidebar identifies the balance as shared', async () => {
+    const ui = await setup({team: true, card: true});
+    assert.equal(ui.ids.get('credit-live-status').textContent, 'Live shared wallet · includes reservations');
 });
 
 test('Live wallet polls only visible tabs and refreshes on focus and tab return', async () => {

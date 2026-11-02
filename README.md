@@ -305,7 +305,9 @@ Their 30/750/2,500/7,500 credits cover 3/75/250/750 local industry searches befo
 refunds when used only for local discovery. Hiring is available on Small Team
 and Enterprise at 15 credits per role-page across Google Jobs and LinkedIn Jobs,
 including company-contact lookups, with depth limits of 3 and 5 respectively.
-Both discovery modes use one balance. Daily caps count accepted submissions.
+Both discovery modes use one balance. Trial and Solo copy describes personal
+credits; Small Team and Enterprise copy identifies the shared team balance.
+Daily caps count accepted submissions.
 Completed submissions producing zero new leads receive a 70% search-credit
 refund (30% retained); this applies to the whole submission, not its individual
 empty industries or sources. Validation failures and wholly failed provider

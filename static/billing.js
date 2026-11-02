@@ -38,7 +38,10 @@
         document.getElementById('billing-start-trial').disabled = busy || blocked || !state.can_start_trial;
         const months = Number(document.getElementById('billing-months').value);
         document.getElementById('billing-current-plan').textContent = account.plan.name;
-        document.getElementById('billing-current-balance').textContent = `${Number(account.balance).toLocaleString()} shared search credits available`;
+        const sharedCredits = ['small_team', 'enterprise'].includes(account.plan.id);
+        document.getElementById('billing-current-balance').textContent = sharedCredits
+            ? `${Number(account.balance).toLocaleString()} shared search credits available`
+            : `${Number(account.balance).toLocaleString()} search credits available for you`;
         document.getElementById('billing-current-status').textContent = account.plan.active ? 'Active' : 'Inactive';
         const date = account.ends_at ? new Date(account.ends_at).toLocaleDateString() : '';
         document.getElementById('billing-expiry').textContent = date ? `Plan expiry: ${date}` : 'No paid billing period yet';
@@ -61,7 +64,8 @@
         topup.disabled = busy || !state.ready || blocked || !eligible;
         topup.textContent = eligible ? `Buy ${pack.pack.toLocaleString()} credits · ${money(pack.topup)}` : 'Active paid plan required';
         document.getElementById('billing-topup-description').textContent = eligible
-            ? `${names[account.plan.id]} pack: ${pack.pack.toLocaleString()} shared search credits for ${money(pack.topup)}.`
+            ? `${names[account.plan.id]} pack: ${pack.pack.toLocaleString()} `
+                + `${sharedCredits ? 'shared ' : ''}search credits for ${money(pack.topup)}.`
             : 'Top-ups become available once your paid plan is active.';
         document.getElementById('billing-months').disabled = busy;
         document.getElementById('billing-refresh').disabled = busy;

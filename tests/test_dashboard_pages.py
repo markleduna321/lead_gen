@@ -178,6 +178,7 @@ class DashboardPagesTests(unittest.TestCase):
                     for unreleased_feature in ("Ad Pixel Check", "Bulk CSV Enrichment", "Webhook/API Export"):
                         self.assertNotIn(unreleased_feature, html)
                     self.assertIn('id="trial-title"', html)
+                    self.assertIn("1 industry per submission", html)
                     self.assertIn('Best Value', html)
                     self.assertIn('href="/plans" aria-current="page"', html)
                     self.assertEqual(html.count('aria-current="page"'), 1)

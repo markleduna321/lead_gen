@@ -23,9 +23,10 @@ function order(overrides = {}) {
         status: 'pending', checkout_url: 'https://checkout.paymongo.com/cs_test',
         created_at: '2026-10-27T00:00:00Z', livemode: false, ...overrides};
 }
-function setup({active = false, ready = true, orders = [], search = '', can_start_trial = false} = {}) {
+function setup({active = false, team = false, enterprise = false, ready = true, orders = [], search = '', can_start_trial = false} = {}) {
     const state = {ready, orders, can_start_trial, account: {owner: true, balance: '750.00',
-        plan: {id: active ? 'solo' : 'unassigned', name: active ? 'Solo' : 'No active plan', active},
+        plan: {id: enterprise ? 'enterprise' : team ? 'small_team' : active ? 'solo' : 'unassigned',
+            name: enterprise ? 'Enterprise' : team ? 'Small Team' : active ? 'Solo' : 'No active plan', active},
         ends_at: active ? '2026-11-27T00:00:00Z' : null}};
     const ids = new Map();
     const get = id => {
@@ -84,6 +85,17 @@ test('Purchase page displays monthly and annual PHP prices and blocks active pla
     assert.equal(active.get('billing-buy-topup').disabled, false);
     assert.match(active.get('billing-buy-topup').textContent, /350.*499/);
     assert.equal(setup({ready: false}).buttons.every(button => button.disabled), true);
+});
+
+test('Billing describes personal balances separately from team shared balances', () => {
+    const solo = setup({active: true});
+    assert.equal(solo.get('billing-current-balance').textContent, '750 search credits available for you');
+    assert.match(solo.get('billing-topup-description').textContent, /350 search credits/);
+    assert.doesNotMatch(solo.get('billing-topup-description').textContent, /shared/);
+
+    const team = setup({active: true, team: true});
+    assert.equal(team.get('billing-current-balance').textContent, '750 shared search credits available');
+    assert.match(team.get('billing-topup-description').textContent, /750 shared search credits/);
 });
 
 test('Checkout sends server-owned product selectors, CSRF and a stable replay key then redirects', async () => {
@@ -166,7 +178,7 @@ test('Eligible legacy accounts can claim a free trial without checkout or paymen
     assert.equal(ui.calls[0].url, '/api/billing/trial');
     assert.equal(ui.calls[0].options.headers['X-CSRF-Token'], 'purchase-csrf');
     assert.equal(ui.get('billing-trial-offer').hidden, true);
-    assert.match(ui.get('billing-current-balance').textContent, /30 shared/);
+    assert.match(ui.get('billing-current-balance').textContent, /30 search credits available for you/);
     assert.equal(ui.redirects.length, 0);
 });
 

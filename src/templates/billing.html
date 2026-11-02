@@ -2,7 +2,7 @@
 {% set page = 'billing' %}
 {% set page_title = 'Billing & Plans' %}
 {% set page_eyebrow = 'INVEST IN YOUR NEXT CHAPTER' %}
-{% set page_description = 'Choose your plan, replenish shared credits, and keep every payment in view.' %}
+{% set page_description = 'Choose your plan, add search credits, and keep every payment in view.' %}
 {% block content %}
 <div id="billing-message" class="queue-notice" role="status" hidden></div>
 <section id="billing-trial-offer" class="panel billing-topup{% if selected_plan == 'trial' %} billing-plan-selected{% endif %}" {% if not billing.can_start_trial %}hidden{% endif %}>
@@ -15,7 +15,7 @@
 <p class="settings-notice">PayMongo test mode. No real money is collected. Test confirmations activate access only in this configured application environment.</p>
 {% endif %}
 <section class="billing-summary panel" aria-label="Current subscription">
-    <div><p class="eyebrow">YOUR CURRENT PLAN</p><h2 id="billing-current-plan">{{ billing.account.plan.name }}</h2><p id="billing-current-balance" class="settings-subtitle">{{ billing.account.balance }} shared search credits available</p></div>
+    <div><p class="eyebrow">YOUR CURRENT PLAN</p><h2 id="billing-current-plan">{{ billing.account.plan.name }}</h2><p id="billing-current-balance" class="settings-subtitle">{{ billing.account.balance }} {{ 'shared search credits available' if billing.account.plan.id in ('small_team', 'enterprise') else 'search credits available for you' }}</p></div>
     <div><span id="billing-current-status" class="settings-badge">{{ 'Active' if billing.account.plan.active else 'Inactive' }}</span><p class="settings-hint">One-time payments. No automatic renewal.</p><p class="settings-hint" id="billing-expiry"></p></div>
 </section>
 <section aria-labelledby="billing-choose-title">
@@ -47,7 +47,7 @@
     <p class="settings-hint">Existing paid-plan changes are handled by <a href="{{ url_for('support_page') }}">support</a>; self-service renewals open after expiry. A trial upgrade starts immediately after confirmed payment and replaces unused trial credits. Pending plan purchases pause discovery until completed or cancelled.</p>
 </section>
 <section class="panel billing-topup" aria-labelledby="billing-topup-title">
-    <div><p class="eyebrow">KEEP YOUR MOMENTUM</p><h2 id="billing-topup-title">Add search credits.</h2><p id="billing-topup-description" class="settings-subtitle">Available to active paid account owners.</p><p class="settings-hint">Top-ups go into the shared wallet. Unused top-up credits are subject to your plan's rollover cap at renewal.</p></div>
+    <div><p class="eyebrow">KEEP YOUR MOMENTUM</p><h2 id="billing-topup-title">Add search credits.</h2><p id="billing-topup-description" class="settings-subtitle">Available to active paid account owners.</p><p class="settings-hint">Top-ups add credits to your balance. For teams, all members use the shared balance. Unused top-up credits are subject to your plan's rollover cap at renewal.</p></div>
     <button id="billing-buy-topup" type="button" class="secondary-button" disabled>Buy credit pack</button>
 </section>
 <section class="panel" aria-labelledby="billing-history-title">

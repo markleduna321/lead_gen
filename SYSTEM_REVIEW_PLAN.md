@@ -318,7 +318,7 @@ T9. The IP-based free-trial protection plan (already agreed), together with emai
 6. ✅ **Done in B6.** HTML plan/permission denials render a styled page with a Billing link; API denials remain JSON, and discovery upgrade prompts point to `/billing` (NV-04, NV-05).
 7. ✅ **Done in B7/B10b.** Show server-priced live search estimates and plan limits in discovery, disable selections beyond limits, leave industries unselected by default, resolve location before quoting, and confirm costs in-page (PR-02, PR-03, FL-10–FL-12).
 8. ✅ **Done in B8.** Generate public plan cards, comparison rows, and pricing metadata from `plans.py`/`payments.PRICES`; use canonical `small_team` IDs and server-owned rates in the pricing explanation (PR-01).
-9. Make copy plan-aware: say "your credits" for Trial and Solo, "shared credits" for teams; fix the "1 industries" grammar (CP-06, CP-07).
+9. ✅ **Done in B9.** Show personal-balance wording for Trial/Solo and shared-balance wording for team plans; use singular "industry" for one-industry limits (CP-06, CP-07).
 10. Update home copy for 5 sources, LinkedIn Jobs, and the free-trial CTA (CP-05).
 10a. ✅ **Done in B5/B10a.** Carry `next` both ways between login and registration, and preselect/highlight the chosen plan on Billing (FL-06, FL-17).
 10b. Show plan limits in the discovery form (industry counter, disable extra boxes); no default industry; resolve the location before the confirm, with a busy state; replace `confirm()` with an in-page cost summary (FL-10–FL-12, PR-02).
