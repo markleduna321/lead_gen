@@ -448,37 +448,65 @@ def sign_in():
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
-    from auth import AuthError, create_user, current_user_id, safe_redirect_target, sign_in_session
+    from auth import (
+        AuthError, create_user, current_user_id, normalize_email, safe_redirect_target,
+        sign_in_session, validate_display_name, validate_password,
+    )
     target = safe_redirect_target(request.args.get('next'))
     if current_user_id() is not None:
         return redirect(target)
     if request.method == 'POST':
         form = request.form
+
+        def registration_error(status, *, error=None, field_errors=None):
+            errors = field_errors or {}
+            first_error = next(
+                (field for field in ('display_name', 'email', 'password', 'confirm_password')
+                 if field in errors),
+                None,
+            )
+            return render_template(
+                'auth.html', mode='register', error=error, field_errors=errors,
+                focus_field=first_error, email=form.get('email', ''),
+                display_name=form.get('display_name', ''), next=target,
+            ), status
+
         try:
             limiter().hit(rate_limit.REGISTER_IP, client_ip())
         except rate_limit.RateLimited as error:
-            return render_template('auth.html', mode='register', error=str(error),
-                                   email=form.get('email', ''), display_name=form.get('display_name', ''),
-                                   next=target), 429, {"Retry-After": str(error.retry_after)}
+            response, status = registration_error(429, error=str(error))
+            return response, status, {"Retry-After": str(error.retry_after)}
         except Exception as error:
             print(f"[AUTH ERROR] Registration limit check failed: {error}", file=sys.stderr)
-            return render_template('auth.html', mode='register', next=target,
-                                   error="Accounts cannot be created right now. Please try again."), 500
+            return registration_error(
+                500, error="Accounts cannot be created right now. Please try again."
+            )
+
+        field_errors = {}
+        for field, validator, value in (
+            ('email', normalize_email, form.get('email')),
+            ('password', validate_password, form.get('password')),
+            ('display_name', validate_display_name, form.get('display_name')),
+        ):
+            try:
+                validator(value)
+            except AuthError as error:
+                field_errors[field] = str(error)
         if form.get('password') != form.get('confirm_password'):
-            return render_template('auth.html', mode='register', error="Both passwords must match.",
-                                   email=form.get('email', ''), display_name=form.get('display_name', ''),
-                                   next=target), 400
+            field_errors['confirm_password'] = "Both passwords must match."
+        if field_errors:
+            return registration_error(400, field_errors=field_errors)
+
         try:
             user = create_user(DB_DSN, form.get('email'), form.get('password'), form.get('display_name'),
                                network_hash=account_email.network_hash(client_ip()))
         except AuthError as error:
-            return render_template('auth.html', mode='register', error=str(error),
-                                   email=form.get('email', ''), display_name=form.get('display_name', ''),
-                                   next=target), 400
+            return registration_error(400, field_errors={'email': str(error)})
         except Exception as error:
             print(f"[AUTH ERROR] Registration failed: {error}", file=sys.stderr)
-            return render_template('auth.html', mode='register', next=target,
-                                   error="Accounts cannot be created right now. Please try again."), 500
+            return registration_error(
+                500, error="Accounts cannot be created right now. Please try again."
+            )
         sign_in_session(user)
         try:
             import system_mail
@@ -773,10 +801,7 @@ def plans():
             f"{PITCH_PRICE:g} credit / draft" if plans_by_id[plan_id].ai_drafts
             else "Upgrade to Solo" for plan_id in column_ids
         ]),
-        ("Other Included Features", [
-            "Site Email/Phone" if plan_id == "trial" else "Website Email/Phone"
-            for plan_id in column_ids
-        ]),
+        ("Other Included Features", ["Website Email/Phone"] * len(column_ids)),
         ("Max Credit Rollover", [
             f"Up to {plans_by_id[plan_id].rollover:,} credits"
             if plans_by_id[plan_id].rollover else "None"

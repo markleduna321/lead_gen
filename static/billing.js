@@ -4,6 +4,9 @@
     const names = {solo: 'Solo', small_team: 'Small Team', enterprise: 'Enterprise'};
     const message = document.getElementById('billing-message');
     let busy = false;
+    const credits = value => new Intl.NumberFormat(undefined, {maximumFractionDigits: 2}).format(Number(value));
+    const date = value => new Intl.DateTimeFormat(undefined,
+        {month: 'short', day: 'numeric', year: 'numeric'}).format(new Date(value));
     const money = amount => new Intl.NumberFormat(undefined, {style: 'currency', currency: 'PHP',
         maximumFractionDigits: 0}).format(amount / 100);
     const open = order => ['creating', 'pending', 'unknown', 'review'].includes(order.status);
@@ -40,11 +43,11 @@
         document.getElementById('billing-current-plan').textContent = account.plan.name;
         const sharedCredits = ['small_team', 'enterprise'].includes(account.plan.id);
         document.getElementById('billing-current-balance').textContent = sharedCredits
-            ? `${Number(account.balance).toLocaleString()} shared search credits available`
-            : `${Number(account.balance).toLocaleString()} search credits available for you`;
+            ? `${credits(account.balance)} shared search credits available`
+            : `${credits(account.balance)} search credits available for you`;
         document.getElementById('billing-current-status').textContent = account.plan.active ? 'Active' : 'Inactive';
-        const date = account.ends_at ? new Date(account.ends_at).toLocaleDateString() : '';
-        document.getElementById('billing-expiry').textContent = date ? `Plan expiry: ${date}` : 'No paid billing period yet';
+        const expiry = account.ends_at ? date(account.ends_at) : '';
+        document.getElementById('billing-expiry').textContent = expiry ? `Plan expiry: ${expiry}` : 'No paid billing period yet';
         document.querySelectorAll('[data-price-plan]').forEach(node => {
             node.textContent = `${money(prices[node.dataset.pricePlan][months])} / ${months === 12 ? 'year' : 'month'}`;
         });
@@ -62,9 +65,9 @@
         const eligible = account.plan.active && !!pack;
         const topup = document.getElementById('billing-buy-topup');
         topup.disabled = busy || !state.ready || blocked || !eligible;
-        topup.textContent = eligible ? `Buy ${pack.pack.toLocaleString()} credits · ${money(pack.topup)}` : 'Active paid plan required';
+        topup.textContent = eligible ? `Buy ${credits(pack.pack)} credits · ${money(pack.topup)}` : 'Add search credits';
         document.getElementById('billing-topup-description').textContent = eligible
-            ? `${names[account.plan.id]} pack: ${pack.pack.toLocaleString()} `
+            ? `${names[account.plan.id]} pack: ${credits(pack.pack)} `
                 + `${sharedCredits ? 'shared ' : ''}search credits for ${money(pack.topup)}.`
             : 'Top-ups become available once your paid plan is active.';
         document.getElementById('billing-months').disabled = busy;
@@ -76,7 +79,7 @@
             const row = document.createElement('tr');
             const description = order.kind === 'topup' ? `${names[order.plan_id]} credit pack`
                 : `${names[order.plan_id]} · ${order.months === 12 ? 'Annual' : 'Monthly'}`;
-            [description, new Date(order.created_at).toLocaleDateString(), money(order.amount),
+            [description, date(order.created_at), money(order.amount),
                 {paid: 'Paid · activated', review: 'Paid · review required', creating: 'Creating checkout',
                     pending: 'Awaiting payment', unknown: 'Needs reconciliation', expired: 'Cancelled / expired',
                     failed: 'Failed'}[order.status] || order.status].forEach((value, index) => {

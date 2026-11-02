@@ -97,12 +97,15 @@ class SecurityHeaderTests(unittest.TestCase):
         for stylesheet in (ROOT / "static").glob("*.css"):
             with self.subTest(stylesheet.name):
                 self.assertNotRegex(stylesheet.read_text(encoding="utf-8"), r"@import\s+url\(['\"]?https?:")
-        for asset in ["vendor/tailwindcss-browser-4.3.3/tailwind.js", "vendor/leaflet-1.9.4/leaflet.js",
+        for asset in ["tailwind.css", "vendor/leaflet-1.9.4/leaflet.js",
                       "vendor/leaflet-1.9.4/leaflet.css", "vendor/leaflet-1.9.4/images/marker-icon.png",
                       "vendor/fonts/fonts.css", "vendor/fonts/dm-sans-latin-wght-normal.woff2",
                       "vendor/fonts/manrope-latin-wght-normal.woff2"]:
             with self.subTest(asset):
                 self.assertTrue((ROOT / "static" / asset).is_file())
+        for template in (ROOT / "src" / "templates").glob("*.html"):
+            with self.subTest(template.name):
+                self.assertNotIn("tailwindcss-browser", template.read_text(encoding="utf-8"))
 
     def test_csp_reports_are_public_logged_once_and_sanitized(self):
         client = self.api.app.test_client()

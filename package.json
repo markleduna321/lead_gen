@@ -2,6 +2,7 @@
   "name": "asuratech-web-assets",
   "private": true,
   "scripts": {
+    "build:css": "tailwindcss -i static/tailwind.input.css -o static/tailwind.css --minify",
     "build:globe": "node scripts/build-region-textures.mjs && esbuild frontend/globe.js --bundle --minify --format=esm --outfile=static/globe/globe.js --legal-comments=linked",
     "test:globe": "node --test tests/globe.test.mjs"
   },
@@ -11,6 +12,7 @@
   },
   "devDependencies": {
     "@napi-rs/canvas": "0.1.80",
+    "@tailwindcss/cli": "4.3.3",
     "d3-geo": "3.1.1",
     "esbuild": "0.25.10",
     "flag-icons": "7.5.0",

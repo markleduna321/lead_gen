@@ -25,7 +25,7 @@ function setup(page = 'prospects') {
             const classes = new Set();
             elements.set(id, {
                 value: '', innerText: '', textContent: '', dataset: {}, attributes: {}, children: [],
-                style: {},
+                style: {}, listeners: {},
                 classList: {
                     add: value => classes.add(value),
                     remove: value => classes.delete(value),
@@ -34,9 +34,17 @@ function setup(page = 'prospects') {
                 },
                 setAttribute(name, value) { this.attributes[name] = value; },
                 getAttribute(name) { return this.attributes[name]; },
-                removeAttribute(name) { delete this.attributes[name]; if (name === 'value') this.value = ''; },
+                removeAttribute(name) {
+                    delete this.attributes[name];
+                    if (name === 'value') this.value = '';
+                    if (name === 'href') delete this.href;
+                },
                 replaceChildren(...children) { this.children = children; },
                 appendChild(child) { child.parent = this; this.children.push(child); },
+                addEventListener(type, handler) { this.listeners[type] = handler; },
+                removeEventListener(type, handler) {
+                    if (this.listeners[type] === handler) delete this.listeners[type];
+                },
                 querySelectorAll() {
                     return this.children.filter(child => child.attributes?.['data-custom-service']);
                 },
@@ -52,9 +60,10 @@ function setup(page = 'prospects') {
             getElementById: element,
             createElement() {
                 return {
-                    children: [], attributes: {},
+                    children: [], attributes: {}, listeners: {},
                     appendChild(child) { child.parent = this; this.children.push(child); },
                     setAttribute(name, value) { this.attributes[name] = value; },
+                    addEventListener(type, handler) { this.listeners[type] = handler; },
                     remove() { this.parent.children = this.parent.children.filter(child => child !== this); }
                 };
             },
@@ -69,7 +78,11 @@ function setup(page = 'prospects') {
                 return preset;
             }
         },
-        window: { location: { assign() {} }, discoverySearchPrices: { hiring: 15 } },
+        window: {
+            location: { assign() {} },
+            discoverySearchPrices: { hiring: 15 },
+            addEventListener() {}
+        },
         URL, URLSearchParams, AbortSignal, console: { error() {} },
         setTimeout(handler) { const id = ++timerId; timers.set(id, handler); return id; },
         clearTimeout(id) { timers.delete(id); }, clearInterval() {},
@@ -81,6 +94,14 @@ function setup(page = 'prospects') {
     vm.runInContext(script, context);
     vm.runInContext(`
         setGlobalLock = value => { isWorking = value; };
+        openAccessibleModal = modal => {
+            const target = typeof modal === 'string' ? document.getElementById(modal) : modal;
+            target.classList.remove('hidden');
+        };
+        closeAccessibleModal = modal => {
+            const target = typeof modal === 'string' ? document.getElementById(modal) : modal;
+            target.classList.add('hidden');
+        };
         setQueueView = view => { globalThis.resultView = view; };
         startLiveConsoleLogStreamingLoop = async () => {};
         startLocalDiscoveryPolling = async runId => { globalThis.trackedRunId = runId; };
@@ -107,12 +128,48 @@ test('one discovery workspace with two search modes', () => {
     assert.doesNotMatch(html, /confirm\(`This search/);
 });
 
+test('industry search filters labels and select-visible respects the account cap', () => {
+    const { context, element } = setup();
+    const industries = ['Dental Clinic', 'Roofing Contractor', 'Cafe'].map(value => {
+        const label = { hidden: false, textContent: value };
+        return {
+            value, checked: false, disabled: false, closest: () => label, label
+        };
+    });
+    context.document.querySelectorAll = selector =>
+        selector === 'input[name="biz-type"]' ? industries : [];
+    context.window.applyAccountCapabilities = () => {
+        const selected = industries.filter(input => input.checked).length;
+        industries.forEach(input => {
+            input.disabled = selected >= 2 && !input.checked;
+        });
+        context.updateBusinessTypePicker();
+    };
+
+    context.filterBusinessTypes('dental');
+    assert.deepEqual(industries.map(input => input.label.hidden), [false, true, true]);
+    assert.match(element('industry-search-results').textContent, /1 of 3 industries match "dental"/);
+    context.selectVisibleBusinessTypes();
+    assert.equal(industries[0].checked, true);
+
+    context.filterBusinessTypes('roof');
+    assert.equal(industries[0].checked, true);
+    assert.equal(industries[0].label.hidden, true);
+    context.selectVisibleBusinessTypes();
+    assert.equal(industries[1].checked, true);
+    assert.equal(industries.filter(input => input.checked).length, 2);
+
+    context.filterBusinessTypes('');
+    context.selectVisibleBusinessTypes();
+    assert.equal(industries.filter(input => input.checked).length, 2);
+});
+
 test('Prospects removes bulk pitch drafting while retaining individual drafting and other tools', () => {
     assert.doesNotMatch(html, /btn-bulk-pitch|bulk-pitch-modal|bulk-pitch-limit|submitBulkPitchRequest|pitch-bulk/);
     assert.match(html, /id="btn-individual-ai"/);
     assert.match(html, /id="btn-score-leads"/);
     assert.match(html, /id="btn-followup-sweep"/);
-    assert.match(html, /href="\/api\/export"/);
+    assert.match(html, /id="btn-export-csv"[^>]*aria-disabled="true"[^>]*tabindex="-1"/);
 });
 
 test('Locked AI drafts show an upgrade toast built without HTML injection', () => {
@@ -221,8 +278,8 @@ test('zero-lead outcome explicitly says no search credits were charged', () => {
 
 test('hiring guidance explains strict targeting without promising global coverage', () => {
     assert.match(html, /blank means no country filter/);
-    assert.match(html, /Strict matching excludes unknown locations/);
-    assert.match(html, /Actual job titles must match a selected service/);
+    assert.match(html, /Results need clear country evidence/);
+    assert.match(html, /Job titles must also match a selected service/);
     assert.doesNotMatch(html, /leave blank for global/);
 });
 
@@ -230,7 +287,7 @@ test('public LinkedIn company search is selectable and clearly scoped', () => {
     assert.match(html, /name="scan-source" value="linkedin"[\s>]/);
     assert.doesNotMatch(html, /name="scan-source" value="linkedin" disabled/);
     assert.match(html, /LinkedIn Companies/);
-    assert.match(html, /Searches public LinkedIn company pages\./);
+    assert.match(html, /Searches public company pages only/);
     assert.doesNotMatch(html, /Scrapingdog|indexed by Google via/);
     assert.match(html, /does not access LinkedIn accounts or private profiles/);
 });
@@ -298,9 +355,31 @@ test('archive and send network failures provide visible feedback', async () => {
     assert.equal(notices[0].isError, true);
     assert.match(notices[0].message, /Offline.*Refresh before retrying/);
 
-    element('btn-send').innerText = 'Approve & Send';
+    element('btn-send').innerText = 'Approve & Send Email';
     await context.dispatchLead();
     assert.deepEqual(toasts, ['Your message could not be sent. Check your connection and try again.']);
+});
+
+test('prospect send action targets the displayed recipient email', async () => {
+    const { context, element, requests } = setup();
+    context.renderTable = () => {};
+    context.showToast = () => {};
+    context.selectLead({
+        id: 42, email: 'prospect@example.test', status: 'drafted', ai_pitch_draft: 'Draft message'
+    });
+    assert.equal(element('recipient-email-input').value, 'prospect@example.test');
+    assert.equal(element('btn-send').innerText, 'Approve & Send Email');
+
+    element('recipient-email-input').value = 'alternate@example.test';
+    context.fetch = async (url, options) => {
+        requests.push({ url, options });
+        return { ok: false, json: async () => ({
+            status: 'error', code: 'invalid_recipient', message: 'Email address is invalid.'
+        }) };
+    };
+    await context.dispatchLead();
+    assert.equal(requests[0].url, '/api/dispatch/42');
+    assert.equal(JSON.parse(requests[0].options.body).destination_email, 'alternate@example.test');
 });
 
 test('tabs preserve form values and support keyboard navigation', () => {
@@ -439,7 +518,7 @@ test('job queue keeps API metadata through table selection, profile and email up
     const row = element('table-body').children[0];
     assert.equal(row.children[0].textContent, lead.company_name);
     assert.equal(row.children[1].textContent, 'Senior Video Editor');
-    row.onclick();
+    row.listeners.click();
     assert.equal(element('job-modal-title').innerText, 'Senior Video Editor');
     assert.equal(element('job-modal-description').innerText, lead.job_description);
     assert.match(element('job-modal-metadata').innerText, /2 days ago/);
@@ -476,6 +555,15 @@ test('prospect filters send prospect fields and list only sources, industries an
         status: [{ value: 'discovered', label: 'discovered', count: 4 },
                  { value: 'sent_followup_1', label: 'sent_followup_1', count: 1 }]
     });
+
+    test('pagination uses a typographic ellipsis for omitted page ranges', () => {
+        const { context, element } = setup();
+        vm.runInContext('globalMetricsTracker.total = 100;', context);
+        context.updatePaginationUIControls();
+        const pageLabels = element('numeric-pages-container').children.map(child => child.innerText);
+        assert.ok(pageLabels.includes('…'));
+        assert.ok(!pageLabels.includes('...'));
+    });
     vm.runInContext(`
         activeQueueView = 'prospects';
         activeSourceFilter = 'yelp';
@@ -501,6 +589,33 @@ test('prospect filters send prospect fields and list only sources, industries an
     assert.deepEqual(optionTexts(element('filter-status')), [
         ['', 'All Active'], ['discovered', 'Discovered (4)'], ['sent_followup_1', 'Follow-Up Sent (1)']
     ]);
+});
+
+test('CSV export stays disabled until prospects exist and hides for the job queue', async () => {
+    const { context, element } = setup('prospects');
+    const exportLink = element('btn-export-csv');
+    context.fetch = queueResponse([], {});
+
+    await context.loadQueue();
+    assert.equal(exportLink.getAttribute('aria-disabled'), 'true');
+    assert.equal(exportLink.href, undefined);
+    assert.equal(exportLink.getAttribute('tabindex'), '-1');
+
+    context.fetch = async () => ({ ok: true, json: async () => ({
+        status: 'success', leads: [], filter_options: {},
+        metrics: { total: 0, pending: 0, sent: 0, with_email: 0,
+            global_total: 1, global_pending: 0, global_sent: 0, global_followup: 0 }
+    }) });
+    await context.loadQueue();
+    assert.equal(exportLink.getAttribute('aria-disabled'), 'false');
+    assert.equal(exportLink.href, '/api/export');
+    assert.equal(exportLink.getAttribute('tabindex'), undefined);
+
+    vm.runInContext("activeQueueView = 'jobs';", context);
+    await context.loadQueue();
+    assert.equal(exportLink.hidden, true);
+    assert.equal(exportLink.getAttribute('aria-disabled'), 'true');
+    assert.equal(exportLink.href, undefined);
 });
 
 test('job lead filters use job boards, saved service names and job statuses', async () => {
@@ -604,7 +719,7 @@ test('hiring depth shows a credit budget, preserves selection and sends explicit
     assert.equal(JSON.parse(requests[0].options.body).pages_per_role, 5);
     assert.match(html, /<option value="1" selected>1 page \(default\)<\/option>/);
     assert.match(html, /More pages use more search credits/);
-    assert.match(html, /id="discovery-panel-jobs"[^>]*onchange="updateHiringSearchBudget\(\)"/);
+    assert.match(html, /id="discovery-panel-jobs"[^>]*data-change-action="updateHiringSearchBudget"/);
 });
 
 test('invalid hiring depth is rejected before any search request', async () => {

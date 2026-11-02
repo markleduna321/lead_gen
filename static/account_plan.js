@@ -4,7 +4,6 @@
     let summaryRequest;
     let confirmationControls = [];
     let resolveSearchConfirmation;
-    const status = document.getElementById('account-plan-status');
     const creditCard = document.getElementById('sidebar-credits');
     const formatCredits = value => new Intl.NumberFormat(undefined, {maximumFractionDigits: 2}).format(Number(value));
     const hasSharedCredits = () => ['small_team', 'enterprise'].includes(account.plan.id);
@@ -22,8 +21,8 @@
         meter.setAttribute('aria-valuetext', `${percent.toFixed(1)}% used this cycle, including reserved credits`);
         document.getElementById('credit-ring-value').setAttribute('stroke-dasharray',
             `${account.plan.active ? 100 - percent : 0} 100`);
-        const date = usage.next_date ? new Date(usage.next_date).toLocaleDateString(undefined,
-            {month: 'short', day: 'numeric', year: 'numeric'}) : '';
+        const date = usage.next_date ? new Intl.DateTimeFormat(undefined,
+            {month: 'short', day: 'numeric', year: 'numeric'}).format(new Date(usage.next_date)) : '';
         document.getElementById('credit-renewal').textContent = !account.plan.active
             ? 'Activate a plan to start searching'
             : `${usage.next_event === 'refresh' ? 'Credits refresh' : 'Plan expires'} ${date}`;
@@ -52,11 +51,13 @@
         + '#custom-service-editor textarea, #custom-service-editor button, #btn-discovery-submit')
         .forEach(input => { input.disabled = true; });
     const csrf = () => document.querySelector('meta[name="csrf-token"]').content;
-    const upgrade = (container, text) => {
+    const upgrade = (container, text, accessibleLabel = text) => {
         const link = document.createElement('a');
         link.href = '/billing';
         link.textContent = text;
-        link.className = 'settings-hint';
+        link.className = 'plan-upgrade-link';
+        link.setAttribute('aria-label', accessibleLabel);
+        container.classList.add('plan-locked');
         container.appendChild(link);
     };
     function updateIndustryLimit() {
@@ -96,8 +97,13 @@
         if (!account) return;
         const hiringSelected = document.getElementById('discovery-tab-jobs')?.getAttribute('aria-selected') === 'true';
         const submit = document.getElementById('btn-discovery-submit');
-        if (submit) submit.disabled = !account.plan.active || (hiringSelected && !account.plan.hiring_pages);
+        if (submit) {
+            const hiringLocked = hiringSelected && !account.plan.hiring_pages;
+            submit.disabled = !account.plan.active || hiringLocked;
+            submit.classList.toggle('is-plan-locked', hiringLocked);
+        }
         updateIndustryLimit();
+        if (typeof window.updateBusinessTypePicker === 'function') window.updateBusinessTypePicker();
         document.querySelectorAll('#custom-hiring-services input').forEach(input => {
             input.disabled = !account.plan.custom_services;
             if (input.disabled) input.checked = false;
@@ -139,9 +145,6 @@
             local: Number(account.plan.local_price),
             hiring: Number(account.plan.hiring_price)
         };
-        status.textContent = `${account.plan.name} · ${account.balance} `
-            + `${hasSharedCredits() ? 'shared search credits' : 'of your search credits'}`;
-        status.setAttribute('role', 'status');
         renderCredits();
         const navigation = document.getElementById('nav-user-management');
         navigation.hidden = !account.can_manage_team;
@@ -164,19 +167,29 @@
                 input.disabled = !allowed;
                 if (!allowed) {
                     input.checked = false;
-                    upgrade(input.parentElement, input.value === 'yelp'
-                        ? ' Upgrade to Solo to unlock' : ' Upgrade to Small Team to unlock');
+                    const plan = input.value === 'yelp' ? 'Solo' : 'Small Team';
+                    const source = {
+                        facebook: 'Facebook',
+                        instagram: 'Instagram',
+                        linkedin: 'LinkedIn'
+                    }[input.value] || input.value;
+                    upgrade(input.parentElement, `Upgrade to ${plan}`,
+                        `Upgrade to ${plan} to unlock ${source} discovery`);
                 }
             });
             const jobs = document.getElementById('discovery-panel-jobs');
             if (jobs && !account.plan.hiring_pages) {
+                jobs.classList.add('plan-locked-panel');
                 jobs.querySelectorAll('input, select, textarea, button').forEach(input => { input.disabled = true; });
-                upgrade(jobs, 'Upgrade to Small Team to unlock Hiring Companies discovery');
+                upgrade(jobs, 'Upgrade to Small Team',
+                    'Upgrade to Small Team to unlock Hiring Companies discovery');
             }
             const custom = document.getElementById('custom-service-editor');
             if (custom && !account.plan.custom_services) {
+                custom.classList.add('plan-locked');
                 custom.querySelectorAll('input, textarea, button').forEach(input => { input.disabled = true; });
-                upgrade(custom, 'Upgrade to Enterprise to add custom hiring services');
+                upgrade(custom, 'Upgrade to Enterprise',
+                    'Upgrade to Enterprise to add custom hiring services');
             }
             const info = document.getElementById('plan-discovery-policy');
             const industryWord = account.plan.industries === 1 ? 'industry' : 'industries';
@@ -187,8 +200,6 @@
                     : 'Your credits are yours to use. Your leads remain private.');
             window.applyAccountCapabilities();
         } catch (error) {
-            status.textContent = `Plan unavailable: ${error.message}`;
-            status.setAttribute('role', 'alert');
             creditError(error);
             const submit = document.getElementById('btn-discovery-submit');
             if (submit) submit.disabled = true;
@@ -201,8 +212,6 @@
             await updateAccountSummary();
             window.applyAccountCapabilities();
         } catch (error) {
-            status.textContent = `Balance refresh failed: ${error.message}`;
-            status.setAttribute('role', 'alert');
             creditError(error);
         }
     };
@@ -231,15 +240,15 @@
             if (!response.ok || data.status !== 'success') throw new Error(data.message || 'Search quote failed.');
             const quote = data.quote;
             if (!quote.sufficient) throw new Error(
-                `This search costs ${quote.charge} credits; `
-                + `${hasSharedCredits() ? 'the shared balance' : 'your balance'} is ${quote.balance}.`
+                `This search costs ${formatCredits(quote.charge)} credits; `
+                + `${hasSharedCredits() ? 'the shared balance' : 'your balance'} is ${formatCredits(quote.balance)}.`
             );
             const confirmation = document.getElementById('search-cost-confirmation');
             const summary = document.getElementById('search-cost-summary');
             if (!confirmation || !summary) throw new Error('Search confirmation is unavailable. Reload before trying again.');
-            summary.textContent = `This search will reserve ${quote.charge} search credits from `
-                + `${hasSharedCredits() ? 'your shared balance' : 'your balance'} of ${quote.balance}. `
-                + `${quote.policy} Zero-new-lead refund: ${quote.zero_result_refund} credits.`;
+            summary.textContent = `This search will reserve ${formatCredits(quote.charge)} search credits from `
+                + `${hasSharedCredits() ? 'your shared balance' : 'your balance'} of ${formatCredits(quote.balance)}. `
+                + `${quote.policy} Zero-new-lead refund: ${formatCredits(quote.zero_result_refund)} credits.`;
             confirmation.classList.remove('hidden');
             lockSearchControls();
             const accepted = await new Promise(resolve => {
@@ -254,7 +263,7 @@
             return true;
         } catch (error) {
             if (typeof showDiscoveryError === 'function') showDiscoveryError(error.message);
-            else status.textContent = error.message;
+            else creditError(error);
             return false;
         } finally {
             quoting = false;

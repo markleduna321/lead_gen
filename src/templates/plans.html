@@ -4,8 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="color-scheme" content="light dark">
+    <meta id="theme-color-meta" name="theme-color" content="#f5f7f9">
     <meta name="description" content="{{ pricing_description }}">
     <title>Plans &amp; Pricing | AsuraTECH</title>
+    <link rel="preload" href="{{ url_for('static', filename='vendor/fonts/dm-sans-latin-wght-normal.woff2') }}" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="{{ url_for('static', filename='vendor/fonts/manrope-latin-wght-normal.woff2') }}" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/fonts/fonts.css') }}">
     <script src="{{ url_for('static', filename='workspace.js') }}"></script>
     <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='home.css') }}">
@@ -21,7 +25,7 @@
             <span class="plans-announcement"><span aria-hidden="true"></span> Annual billing includes {{ annual_free_months }} months free</span>
         </section>
         <aside class="plans-trial" aria-labelledby="trial-title">
-            <div><p class="home-kicker">START WITH A LITTLE POSSIBILITY</p><h2 id="trial-title">{{ trial_plan.name }} <span>&#8369;0 / {{ trial_days }} days</span></h2><p>{{ trial_plan.credits }} search credits &middot; {{ trial_industry_searches }} local industry searches before refunds &middot; {{ trial_plan.seats }} user</p><p>{{ trial_plan.industries }} {{ 'industry' if trial_plan.industries == 1 else 'industries' }} per submission &middot; {{ trial_plan.daily }} submissions per day, subject to balance.</p><p>Maps / Location Search + Site Email/Phone. No rollover; upgrade to access credit top-ups.</p>
+            <div><p class="home-kicker">START WITH A LITTLE POSSIBILITY</p><h2 id="trial-title">{{ trial_plan.name }} <span>&#8369;0 / {{ trial_days }} days</span></h2><p>{{ trial_plan.credits }} search credits &middot; {{ trial_industry_searches }} local industry searches before refunds &middot; {{ trial_plan.seats }} user</p><p>{{ trial_plan.industries }} {{ 'industry' if trial_plan.industries == 1 else 'industries' }} per submission &middot; {{ trial_plan.daily }} submissions per day, subject to balance.</p>            <p>Google Maps discovery + website email and phone lookup. No rollover; upgrade to access credit top-ups.</p>
                 {% set trial_target = url_for('purchases.billing_page') ~ '#billing-trial-offer' %}
                 <a class="home-button" href="{{ trial_target if current_user else url_for('register', next=trial_target) }}" data-plan-cta="trial">Start free trial <span aria-hidden="true">&rarr;</span></a>
             </div>
@@ -66,18 +70,21 @@
         </section>
         <section class="plans-comparison" aria-labelledby="search-credit-rules">
             <div class="home-section-heading"><div><p class="home-kicker">KNOW BEFORE YOU SEARCH</p><h2 id="search-credit-rules">How search credits work.</h2></div></div>
-            <p>Search credits pay for discovery work, not a guaranteed number of leads, emails, or phone numbers. Results depend on location, availability, filters, and businesses already saved.</p>
+            <p>Search credits cover discovery work. Results vary by location, availability, filters, and businesses already saved; a particular number of leads, emails, or phone numbers is not guaranteed.</p>
+            <details class="plans-help">
+                <summary>See charges, plan access, and refund details</summary>
             <p>Local discovery costs {{ local_price }} credits per industry, covering the selected sources included in your plan. Each selected industry adds its own charge. A submission is one accepted discovery run; daily caps apply to submissions across both discovery modes and do not replace credit charges.</p>
-            <p>Discovery access: Solo can select Google Maps and Yelp only. Facebook, Instagram, and LinkedIn company-page options remain visible but locked, with an Upgrade to Small Team prompt. Hiring Companies discovery also remains visible but locked for Solo, with the same upgrade prompt. Small Team can search the preset hiring services; Add Service remains visible but locked with an Upgrade to Enterprise prompt. Enterprise can create and search custom hiring services.</p>
+            <p>Solo includes Google Maps and Yelp discovery. Small Team adds Facebook, Instagram, LinkedIn company pages, and preset hiring searches. Enterprise also lets you create custom hiring services.</p>
             <p>Small Team and Enterprise members share the owner's search credit balance and daily submission cap. Each account keeps its leads and outreach mailbox private. The owner occupies one seat; pending email invitations reserve seats until accepted, revoked, or expired.</p>
             <p>Hiring discovery on Small Team and Enterprise costs {{ hiring_price }} credits per role-page: one role searched on both Google Jobs and LinkedIn Jobs for one page each, including company-contact lookups. The total charge scales with selected roles and page depth; an itemized quote appears before submission. Local and hiring discovery share the same credit balance.</p>
             <p>AI pitch drafts on Solo, Small Team, and Enterprise cost {{ pitch_price }} credit{% if pitch_price != 1 %}s{% endif %} each, including regenerations, from the same credit balance. If the AI service fails, the credit is refunded automatically. The Free Trial covers discovery only.</p>
             <p>For a completed search with zero new leads, {{ refund_percent | int }}% of the search charge is refunded as search credits, not cash; {{ retained_percent | int }}% covers processing. Refunds apply when the whole completed submission produces zero new leads, not to individual empty sources or industries within a submission that produces new leads.</p>
             <p>Validation failures and searches that fail before returning results are not charged. Completed searches with zero new leads follow the 70% refund policy instead. The applicable charge and refund policy will be shown before submission.</p>
+            </details>
         </section>
         <aside class="plans-disclaimer" aria-label="Plan availability">
             <span class="plans-disclaimer-icon" aria-hidden="true">i</span>
-            <p>Owners can purchase monthly or annual plans and active-plan credit top-ups through PayMongo QR Ph hosted checkout when payments are configured. These are one-time payments with no automatic renewal; access is granted only after verified payment confirmation. Active paid-plan changes require support. New accounts receive a 7-day free trial with 30 search credits once they verify their email (one trial per network).</p>
+            <p>Monthly and annual plans and credit top-ups are one-time purchases with no automatic renewal. Access is added after payment is confirmed. Contact support to change an active paid plan. New accounts receive a 7-day free trial with 30 search credits after email verification (one trial per network).</p>
         </aside>
         <section class="plans-next" aria-labelledby="plans-next-title">
             <div><p class="home-kicker">IN THE MEANTIME</p><h2 id="plans-next-title">Get to know your next workspace.</h2><p>See how discovery and thoughtful outreach come together.</p></div>

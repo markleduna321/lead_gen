@@ -231,7 +231,7 @@ class TeamBillingIntegrationTests(unittest.TestCase):
         invalid = client.get("/billing?plan=not-a-plan")
         self.assertIn('data-selected-plan=""', invalid.text)
         with patch.dict(os.environ, {"PAYMONGO_SECRET_KEY": ""}):
-            self.assertIn("Payments are not configured", client.get("/billing").text)
+            self.assertIn("Online purchases are unavailable right now", client.get("/billing").text)
             result = client.post("/api/billing/checkout", json={"kind": "plan", "plan_id": "solo"})
             self.assertEqual(result.status_code, 503)
         self.assertFalse(self.gateway.calls)

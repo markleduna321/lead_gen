@@ -4,11 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="color-scheme" content="light dark">
+    <meta id="theme-color-meta" name="theme-color" content="#f5f7f9">
     {% set titles = {'register': 'Create your account', 'forgot': 'Reset your password', 'reset': 'Choose a new password'} %}
     <title>{{ titles.get(mode, 'Sign in') }} | AsuraTECH</title>
+    <link rel="preload" href="{{ url_for('static', filename='vendor/fonts/dm-sans-latin-wght-normal.woff2') }}" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="{{ url_for('static', filename='vendor/fonts/manrope-latin-wght-normal.woff2') }}" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/fonts/fonts.css') }}">
     <script src="{{ url_for('static', filename='workspace.js') }}"></script>
-    <script src="{{ url_for('static', filename='vendor/tailwindcss-browser-4.3.3/tailwind.js') }}"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='tailwind.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+    {% if mode in ('register', 'login') %}<script src="{{ url_for('static', filename='auth.js') }}" defer></script>{% endif %}
     {% if mode == 'reset' %}<script src="{{ url_for('static', filename='account_email.js') }}" defer></script>{% endif %}
 </head>
 <body data-page="auth" data-auth-mode="{{ mode }}" class="auth-body">
@@ -33,6 +38,9 @@
             {% if error %}
             <p class="auth-error" role="alert">{{ error }}</p>
             {% endif %}
+            {% if field_errors %}
+            <p class="auth-error" role="alert">Please correct the highlighted fields.</p>
+            {% endif %}
             {% if notice %}
             <p class="auth-notice" role="status">{{ notice }}</p>
             {% endif %}
@@ -50,14 +58,18 @@
                 {% if mode == 'register' %}
                 <label for="display_name">Your name <span class="auth-optional">(optional)</span></label>
                 <input id="display_name" name="display_name" type="text" maxlength="120"
-                       autocomplete="name" value="{{ display_name or '' }}">
+                       autocomplete="name" value="{{ display_name or '' }}"
+                       {% if field_errors and field_errors.get('display_name') %}aria-invalid="true" aria-describedby="display_name-error" data-autofocus{% endif %}>
+                {% if field_errors and field_errors.get('display_name') %}
+                <small class="auth-field-error" id="display_name-error" role="alert">{{ field_errors.get('display_name') }}</small>
+                {% endif %}
                 {% endif %}
 
                 {% if mode == 'reset' %}
                 <input type="hidden" id="reset-token" name="token" value="{{ token or '' }}">
                 <label for="password">New password</label>
                 <input id="password" name="password" type="password" required minlength="10"
-                       autocomplete="new-password" aria-describedby="password-hint" autofocus>
+                       autocomplete="new-password" aria-describedby="password-hint" data-autofocus>
                 <small id="password-hint" class="auth-hint">Use at least 10 characters.</small>
                 <label for="confirm_password">Confirm new password</label>
                 <input id="confirm_password" name="confirm_password" type="password" required
@@ -65,7 +77,11 @@
                 {% else %}
                 <label for="email">Email address</label>
                 <input id="email" name="email" type="email" required maxlength="255"
-                       autocomplete="email" value="{{ email or '' }}" autofocus>
+                       autocomplete="email" value="{{ email or '' }}"
+                       {% if field_errors and field_errors.get('email') %}aria-invalid="true" aria-describedby="email-error" data-autofocus{% elif not field_errors or field_errors.get('email') %}data-autofocus{% endif %}>
+                {% if field_errors and field_errors.get('email') %}
+                <small class="auth-field-error" id="email-error" role="alert">{{ field_errors.get('email') }}</small>
+                {% endif %}
                 {% endif %}
 
                 {% if mode in ('login', 'register') %}
@@ -75,14 +91,26 @@
                 </div>
                 <input id="password" name="password" type="password" required
                        autocomplete="{{ 'new-password' if mode == 'register' else 'current-password' }}"
-                       {% if mode == 'register' %}minlength="10" aria-describedby="password-hint"{% endif %}>
+                       {% if mode == 'register' %}minlength="10" aria-describedby="password-hint password-strength{% if field_errors and field_errors.get('password') %} password-error{% endif %}"{% if field_errors and field_errors.get('password') %} aria-invalid="true" data-autofocus{% endif %}{% endif %}>
+                {% if field_errors and field_errors.get('password') %}
+                <small class="auth-field-error" id="password-error" role="alert">{{ field_errors.get('password') }}</small>
+                {% endif %}
                 {% endif %}
                 {% if mode == 'register' %}
-                <small id="password-hint" class="auth-hint">Use at least 10 characters.</small>
+                <small id="password-hint" class="auth-hint">Use 10 or more characters. Avoid common passwords; try a passphrase or a mix of three character types.</small>
+                <div class="password-strength">
+                    <label class="auth-visually-hidden" for="password-strength-meter">Password strength</label>
+                    <meter id="password-strength-meter" min="0" max="4" value="0"></meter>
+                    <span id="password-strength" role="status" aria-live="polite">Password strength: not checked</span>
+                </div>
 
                 <label for="confirm_password">Confirm password</label>
                 <input id="confirm_password" name="confirm_password" type="password" required
-                       minlength="10" autocomplete="new-password">
+                       minlength="10" autocomplete="new-password"
+                       {% if field_errors and field_errors.get('confirm_password') %}aria-invalid="true" aria-describedby="confirm_password-error" data-autofocus{% endif %}>
+                {% if field_errors and field_errors.get('confirm_password') %}
+                <small class="auth-field-error" id="confirm_password-error" role="alert">{{ field_errors.get('confirm_password') }}</small>
+                {% endif %}
                 {% endif %}
 
                 <button type="submit" class="primary-button auth-submit">

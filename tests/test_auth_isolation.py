@@ -39,9 +39,14 @@ class AuthCredentialTests(unittest.TestCase):
         for email in ["", "not-an-email", "missing@tld", "a@b@c.test", None, 42]:
             with self.subTest(email=email), self.assertRaises(auth.AuthError):
                 auth.normalize_email(email)
-        for password in ["short", "", None, "x" * 500, "has\nnewline123456"]:
+        for password in [
+            "short", "", None, "x" * 500, "has\nnewline123456",
+            "password123", "Password123!", "aaaaaaaaaa", "abcdefghij",
+        ]:
             with self.subTest(password=password), self.assertRaises(auth.AuthError):
                 auth.validate_password(password)
+        self.assertEqual(auth.validate_password("correct-horse-battery"), "correct-horse-battery")
+        self.assertEqual(auth.validate_password("LocalPreviewOnly123!"), "LocalPreviewOnly123!")
         self.assertEqual(auth.normalize_email("  QA@Example.test  "), "QA@Example.test")
 
     def test_unknown_email_and_wrong_password_are_indistinguishable(self):

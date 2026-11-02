@@ -92,7 +92,11 @@ python -c "import secrets; print(secrets.token_urlsafe(48))"                    
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"   # SMTP_ENCRYPTION_KEY
 ```
 
-Passwords are hashed with Werkzeug (scrypt). Sign-in failures return one
+Passwords are hashed with Werkzeug (scrypt). New passwords must be 10–200
+characters, must not be on the common-password blocklist or a repeated
+single-character string, and must use at least three character types or a
+three-word passphrase. Registration shows field-linked errors and live strength
+feedback; the server remains authoritative. Sign-in failures return one
 generic message whether or not the email exists. Accounts are never locked;
 instead, rate limits (stored in PostgreSQL, so they hold across workers) apply:
 
@@ -165,12 +169,14 @@ errors and static files:
 
 - `Content-Security-Policy`: everything is served from this site except map
   tiles (`basemaps.cartocdn.com`), place search (`photon.komoot.io`) and
-  screenshot images (`*.r2.cloudflarestorage.com`). Inline scripts and styles
-  are still allowed, because the templates use inline `on*=` handlers.
+  screenshot images (`*.r2.cloudflarestorage.com`). Inline script and style
+  content is still allowed while the dashboard's inline script and inline
+  styles remain; templates no longer use inline event-handler attributes.
 - `Content-Security-Policy-Report-Only`: the same policy without inline
   scripts. Browsers report what it would block to `POST /api/csp-report`, and
-  each distinct violation is logged once as `CSP violation: ...`. When the
-  log is clean, the strict policy can be enforced.
+  each distinct violation is logged once as `CSP violation: ...`. Move the
+  remaining inline dashboard script and styles to files, then review the
+  reports before enforcing the strict policy.
 - `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy`,
   `Permissions-Policy` and `Cross-Origin-Opener-Policy`.
 - `Strict-Transport-Security` (1 year, this host only), sent only over HTTPS
@@ -234,7 +240,6 @@ with its license:
 | Folder | Source |
 | --- | --- |
 | `leaflet-1.9.4/` | `leaflet` npm package (`dist/`) |
-| `tailwindcss-browser-4.3.3/` | `@tailwindcss/browser` npm package (`dist/index.global.js`, renamed `tailwind.js`) |
 | `fonts/` | `@fontsource-variable/dm-sans` and `@fontsource-variable/manrope` 5.3.0 (latin and latin-ext woff2) |
 
 To upgrade one, download the new package with `npm.cmd pack <name>@<version>`,
@@ -271,13 +276,15 @@ Providers using two-factor authentication require an **app password**. For
 (`abcd efgh ijkl mnop`) has its spaces removed. Every other password is used
 exactly as saved, including spaces and dashes.
 
-**Approve & Send** (`POST /api/dispatch/<id>`) needs a valid address in the
-**Recipient email** box. A blank or invalid address returns `400` with
-`{"code": "invalid_recipient"}`, and nothing is sent; there is no fallback to
-your own address. After a successful send the address is saved as the
-prospect's email. The pitch is plain text: it is HTML-escaped and line breaks
-become `<br>`. The sender name is encoded into a standard `From` header, and
-line breaks in the subject are collapsed, so neither can add extra headers.
+**Approve & Send Email** (`POST /api/dispatch/<id>`) sends the message to the
+address in **Send to email address**, which defaults to the prospect's saved
+email. It is a real outreach email, not a test message. A blank or invalid
+address returns `400` with `{"code": "invalid_recipient"}`, and nothing is
+sent; there is no fallback to your own address. After a successful send, the
+address is saved as the prospect's email. The pitch is plain text: it is
+HTML-escaped and line breaks become `<br>`. The sender name is encoded into
+a standard `From` header, and line breaks in the subject are collapsed, so
+neither can add extra headers.
 
 ## Workspace
 
@@ -326,6 +333,24 @@ Provider and worker logs stay out of the customer progress display; failed
 email updates, archiving, and message sending show an actionable notice.
 Public and workspace pages use a shared type scale with a 12px text floor and
 14px navigation and action controls.
+Light-theme muted and subtle text colors meet 4.5:1 contrast against the
+workspace's light surfaces.
+Self-hosted DM Sans and Manrope variable fonts use three CSS weight stops per
+family; the Latin subsets are preloaded and Latin-ext remains available as a
+fallback.
+Workspace dialogs expose accessible names, keep keyboard focus inside while
+open, close on Escape where appropriate, and return focus to the opener.
+Workspace form controls and pagination buttons have programmatic names, and
+template interactions are registered through JavaScript listeners instead
+of inline event-handler attributes.
+Keyboard focus remains visible on sign-in, settings, and workspace form
+controls. Local discovery industries can be searched and selected in bulk
+without bypassing the account's industry limit.
+Discovery guidance is grouped into expandable "How this works" sections, and
+workspace labels and status messages use plain language. Pricing explains
+plan access and checkout availability without exposing setup terminology.
+Plan-locked discovery controls are visibly muted, carry concise upgrade links,
+and keep the hiring submit action distinct from an available search.
 Owners can buy plans and top-ups through PayMongo QR Ph hosted checkout when
 configured. Verified payments activate purchases automatically; a new account
 starts its 7-day free trial with 30 credits when it verifies its email (one
@@ -653,6 +678,19 @@ system Cairo libraries. Third-party notices ship alongside the generated assets.
 Commit rebuilt assets when changing `frontend/globe.js`,
 `frontend/globe-state.mjs`, or `scripts/build-region-textures.mjs`.
 
+Workspace and auth utility classes are compiled at build time from
+`src/templates/` by `static/tailwind.input.css` into
+`static/tailwind.css`; no Tailwind browser runtime is served. After changing
+those classes or `static/tailwind.input.css`, run:
+
+```text
+npm ci
+npm run build:css
+```
+
+Commit the generated stylesheet with its source changes. The CLI and its
+dependencies are development-only.
+
 Run `venv\Scripts\python.exe app.py` to open the desktop application.
 The shared sidebar links to four independently addressable pages:
 
@@ -663,6 +701,19 @@ The shared sidebar links to four independently addressable pages:
 | Job Leads | `/job-leads` | Search/filter hiring companies, inspect job details, and update contact emails |
 | Discovery | `/discovery` | Local Businesses and Hiring Companies search forms, map, and worker progress |
 | Settings | `/settings` | Your sending mailbox, email signature, password, and signed-in devices |
+
+The Appearance selector follows your system theme by default; you can also
+choose Light or Dark. The browser's theme color follows that selection.
+
+The workspace account menu shows your signed-in email and links to account
+settings, password changes, and sign-out. Billing and User Management appear
+under More when available for your plan.
+
+CSV export is available only when your account has at least one prospect; it
+stays disabled in the Job Leads view. Billing dates use the same locale-aware
+month/day/year format as the workspace sidebar. On mobile, opening the
+navigation drawer moves keyboard focus to its first navigation link, and
+closing it returns focus to the menu button.
 
 Filters are built from your own leads, so every option matches something in the
 list, with a count next to it:

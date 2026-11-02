@@ -10,12 +10,12 @@
     <button id="billing-start-trial" type="button" class="primary-button">Start free trial</button>
 </section>
 {% if not billing.ready %}
-<p class="settings-error" role="alert">Payments are not configured yet. <a href="{{ url_for('support_page') }}">Contact support</a> before purchasing. No payment will be taken here.</p>
+<p class="settings-error" role="alert">Online purchases are unavailable right now. <a href="{{ url_for('support_page') }}">Contact support</a> for help. No payment will be taken here.</p>
 {% elif not billing.livemode %}
 <p class="settings-notice">PayMongo test mode. No real money is collected. Test confirmations activate access only in this configured application environment.</p>
 {% endif %}
 <section class="billing-summary panel" aria-label="Current subscription">
-    <div><p class="eyebrow">YOUR CURRENT PLAN</p><h2 id="billing-current-plan">{{ billing.account.plan.name }}</h2><p id="billing-current-balance" class="settings-subtitle">{{ billing.account.balance }} {{ 'shared search credits available' if billing.account.plan.id in ('small_team', 'enterprise') else 'search credits available for you' }}</p></div>
+    <div><p class="eyebrow">YOUR CURRENT PLAN</p><h2 id="billing-current-plan">{{ billing.account.plan.name }}</h2><p id="billing-current-balance" class="settings-subtitle">{{ '{:,.2f}'.format(billing.account.balance|float).rstrip('0').rstrip('.') }} {{ 'shared search credits available' if billing.account.plan.id in ('small_team', 'enterprise') else 'search credits available for you' }}</p></div>
     <div><span id="billing-current-status" class="settings-badge">{{ 'Active' if billing.account.plan.active else 'Inactive' }}</span><p class="settings-hint">One-time payments. No automatic renewal.</p><p class="settings-hint" id="billing-expiry"></p></div>
 </section>
 <section aria-labelledby="billing-choose-title">
@@ -28,7 +28,7 @@
         {% for plan_id, price in prices.items() %}
         {% set plan = plans[plan_id] %}
         <article id="buy-{{ plan_id }}" class="billing-plan panel{% if plan_id == 'small_team' %} billing-plan-featured{% endif %}{% if selected_plan == plan_id %} billing-plan-selected{% endif %}" data-selected-plan="{{ 'true' if selected_plan == plan_id else 'false' }}">
-            <div class="billing-plan-title"><h3>{{ plan.name }}</h3>{% if plan_id == 'small_team' %}<span class="settings-badge settings-badge-on">Best value</span>{% endif %}</div>
+            <div class="billing-plan-title"><h3>{{ plan.name }}</h3>{% if plan_id == 'small_team' %}<span class="settings-badge settings-badge-on">Best Value</span>{% endif %}</div>
             <p class="billing-price" data-price-plan="{{ plan_id }}">&#8369;{{ '{:,.0f}'.format(price[1] / 100) }}<small> / month</small></p>
             <p class="settings-hint" data-price-note="{{ plan_id }}">One-time monthly payment</p>
             <ul class="billing-features">

@@ -3,6 +3,7 @@ import csv
 import importlib
 import io
 from html import unescape
+from html.parser import HTMLParser
 import os
 from pathlib import Path
 import re
@@ -15,7 +16,7 @@ from unittest.mock import MagicMock, patch
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from discovery_runs import LocalDiscoveryRuns
-from support import QA_USER_ID, signed_in_client
+from support import QA_USER_ID, signed_in_client, with_csrf
 
 
 class DashboardPagesTests(unittest.TestCase):
@@ -63,13 +64,378 @@ class DashboardPagesTests(unittest.TestCase):
         self.assertNotIn('id="overview-recent-prospects"', discovery)
         self.assertIn('role="region" aria-label="Discover leads"', discovery)
         self.assertIn('id="discovery-panel-jobs"', discovery)
+        self.assertNotIn("Back to overview", discovery)
+        main = overview.split('<main id="main-content"', 1)[1].split("</main>", 1)[0]
+        self.assertEqual(main.count('href="/discovery"'), 1)
+
+    def test_csv_export_starts_disabled_until_prospects_are_available(self):
+        html = self.client.get("/prospects").get_data(as_text=True)
+        class ExportLinkParser(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.attributes = None
+                self.text = []
+                self.in_export_link = False
+
+            def handle_starttag(self, tag, attrs):
+                attributes = dict(attrs)
+                if tag == "a" and attributes.get("id") == "btn-export-csv":
+                    self.attributes = attributes
+                    self.in_export_link = True
+
+            def handle_data(self, data):
+                if self.in_export_link:
+                    self.text.append(data)
+
+            def handle_endtag(self, tag):
+                if tag == "a" and self.in_export_link:
+                    self.in_export_link = False
+
+        export_link = ExportLinkParser()
+        export_link.feed(html)
+        self.assertIsNotNone(export_link.attributes)
+        self.assertEqual(export_link.attributes["aria-disabled"], "true")
+        self.assertEqual(export_link.attributes["tabindex"], "-1")
+        self.assertNotIn("href", export_link.attributes)
+        self.assertIn("Export CSV", "".join(export_link.text))
+        self.assertIn('id="export-csv-status" class="settings-hint" role="status"', html)
+
+    def test_workspace_header_and_account_menu_are_consolidated(self):
+        html = self.client.get("/settings").get_data(as_text=True)
+        self.assertIn('id="account-menu"', html)
+        self.assertIn('aria-label="Account menu for qa@example.test"', html)
+        self.assertIn("qa@example.test", html)
+        self.assertIn('href="/settings#account-security-title">Change password</a>', html)
+        self.assertIn('href="/settings">Account settings</a>', html)
+        self.assertIn('action="/logout"', html)
+        self.assertNotIn("AsuraTECH / Lead Gen", html)
+        self.assertNotIn('id="account-plan-status"', html)
+        self.assertNotIn('class="primary-button" href="/discovery"', html)
+        self.assertNotIn('id="sidebar-logout"', html)
+
+        sidebar = re.search(
+            r'<div class="sidebar-scroll">(.*?)</div>\s*<div class="sidebar-footer">',
+            html,
+            re.S,
+        ).group(1)
+        nav_billing = re.search(
+            r'<nav class="side-nav" aria-labelledby="nav-label-more">(.*?)</nav>',
+            sidebar,
+            re.S,
+        ).group(1)
+        self.assertIn('id="nav-billing"', nav_billing)
+        self.assertIn('id="nav-user-management"', nav_billing)
+
+    def test_public_footer_links_home_and_plans(self):
+        public_client = self.module.app.test_client()
+        for path in ("/", "/plans"):
+            html = public_client.get(path).get_data(as_text=True)
+            self.assertIn('<a href="/">Home</a>', html)
+            self.assertIn('<a href="/plans">Plans &amp; Pricing</a>', html)
+
+    def test_workspace_controls_have_programmatic_names(self):
+        class FormControlNameParser(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.label_depth = 0
+                self.label_for = set()
+                self.controls = []
+
+            def handle_starttag(self, tag, attrs):
+                attributes = dict(attrs)
+                if tag == "label":
+                    self.label_depth += 1
+                    if attributes.get("for"):
+                        self.label_for.add(attributes["for"])
+                elif tag in {"input", "select", "textarea"}:
+                    self.controls.append((tag, attributes, self.label_depth > 0))
+
+            def handle_endtag(self, tag):
+                if tag == "label" and self.label_depth:
+                    self.label_depth -= 1
+
+            def handle_startendtag(self, tag, attrs):
+                self.handle_starttag(tag, attrs)
+                self.handle_endtag(tag)
+
+        pages = ("discovery", "prospects", "jobs", "settings")
+        rendered_pages = [
+            self.client.get(path).get_data(as_text=True)
+            for path in ("/discovery", "/prospects", "/job-leads", "/settings")
+        ]
+        for page, html in zip(pages, rendered_pages):
+            parser = FormControlNameParser()
+            parser.feed(html)
+            missing_names = []
+            for tag, attributes, wrapped_by_label in parser.controls:
+                if tag == "input" and (
+                    attributes.get("type") == "hidden" or "hidden" in attributes
+                ):
+                    continue
+                if (
+                    not attributes.get("aria-label")
+                    and not attributes.get("aria-labelledby")
+                    and not wrapped_by_label
+                    and attributes.get("id") not in parser.label_for
+                ):
+                    missing_names.append(attributes.get("id", tag))
+            with self.subTest(page=page):
+                self.assertEqual(missing_names, [])
+
+        html = rendered_pages[0]
+        labels = set(re.findall(r'<label\b[^>]*\bfor="([^"]+)"', html))
+        for control_id in (
+            "recipient-email-input",
+            "job-modal-email-input",
+            "profile-email-input",
+            "job-country-input",
+            "modal-radius",
+            "custom-biz-input",
+            "modal-rating-min",
+            "modal-reviews-max",
+            "editor",
+        ):
+            with self.subTest(control_id=control_id):
+                self.assertIn(control_id, labels)
+
+        for control_id, accessible_name in (
+            ("table-search-input", "Search leads"),
+            ("filter-sort", "Sort results"),
+            ("btn-page-prev", "Previous page"),
+            ("btn-page-next", "Next page"),
+        ):
+            with self.subTest(control_id=control_id):
+                self.assertRegex(
+                    html,
+                    rf'<(?:input|select|button)\b[^>]*\bid="{control_id}"[^>]*'
+                    rf'\baria-label="{accessible_name}"',
+                )
+
+    def test_prospect_send_copy_and_icons_are_unambiguous(self):
+        html = self.client.get("/prospects").get_data(as_text=True)
+        self.assertIn('id="recipient-email-input"', html)
+        self.assertIn(">Send to email address</label>", html)
+        self.assertIn(
+            "Sent to the address shown. Defaults to the prospect's saved email.",
+            unescape(html),
+        )
+        self.assertIn("Approve &amp; Send Email", html)
+        self.assertNotIn("Approve &amp; Send Test", html)
+        self.assertNotRegex(html, r"[🔍📋🤖📍✕]")
+        self.assertRegex(
+            html,
+            r'(?s)id="btn-view-more"[^>]*>.*?<svg[^>]*aria-hidden="true".*?</svg>\s*View More Data',
+        )
+
+    def test_templates_do_not_use_inline_event_handler_attributes(self):
+        class InlineHandlerParser(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.handlers = []
+
+            def handle_starttag(self, tag, attrs):
+                self.handlers.extend(
+                    f"{tag}[{name}]" for name, _ in attrs
+                    if name and name.lower().startswith("on")
+                )
+
+            handle_startendtag = handle_starttag
+
+        template_dir = Path(__file__).resolve().parents[1] / "src" / "templates"
+        for template_path in template_dir.glob("*.html"):
+            parser = InlineHandlerParser()
+            parser.feed(template_path.read_text(encoding="utf-8"))
+            with self.subTest(template=template_path.name):
+                self.assertEqual(parser.handlers, [])
 
     def test_shared_assets_are_available(self):
-        for asset in ("dashboard.css", "workspace.js", "home.css"):
+        for asset in (
+            "dashboard.css",
+            "tailwind.css",
+            "workspace.js",
+            "home.css",
+            "vendor/fonts/fonts.css",
+            "vendor/fonts/dm-sans-latin-wght-normal.woff2",
+            "vendor/fonts/dm-sans-latin-ext-wght-normal.woff2",
+            "vendor/fonts/manrope-latin-wght-normal.woff2",
+            "vendor/fonts/manrope-latin-ext-wght-normal.woff2",
+        ):
             with self.subTest(asset=asset):
                 response = self.client.get(f"/static/{asset}")
                 self.assertEqual(response.status_code, 200)
                 response.close()
+
+    def test_self_hosted_fonts_are_preloaded_without_css_imports(self):
+        repository = Path(__file__).resolve().parents[1]
+        dashboard_css = (repository / "static" / "dashboard.css").read_text(encoding="utf-8")
+        fonts_css = (repository / "static" / "vendor" / "fonts" / "fonts.css").read_text(encoding="utf-8")
+        tailwind_css = (repository / "static" / "tailwind.css").read_text(encoding="utf-8")
+        templates = (
+            "base.html",
+            "public_page.html",
+            "auth.html",
+            "verify_email.html",
+            "home.html",
+            "legal.html",
+            "plans.html",
+            "error.html",
+        )
+        font_files = (
+            "dm-sans-latin-wght-normal.woff2",
+            "manrope-latin-wght-normal.woff2",
+        )
+
+        self.assertNotIn("@import", dashboard_css)
+        self.assertEqual(fonts_css.count("font-weight: 400 700;"), 2)
+        self.assertEqual(fonts_css.count("font-weight: 600 800;"), 2)
+        self.assertIn("font-family: 'DM Sans';", fonts_css)
+        self.assertIn("font-family: 'Manrope';", fonts_css)
+        self.assertNotIn(".font-medium{", tailwind_css)
+        self.assertIn(".font-semibold{", tailwind_css)
+
+        for template_name in templates:
+            template = (
+                repository / "src" / "templates" / template_name
+            ).read_text(encoding="utf-8")
+            with self.subTest(template=template_name):
+                self.assertIn("filename='vendor/fonts/fonts.css'", template)
+                self.assertNotIn("latin-ext", template)
+                self.assertLess(template.index('rel="preload"'), template.index("<script"))
+                for font_file in font_files:
+                    self.assertIn(
+                        f"rel=\"preload\" href=\"{{{{ url_for('static', filename='vendor/fonts/{font_file}') }}}}\" "
+                        "as=\"font\" type=\"font/woff2\" crossorigin",
+                        template,
+                    )
+
+        font_weights = set()
+        for stylesheet in (
+            dashboard_css,
+            (repository / "static" / "home.css").read_text(encoding="utf-8"),
+        ):
+            font_weights.update(re.findall(r"\bfont-weight:\s*(\d{3})\b", stylesheet))
+            font_weights.update(re.findall(r"\bfont:\s*(\d{3})\s", stylesheet))
+        self.assertEqual(font_weights, {"400", "600", "700", "800"})
+
+    def test_auth_and_settings_focus_indicators_remain_visible(self):
+        repository = Path(__file__).resolve().parents[1]
+        dashboard_css = (repository / "static" / "dashboard.css").read_text(encoding="utf-8")
+        self.assertRegex(
+            dashboard_css,
+            r"\.auth-form input:focus-visible,\s*\.settings-form input:focus-visible,\s*"
+            r"\.settings-form select:focus-visible,[\s\S]*?\.page-content input:focus-visible,[\s\S]*?"
+            r"outline:\s*3px solid var\(--accent\)",
+        )
+        self.assertNotRegex(
+            dashboard_css,
+            r"\.auth-form input:focus\s*\{\s*outline:\s*none",
+        )
+        self.assertNotRegex(
+            dashboard_css,
+            r"\.settings-form input:focus,\s*\.settings-form select:focus\s*\{\s*outline:\s*none",
+        )
+
+    def test_theme_color_select_styling_and_mobile_safe_auth_focus(self):
+        repository = Path(__file__).resolve().parents[1]
+        templates = repository / "src" / "templates"
+        head_templates = [
+            template for template in templates.glob("*.html")
+            if "<head>" in template.read_text(encoding="utf-8")
+        ]
+        self.assertTrue(head_templates)
+        for template in head_templates:
+            with self.subTest(template=template.name):
+                html = template.read_text(encoding="utf-8")
+                self.assertEqual(html.count('id="theme-color-meta" name="theme-color"'), 1)
+                self.assertNotRegex(html, r"\sautofocus(?:\s|>)")
+
+        auth_html = (templates / "auth.html").read_text(encoding="utf-8")
+        self.assertIn('id="email" name="email" type="email"', auth_html)
+        self.assertIn('autocomplete="email" value="{{ email or \'\' }}"', auth_html)
+        self.assertIn('aria-describedby="password-hint" data-autofocus', auth_html)
+
+        dashboard_css = (repository / "static" / "dashboard.css").read_text(encoding="utf-8")
+        home_css = (repository / "static" / "home.css").read_text(encoding="utf-8")
+        self.assertRegex(
+            dashboard_css,
+            r"select\s*\{[^}]*background-color:\s*var\(--surface-soft\)[^}]*color:\s*var\(--text\)",
+        )
+        self.assertRegex(
+            dashboard_css,
+            r"select option\s*\{[^}]*background-color:\s*var\(--surface\)[^}]*color:\s*var\(--text\)",
+        )
+        self.assertNotRegex(home_css, r"\.home-theme select\s*\{[^}]*background:\s*transparent")
+
+    def test_registration_validation_renders_field_errors_and_preserves_safe_values(self):
+        cases = [
+            (
+                {"email": "not-an-email", "password": "LocalPreviewOnly123!",
+                 "confirm_password": "LocalPreviewOnly123!", "display_name": "Ana"},
+                "email-error", "Enter a valid email address.", "email", "Ana",
+            ),
+            (
+                {"email": "ana@example.test", "password": "password123",
+                 "confirm_password": "password123", "display_name": "Ana"},
+                "password-error", "That password is too common.", "password", "Ana",
+            ),
+            (
+                {"email": "ana@example.test", "password": "LocalPreviewOnly123!",
+                 "confirm_password": "different", "display_name": "Ana"},
+                "confirm_password-error", "Both passwords must match.", "confirm_password", "Ana",
+            ),
+            (
+                {"email": "ana@example.test", "password": "LocalPreviewOnly123!",
+                 "confirm_password": "LocalPreviewOnly123!", "display_name": "A" * 121},
+                "display_name-error", "Your name must be 120 characters or fewer.",
+                "display_name", "A" * 121,
+            ),
+        ]
+        client = with_csrf(self.module.app.test_client())
+        with patch.object(self.module.limiter(), "hit"):
+            for form, error_id, message, focus_field, retained_name in cases:
+                response = client.post("/register", data=form)
+                html = response.get_data(as_text=True)
+                with self.subTest(error_id=error_id):
+                    self.assertEqual(response.status_code, 400)
+                    self.assertIn(f'id="{error_id}" role="alert"', html)
+                    self.assertIn(message, html)
+                    self.assertRegex(
+                        html,
+                        rf'<input\b[^>]*\bid="{focus_field}"[^>]*aria-invalid="true"[^>]*data-autofocus',
+                    )
+                    self.assertIn('data-autofocus', html)
+                    self.assertIn(f'value="{retained_name}"', html)
+                    self.assertNotIn('value="LocalPreviewOnly123!"', html)
+
+    def test_registration_password_meter_and_auth_script_are_rendered(self):
+        html = self.module.app.test_client().get("/register").get_data(as_text=True)
+        self.assertIn('src="/static/auth.js" defer', html)
+        self.assertIn('id="password-strength-meter"', html)
+        self.assertIn('aria-live="polite"', html)
+        self.assertIn('id="password-strength"', html)
+        self.assertIn("Avoid common passwords", html)
+
+    def test_workspace_utility_css_is_precompiled_and_theme_aware(self):
+        repository = Path(__file__).resolve().parents[1]
+        dashboard_css = (repository / "static" / "dashboard.css").read_text(encoding="utf-8")
+        tailwind_css = (repository / "static" / "tailwind.css").read_text(encoding="utf-8")
+        templates = "\n".join(
+            template.read_text(encoding="utf-8")
+            for template in (repository / "src" / "templates").glob("*.html")
+        )
+
+        self.assertNotIn("tailwindcss-browser", templates)
+        self.assertNotIn("[class*=", dashboard_css)
+        self.assertIn(".grid-cols-2", tailwind_css)
+        self.assertIn(".bg-slate-950", tailwind_css)
+        self.assertIn(".pl-9", tailwind_css)
+        self.assertIn(".inline-flex", tailwind_css)
+        self.assertIn(".pointer-events-none", tailwind_css)
+        self.assertIn(".left-2\\.5", tailwind_css)
+        self.assertIn(".top-1\\/2", tailwind_css)
+        self.assertIn(".-translate-y-1\\/2", tailwind_css)
+        self.assertIn("background-color:var(--surface)", tailwind_css)
+        self.assertIn("color:var(--muted)", tailwind_css)
 
     def test_type_scale_sets_a_12px_floor_and_readable_controls(self):
         repository = Path(__file__).resolve().parents[1]
@@ -96,7 +462,12 @@ class DashboardPagesTests(unittest.TestCase):
                 for size in re.findall(r"(?<![\w.-])(\d+(?:\.\d+)?)px", declaration):
                     self.assertGreaterEqual(float(size), 12)
 
-        for selector in (".nav-link", ".primary-button, .secondary-button"):
+        for selector in (
+            ".nav-link",
+            ".primary-button, .secondary-button",
+            "#discovery-tab-local, #discovery-tab-jobs",
+            ".auth-submit",
+        ):
             self.assertRegex(
                 dashboard_css,
                 re.escape(selector) + r" \{[^}]*font-size: var\(--type-body-small\)",
@@ -106,7 +477,47 @@ class DashboardPagesTests(unittest.TestCase):
                 home_css,
                 re.escape(selector) + r" \{[^}]*font-size: var\(--type-body-small\)",
             )
-        self.assertNotIn("text-[10px]", dashboard_html)
+        self.assertNotRegex(dashboard_html, r"text-\[(?:[1-9]|1[01])px\]")
+
+    def test_light_theme_muted_colors_meet_aa_contrast(self):
+        repository = Path(__file__).resolve().parents[1]
+        dashboard_css = (repository / "static" / "dashboard.css").read_text(encoding="utf-8")
+        light_theme = dashboard_css.split(":root[data-theme=\"dark\"]", 1)[0]
+
+        def token(name):
+            match = re.search(
+                r"--" + name + r":\s*(#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?);",
+                light_theme,
+            )
+            self.assertIsNotNone(match, f"Missing light-theme --{name} token")
+            value = match.group(1)
+            if len(value) == 4:
+                value = "#" + "".join(channel * 2 for channel in value[1:])
+            return value
+
+        def luminance(color):
+            channels = [int(color[index:index + 2], 16) / 255 for index in (1, 3, 5)]
+            linear = [
+                channel / 12.92 if channel <= 0.04045 else ((channel + 0.055) / 1.055) ** 2.4
+                for channel in channels
+            ]
+            return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+        def contrast_ratio(foreground, background):
+            lighter, darker = sorted(
+                (luminance(foreground), luminance(background)), reverse=True
+            )
+            return (lighter + 0.05) / (darker + 0.05)
+
+        for text_token in ("muted", "subtle"):
+            foreground = token(text_token)
+            for background_token in ("surface", "canvas", "surface-soft", "surface-hover"):
+                background = token(background_token)
+                with self.subTest(text_token=text_token, background_token=background_token):
+                    self.assertGreaterEqual(
+                        contrast_ratio(foreground, background),
+                        4.5,
+                    )
 
     def test_public_home_is_available_without_database_access(self):
         with patch("psycopg2.connect", side_effect=AssertionError("Unexpected database access")):
@@ -222,8 +633,10 @@ class DashboardPagesTests(unittest.TestCase):
                     for unreleased_feature in ("Ad Pixel Check", "Bulk CSV Enrichment", "Webhook/API Export"):
                         self.assertNotIn(unreleased_feature, html)
                     self.assertIn('id="trial-title"', html)
+                    self.assertIn("Google Maps discovery + website email and phone lookup.", html)
                     self.assertIn("1 industry per submission", html)
                     self.assertIn('Best Value', html)
+                    self.assertNotIn('Best value', html)
                     self.assertIn('href="/plans" aria-current="page"', html)
                     self.assertEqual(html.count('aria-current="page"'), 1)
                     self.assertIn('href="/#platform"', html)
@@ -235,7 +648,7 @@ class DashboardPagesTests(unittest.TestCase):
                     self.assertNotIn('type="submit"', html)
                     self.assertIn('data-plan-cta="solo"', html)
                     self.assertNotIn('$', html)
-                    self.assertIn('New accounts receive a 7-day free trial with 30 search credits once they verify their email (one trial per network).', html)
+                    self.assertIn('New accounts receive a 7-day free trial with 30 search credits after email verification (one trial per network).', html)
 
     def test_plan_calls_to_action_preserve_intent_for_anonymous_and_signed_in_visitors(self):
         anon_html = self.module.app.test_client().get("/plans").get_data(as_text=True)
@@ -302,7 +715,7 @@ class DashboardPagesTests(unittest.TestCase):
             ['Hiring Companies Discovery', 'Not included', 'Upgrade to Small Team', 'Preset services', 'Preset + custom services'],
             ['Add Custom Hiring Service', 'Not included', 'Not included', 'Upgrade to Enterprise', 'Included'],
             ['AI Pitch Drafts', 'Upgrade to Solo', *['1 credit / draft'] * 3],
-            ['Other Included Features', 'Site Email/Phone', 'Website Email/Phone', 'Website Email/Phone', 'Website Email/Phone'],
+            ['Other Included Features', *['Website Email/Phone'] * 4],
             ['Max Credit Rollover', 'None', 'Up to 350 credits', 'Up to 1,250 credits', 'Up to 3,500 credits'],
             ['Credit Top-Up Pack (Active subs only)', 'Must upgrade', '₱499 for 350 credits', '₱799 for 750 credits', '₱1,499 for 2,000 credits'],
         ])
@@ -379,7 +792,7 @@ class DashboardPagesTests(unittest.TestCase):
         for unreleased_feature in ("Ad Pixel Check", "Bulk CSV Enrichment", "Webhook/API Export"):
             self.assertNotIn(unreleased_feature, html)
         for expected in [
-            "Search credits pay for discovery work, not a guaranteed number of leads",
+            "Search credits cover discovery work.",
             "Each selected industry adds its own charge.",
             "Local and hiring discovery share the same credit balance.",
             "The total charge scales with selected roles and page depth",
@@ -387,19 +800,21 @@ class DashboardPagesTests(unittest.TestCase):
             "30% covers processing.",
             "the whole completed submission produces zero new leads",
             "Validation failures and searches that fail before returning results are not charged.",
-            "PayMongo QR Ph hosted checkout when payments are configured",
-            "one-time payments with no automatic renewal",
-            "Solo can select Google Maps and Yelp only.",
-            "Facebook, Instagram, and LinkedIn company-page options remain visible but locked",
-            "Hiring Companies discovery also remains visible but locked for Solo",
-            "Add Service remains visible but locked with an Upgrade to Enterprise prompt.",
+            "Monthly and annual plans and credit top-ups are one-time purchases",
+            "one-time purchases with no automatic renewal",
+            "Solo includes Google Maps and Yelp discovery.",
+            "Small Team adds Facebook, Instagram, LinkedIn company pages, and preset hiring searches.",
+            "Enterprise also lets you create custom hiring services.",
             "members share the owner's search credit balance and daily submission cap.",
+            '<summary>See charges, plan access, and refund details</summary>',
         ]:
             with self.subTest(expected=expected):
                 self.assertIn(expected, html)
         for obsolete in ["lead credits", "Lead Credits", "per lead", "per-lead"]:
             with self.subTest(obsolete=obsolete):
                 self.assertNotIn(obsolete, html)
+        self.assertNotIn("when payments are configured", html)
+        self.assertNotIn("remain visible but locked", html)
         cards = re.findall(r'<article class="plan-card[^"]*".*?</article>', html, re.S)
         for card, industries, allowance in zip(cards, [3, 5, 10], [75, 250, 750]):
             self.assertIn(f"Up to {industries} industries per submission", card)
@@ -417,6 +832,45 @@ class DashboardPagesTests(unittest.TestCase):
             with self.subTest(internal_detail=internal_detail):
                 self.assertNotIn(internal_detail, html)
         self.assertIn("More pages use more search credits", html)
+
+    def test_discovery_explanations_are_collapsible_and_workspace_copy_is_plain(self):
+        html = self.client.get("/discovery").get_data(as_text=True)
+        for summary in (
+            "How the search radius works",
+            "About LinkedIn company searches",
+            "How industries are matched",
+            "How service matching works",
+            "How country matching works",
+            "About pages and search estimates",
+        ):
+            with self.subTest(summary=summary):
+                self.assertIn(f"<summary>{summary}</summary>", html)
+        for obsolete in (
+            "LEAD ENGINE",
+            "Interactive Target Range Matrix",
+            "Inspector Panel",
+            "No matching pipeline leads captured inside this view index.",
+            "Select any lead row to engage workstation nodes.",
+            "Shifting data view scope...",
+        ):
+            with self.subTest(obsolete=obsolete):
+                self.assertNotIn(obsolete, html)
+
+    def test_plan_locked_controls_have_distinct_upgrade_styles(self):
+        repository = Path(__file__).resolve().parents[1]
+        dashboard_css = (repository / "static" / "dashboard.css").read_text(encoding="utf-8")
+        html = self.client.get("/discovery").get_data(as_text=True)
+
+        self.assertIn('id="discovery-source-options"', html)
+        self.assertIn('class="source-option flex items-center', html)
+        self.assertIn(".source-option.plan-locked", dashboard_css)
+        self.assertIn(".plan-locked-panel", dashboard_css)
+        self.assertIn(".plan-upgrade-link", dashboard_css)
+        self.assertRegex(
+            dashboard_css,
+            r"#btn-discovery-submit\.is-plan-locked,\s*#btn-discovery-submit:disabled",
+        )
+        self.assertIn("#custom-service-editor.plan-locked > summary::after", dashboard_css)
 
     def test_user_management_renders_live_team_data_without_exposing_owner_actions_to_members(self):
         from flask import render_template
@@ -454,7 +908,7 @@ class DashboardPagesTests(unittest.TestCase):
         self.assertIn("/user-management", routes)
         self.assertNotIn("/team", routes)
         html = self.client.get("/overview").get_data(as_text=True)
-        self.assertIn('id="nav-user-management" class="nav-link" hidden', html)
+        self.assertRegex(html, r'id="nav-user-management" class="nav-link[^"]*" hidden')
         self.assertEqual(self.module.app.test_client().get("/user-management").status_code, 302)
 
     def test_globe_assets_are_public_and_have_browser_compatible_content_types(self):

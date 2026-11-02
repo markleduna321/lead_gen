@@ -98,6 +98,29 @@ test('Billing describes personal balances separately from team shared balances',
     assert.match(team.get('billing-topup-description').textContent, /750 shared search credits/);
 });
 
+test('Disabled top-up retains an action label and explains how to unlock it', () => {
+    const ui = setup();
+    assert.equal(ui.get('billing-buy-topup').disabled, true);
+    assert.equal(ui.get('billing-buy-topup').textContent, 'Add search credits');
+    assert.match(ui.get('billing-topup-description').textContent, /once your paid plan is active/);
+});
+
+test('Billing formats credit amounts and dates consistently with the workspace', async () => {
+    const ui = setup({active: true, orders: [order()]});
+    const formatDate = value => new Intl.DateTimeFormat(undefined,
+        {month: 'short', day: 'numeric', year: 'numeric'}).format(new Date(value));
+    assert.equal(ui.get('billing-current-balance').textContent, '750 search credits available for you');
+    assert.equal(ui.get('billing-expiry').textContent,
+        `Plan expiry: ${formatDate('2026-11-27T00:00:00Z')}`);
+    assert.equal(ui.get('billing-orders').children[0].children[1].textContent,
+        formatDate('2026-10-27T00:00:00Z'));
+    assert.match(ui.get('billing-expiry').textContent, /Nov 27, 2026|27 Nov 2026/);
+
+    ui.state.account.balance = '1234.50';
+    await ui.get('billing-refresh').listeners.click();
+    assert.equal(ui.get('billing-current-balance').textContent, '1,234.5 search credits available for you');
+});
+
 test('Checkout sends server-owned product selectors, CSRF and a stable replay key then redirects', async () => {
     const ui = setup();
     await ui.buttons[0].listeners.click();

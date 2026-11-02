@@ -12,7 +12,11 @@ function element(value) {
         attributes: {}, listeners: {}, classList: {
             add(name) { classes.add(name); },
             remove(name) { classes.delete(name); },
-            contains(name) { return classes.has(name); }
+            contains(name) { return classes.has(name); },
+            toggle(name, force) {
+                if (force) classes.add(name);
+                else classes.delete(name);
+            }
         },
         appendChild(child) { this.children.push(child); },
         setAttribute(key, value) { this.attributes[key] = value; },
@@ -37,7 +41,7 @@ async function setup({team = false, enterprise = false, trial = false, fail = fa
     const confirmation = element();
     confirmation.classList.add('hidden');
     const ids = new Map([
-        ['account-plan-status', element()], ['btn-discovery-submit', element()],
+        ['btn-discovery-submit', element()],
         ['nav-user-management', element()], ['nav-billing', element()], ['discovery-tab-jobs', element()],
         ['custom-service-editor', element()], ['discovery-panel-jobs', element()],
         ['job-pages-input', element()], ['plan-discovery-policy', element()],
@@ -123,16 +127,38 @@ async function setup({team = false, enterprise = false, trial = false, fail = fa
 
 test('Solo keeps source and hiring upgrade controls visible but locked, with no owner navigation', async () => {
     const ui = await setup();
-    assert.match(ui.ids.get('account-plan-status').textContent, /750 of your search credits$/);
-    assert.doesNotMatch(ui.ids.get('account-plan-status').textContent, /shared/);
+    assert.equal(ui.ids.get('account-plan-status'), undefined);
     assert.match(ui.ids.get('plan-discovery-policy').textContent, /Your credits are yours to use/);
     assert.match(ui.ids.get('plan-discovery-policy').textContent, /maximum 3 industries/);
     assert.deepEqual(ui.sources.map(input => input.disabled), [false, false, true, true, true]);
+    assert.deepEqual(ui.sources.slice(2).map(input =>
+        input.parentElement.classList.contains('plan-locked')), [true, true, true]);
+    assert.deepEqual(ui.sources.slice(2).map(input =>
+        input.parentElement.children[0].textContent), ['Upgrade to Small Team', 'Upgrade to Small Team', 'Upgrade to Small Team']);
+    assert.equal(ui.sources[2].parentElement.children[0].className, 'plan-upgrade-link');
+    assert.match(ui.sources[2].parentElement.children[0].attributes['aria-label'], /Facebook discovery/);
     assert.equal(ui.editor.disabled, true);
     assert.equal(ui.custom.disabled, true);
+    assert.equal(ui.ids.get('custom-service-editor').classList.contains('plan-locked'), true);
+    assert.equal(ui.ids.get('discovery-panel-jobs').classList.contains('plan-locked-panel'), true);
+    assert.equal(ui.ids.get('discovery-panel-jobs').children[0].textContent, 'Upgrade to Small Team');
     assert.equal(ui.ids.get('nav-user-management').hidden, true);
     assert.equal(ui.ids.get('industry-limit-status').textContent, '0 of 3 industries selected');
-    ui.industries.slice(0, 3).forEach(input => { input.checked = true; });
+    ui.industries.slice(0, 3).forEach(input => { input.checked = true;     });
+
+    test('Hiring discovery shows a distinct locked submit state and actionable plan link', async () => {
+        const ui = await setup();
+        const submit = ui.ids.get('btn-discovery-submit');
+        ui.ids.get('discovery-tab-jobs').attributes['aria-selected'] = 'true';
+        ui.window.applyAccountCapabilities();
+        assert.equal(submit.disabled, true);
+        assert.equal(submit.classList.contains('is-plan-locked'), true);
+
+        ui.ids.get('discovery-tab-jobs').attributes['aria-selected'] = 'false';
+        ui.window.applyAccountCapabilities();
+        assert.equal(submit.disabled, false);
+        assert.equal(submit.classList.contains('is-plan-locked'), false);
+    });
     ui.events.change({target: ui.industries[2]});
     assert.deepEqual(ui.industries.map(input => input.disabled), [false, false, false, true]);
     assert.match(ui.ids.get('discovery-search-estimate').textContent, /30 search credits for 3 industries/);
@@ -149,7 +175,7 @@ test('Solo keeps source and hiring upgrade controls visible but locked, with no 
 
 test('Small Team owner sees management, preset hiring and locked custom editor; Enterprise unlocks it', async () => {
     const ui = await setup({team: true});
-    assert.match(ui.ids.get('account-plan-status').textContent, /750 shared search credits$/);
+    assert.equal(ui.ids.get('account-plan-status'), undefined);
     assert.match(ui.ids.get('plan-discovery-policy').textContent, /All members share the owner balance/);
     assert.match(ui.ids.get('plan-discovery-policy').textContent, /maximum 5 industries/);
     assert.equal(ui.ids.get('nav-user-management').hidden, false);
@@ -169,7 +195,7 @@ test('Small Team owner sees management, preset hiring and locked custom editor; 
 
 test('Trial industry limits use singular copy and allow one selection', async () => {
     const ui = await setup({trial: true});
-    assert.match(ui.ids.get('account-plan-status').textContent, /750 of your search credits$/);
+    assert.equal(ui.ids.get('account-plan-status'), undefined);
     assert.match(ui.ids.get('plan-discovery-policy').textContent, /maximum 1 industry\./);
     assert.equal(ui.ids.get('industry-limit-status').textContent, '0 of 1 industry selected');
     assert.match(ui.ids.get('discovery-search-estimate').textContent, /Choose up to 1 industry/);
@@ -187,7 +213,7 @@ test('Search confirmation uses an in-page server quote, CSRF, refund disclosure 
     const quote = ui.calls.find(call => call.url === '/api/discovery/quote');
     assert.equal(quote.options.headers['X-CSRF-Token'], 'csrf-token');
     assert.match(ui.ids.get('search-cost-summary').textContent, /30 search credits from your balance of 750/);
-    assert.match(ui.ids.get('search-cost-summary').textContent, /21.00 credits/);
+    assert.match(ui.ids.get('search-cost-summary').textContent, /21 credits/);
     assert.equal(ui.ids.get('btn-discovery-submit').disabled, true);
     ui.ids.get('search-cost-continue').click();
     assert.equal(await first, true);
@@ -222,9 +248,9 @@ test('Cancelling the in-page search cost confirmation prevents the search', asyn
     assert.equal(ui.ids.get('search-cost-confirmation').classList.contains('hidden'), true);
 });
 test('Unavailable plan or insufficient balance blocks search and surfaces errors', async () => {
-    const unavailable = await setup({fail: true});
+    const unavailable = await setup({fail: true, card: true});
     assert.equal(unavailable.ids.get('btn-discovery-submit').disabled, true);
-    assert.match(unavailable.ids.get('account-plan-status').textContent, /Database offline/);
+    assert.match(unavailable.ids.get('credit-live-status').textContent, /Wallet unavailable: Database offline/);
     assert.equal(await unavailable.window.preparePaidSearch('/api/trigger/discover', {}), false);
     const insufficient = await setup({sufficient: false});
     assert.equal(await insufficient.window.preparePaidSearch('/api/trigger/discover', {}), false);
@@ -233,17 +259,15 @@ test('Unavailable plan or insufficient balance blocks search and surfaces errors
 });
 
 test('Balance refresh shows settled credits and reports refresh failures explicitly', async () => {
-    const ui = await setup();
+    const ui = await setup({card: true});
     ui.context.fetch = async () => ({ok: true, json: async () => ({
         status: 'success', account: {balance: '747.00', can_manage_team: false,
             plan: {name: 'Solo', active: true, custom_services: false, hiring_pages: 0}}
     })});
     await ui.window.refreshAccountPlan();
-    assert.match(ui.ids.get('account-plan-status').textContent, /747.00 of your search credits$/);
     ui.context.fetch = async () => { throw new Error('Database offline'); };
     await ui.window.refreshAccountPlan();
-    assert.match(ui.ids.get('account-plan-status').textContent, /Balance refresh failed: Database offline/);
-    assert.equal(ui.ids.get('account-plan-status').attributes.role, 'alert');
+    assert.match(ui.ids.get('credit-live-status').textContent, /Wallet unavailable: Database offline/);
 });
 
 test('Sidebar renders real balance, usage percentage, expiry and upgrade link', async () => {
@@ -259,6 +283,10 @@ test('Sidebar renders real balance, usage percentage, expiry and upgrade link', 
     assert.equal(ui.ids.get('credit-plan-link').href, '/billing');
     assert.equal(ui.ids.get('nav-billing').hidden, false);
     assert.equal(ui.ids.get('sidebar-credits').attributes['aria-busy'], 'false');
+    assert.equal(
+        ui.ids.get('credit-renewal').textContent,
+        `Plan expires ${new Intl.DateTimeFormat(undefined, {month: 'short', day: 'numeric', year: 'numeric'}).format(new Date('2026-11-27T00:00:00Z'))}`
+    );
     ui.context.fetch = async () => { throw new Error('Offline'); };
     await ui.window.refreshAccountPlan();
     assert.equal(ui.ids.get('sidebar-credits').dataset.state, 'error');

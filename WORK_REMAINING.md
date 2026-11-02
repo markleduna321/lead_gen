@@ -3,7 +3,8 @@
 > **Companion document:** [WORK_DONE.md](./WORK_DONE.md) records everything finished so far.
 > **Master plan:** [SYSTEM_REVIEW_PLAN.md](./SYSTEM_REVIEW_PLAN.md) holds each item's finding codes (NV-, CP-, PR-, FL-, UI-, AX-) and full context. Mark items ✅ there as they're finished, and move a summary to [WORK_DONE.md](./WORK_DONE.md).
 
-Last updated: 2026-11-02. **Next item: C12.**
+Last updated: 2026-11-02. All implementation items are complete; the remaining
+checkboxes below are deployment follow-ups for the owner.
 
 ## How to resume
 
@@ -38,23 +39,23 @@ Suggested prompt when resuming: *"Continue the system review fixes from WORK_REM
 ## Milestone C: Visual system & accessibility (P1–P2)
 
 - [x] **C11** Shared type scale; minimum 12px text and 14px buttons/navigation across public and workspace pages (UI-01, UI-04).
-- [ ] **C12** Darken light-theme `--subtle` (about `#6b7a83`) and `--muted` (about `#5a6c76`) for AA contrast (UI-02).
-- [ ] **C13** Replace the runtime Tailwind browser build with component classes or a build-time compile (UI-03).
-- [ ] **C14** Fonts: already self-hosted in T1; still reduce to 3 weights per family and preload (UI-05).
-- [ ] **C15** One accessible modal helper (dialog role, Escape, focus trap and return) (AX-01).
-- [ ] **C16** Clear locked-state style for plan-locked features (AX-02).
-- [ ] **C17** Label all inputs, name pagination buttons, and move inline `onclick` handlers to listeners (AX-03, AX-04). Once this is done, the T1 report-only CSP can be enforced.
-- [ ] **C18** Focus outlines on inputs; search and select-all in the industry picker (AX-05, AX-06).
+- [x] **C12** Darken light-theme `--subtle` and `--muted`; both now meet 4.5:1 against light surfaces (UI-02).
+- [x] **C13** Compile Tailwind utilities at build time, serve the generated CSS, remove runtime script and attribute-selector theme remapping (UI-03).
+- [x] **C14** Fonts: use three CSS weight stops per family, preload the self-hosted Latin subsets, and load font CSS without `@import` (UI-05).
+- [x] **C15** Shared accessible modal helper with dialog semantics, Escape handling, focus trapping/return, and labeled close buttons (AX-01).
+- [x] **C16** Distinct locked styling, compact upgrade links, and a muted disabled hiring-search action for plan-gated discovery features (AX-02).
+- [x] **C17** Give all rendered workspace form controls and pagination buttons accessible names; replace inline template event handlers with delegated JavaScript listeners (AX-03, AX-04). CSP enforcement still requires moving the remaining inline dashboard script/styles and reviewing report-only violations.
+- [x] **C18** Restore keyboard focus outlines on auth, settings, and workspace inputs; add industry search and select-visible controls that honor the plan's selection limit (AX-05, AX-06).
 
 ## Milestone D: Copy polish & consistency (P2–P3)
 
-- [ ] **D19** Rewrite jargon and spec-style text; collapsible "How this works" sections (CP-03, CP-04, CP-08).
-- [ ] **D20** SVG icons instead of emoji; clarify "Approve & Send Test" (CP-09, CP-10).
-- [ ] **D21** `Intl` formatting for credits and dates, `…`, consistent capitalization (UI-07, UI-08, CP-11).
-- [ ] **D22** Simpler header and an account menu (NV-06–NV-09).
-- [ ] **D23** `theme-color` meta, select styling, no `autofocus` on mobile (UI-06, AX-07).
-- [ ] **D24** Field-level registration errors with `aria-invalid`; password strength and common-password check (FL-04, FL-05).
-- [ ] **D25** Disable Export with no leads, one date format everywhere, focus into the mobile drawer (FL-16, FL-18, FL-19).
+- [x] **D19** Replace workspace jargon and implementation-heavy purchase copy with plain language; move detailed discovery matching, location, and pagination guidance into expandable help sections (CP-03, CP-04, CP-08).
+- [x] **D20** Use shared SVG icons instead of emoji; clarify that approving sends a real email to the displayed recipient address (CP-09, CP-10).
+- [x] **D21** Use consistent `Intl` formatting for credits and dates, typographic ellipses, and capitalization and plan-feature names (UI-07, UI-08, CP-11).
+- [x] **D22** Simplify the workspace header, group navigation, and add an account menu (NV-06–NV-09).
+- [x] **D23** Add theme-aware browser chrome color, consistent select styling, and keep auth autofocus off touch-first devices (UI-06, AX-07).
+- [x] **D24** Add field-linked registration errors and focus, plus live password strength feedback and server-side weak/common-password rejection (FL-04, FL-05).
+- [x] **D25** Disable CSV export until prospects exist and hide it in Job Leads; keep Billing and sidebar dates in the same locale-aware format; move focus into the mobile navigation drawer and restore it on close (FL-16, FL-18, FL-19).
 
 ## Verification for every milestone
 

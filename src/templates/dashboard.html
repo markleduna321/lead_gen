@@ -13,14 +13,14 @@
 
     <div class="text-xs text-slate-400">
         <p id="hiring-services-error" role="alert" class="hidden text-red-400"></p>
-        <button id="btn-reload-hiring-services" type="button" onclick="loadHiringServices()" class="hidden underline">Reload hiring services</button>
+        <button id="btn-reload-hiring-services" type="button" data-click-action="loadHiringServices" class="hidden underline">Reload hiring services</button>
     </div>
 
-    <div id="loading-overlay" class="hidden discovery-progress-overlay">
-        <section class="discovery-progress-card" role="dialog" aria-modal="true"
-            aria-labelledby="discovery-progress-title" aria-describedby="loading-overlay-text">
+    <div id="loading-overlay" class="hidden discovery-progress-overlay" role="dialog" aria-modal="true"
+        aria-labelledby="discovery-progress-title" aria-describedby="loading-overlay-text" tabindex="-1">
+        <section class="discovery-progress-card">
             <header class="discovery-progress-topline">
-                <span class="discovery-progress-brand"><span class="discovery-progress-monogram" aria-hidden="true">A.</span> ASURATECH <span>/ LEAD ENGINE</span></span>
+                <span class="discovery-progress-brand"><span class="discovery-progress-monogram" aria-hidden="true">A.</span> ASURATECH <span>/ LEAD WORKSPACE</span></span>
                 <span class="discovery-live-badge"><span aria-hidden="true"></span> Live activity</span>
             </header>
             <div class="discovery-progress-intro">
@@ -31,7 +31,7 @@
                 </div>
                 <p class="discovery-progress-eyebrow">A LITTLE DISCOVERY. NEW POSSIBILITIES.</p>
                 <h2 id="discovery-progress-title">Moving your pipeline forward<span>.</span></h2>
-                <p id="loading-overlay-text" role="status" aria-live="polite">Preparing your search...</p>
+                <p id="loading-overlay-text" role="status" aria-live="polite">Preparing your search…</p>
             </div>
             <div class="discovery-progress-body">
                 <div id="discovery-progress-metrics" class="hidden discovery-progress-metrics">
@@ -41,12 +41,12 @@
                 <progress id="discovery-progress-bar" class="discovery-progress-bar" aria-label="Searches completed" max="1"></progress>
                 <div class="discovery-activity-heading"><h3>Activity feed</h3><span><span class="discovery-activity-pulse" aria-hidden="true"></span> Updating live</span></div>
                 <div id="terminal-stream-log" class="discovery-activity-feed" role="region" aria-label="Discovery activity" tabindex="0">
-                    <div class="discovery-log-line">Waiting for worker updates...</div>
+                    <div class="discovery-log-line">Waiting for worker updates…</div>
                 </div>
             </div>
             <footer class="discovery-progress-footer">
                 <p><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="m10 2 6 2.5V10c0 4-6 7-6 7s-6-3-6-7V4.5L10 2Z"/><path d="m7 9 2 2 4-4"/></svg> Results are saved as we go.</p>
-                <button id="btn-stop-discovery-wait" type="button" onclick="stopWaitingForLocalDiscovery()"
+                <button id="btn-stop-discovery-wait" type="button" data-click-action="stopWaitingForLocalDiscovery"
                     class="hidden discovery-progress-dismiss" title="Stop monitoring. The search continues in the background."
                     aria-describedby="discovery-progress-dismiss-hint">
                     Stop waiting <span aria-hidden="true">&rarr;</span>
@@ -58,6 +58,7 @@
 
     <!-- Job Board Prospect Modal -->
     <div id="job-profile-modal"
+        role="dialog" aria-modal="true" aria-labelledby="job-modal-company" tabindex="-1"
         class="hidden fixed inset-0 z-40 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
         <div class="bg-slate-900 border border-purple-900/50 rounded-2xl max-w-2xl max-h-[90vh] overflow-y-auto w-full p-6 shadow-2xl space-y-4">
             <div class="flex items-center justify-between border-b border-slate-800 pb-3">
@@ -65,19 +66,19 @@
                     <h3 id="job-modal-company" class="text-base font-bold text-purple-300">Company</h3>
                     <p id="job-modal-platform" class="text-xs text-slate-500 mt-0.5 font-mono"></p>
                 </div>
-                <button onclick="toggleJobProfileModal(false)"
-                    class="text-slate-500 hover:text-slate-300 text-sm cursor-pointer">✕</button>
+                <button type="button" aria-label="Close job profile" data-click-action="toggleJobProfileModal" data-click-argument="false" data-click-argument-type="boolean"
+                    class="text-slate-500 hover:text-slate-300 text-sm cursor-pointer">{{ icon('close', 16) }}</button>
             </div>
             <div class="space-y-3 text-sm">
                 <div class="grid grid-cols-2 gap-3">
                     <div>
                         <label class="text-xs font-bold uppercase tracking-wider text-slate-500 block mb-0.5">Actual Job Title</label>
-                        <p id="job-modal-title" class="text-purple-400 font-medium"></p>
+                        <p id="job-modal-title" class="text-purple-400 font-semibold"></p>
                         <p id="job-modal-signal" class="text-xs text-slate-500"></p>
                     </div>
                     <div>
                         <label class="text-xs font-bold uppercase tracking-wider text-slate-500 block mb-0.5">Our Service Pitch</label>
-                        <p id="job-modal-service" class="text-slate-300 font-medium"></p>
+                        <p id="job-modal-service" class="text-slate-300 font-semibold"></p>
                     </div>
                 </div>
                 <div class="grid grid-cols-2 gap-3">
@@ -125,33 +126,34 @@
                 </div>
                 <hr class="border-slate-800">
                 <div>
-                    <label class="text-xs font-bold uppercase tracking-wider text-amber-400 block mb-1">Contact Email</label>
-                    <input id="job-modal-email-input" type="email" placeholder="No email found. Paste manually..."
+                    <label for="job-modal-email-input" class="text-xs font-bold uppercase tracking-wider text-amber-400 block mb-1">Contact Email</label>
+                    <input id="job-modal-email-input" type="email" placeholder="No email found. Paste manually…"
                         class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-amber-500 font-mono">
                 </div>
             </div>
             <div class="flex items-center gap-3 pt-2">
-                <button onclick="toggleJobProfileModal(false)"
+                <button type="button" data-click-action="toggleJobProfileModal" data-click-argument="false" data-click-argument-type="boolean"
                     class="w-full bg-slate-950 border border-slate-800 text-slate-400 text-xs py-2 rounded-lg cursor-pointer">Close</button>
-                <button onclick="saveJobEmailUpdate()"
+                <button data-click-action="saveJobEmailUpdate"
                     class="w-full bg-amber-500 text-slate-950 font-bold text-xs py-2 rounded-lg shadow-md shadow-amber-500/10 cursor-pointer">Update Email</button>
             </div>
         </div>
     </div>
 
     <div id="profile-modal"
+        role="dialog" aria-modal="true" aria-labelledby="modal-profile-title" tabindex="-1"
         class="hidden fixed inset-0 z-40 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
         <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto">
             <div class="flex items-center justify-between border-b border-slate-800 pb-3">
                 <h3 id="modal-profile-title" class="text-base font-bold text-emerald-400">Prospect Profile</h3>
-                <button onclick="toggleProfileModal(false)"
-                    class="text-slate-500 hover:text-slate-300 text-sm cursor-pointer">✕</button>
+                <button type="button" aria-label="Close prospect profile" data-click-action="toggleProfileModal" data-click-argument="false" data-click-argument-type="boolean"
+                    class="text-slate-500 hover:text-slate-300 text-sm cursor-pointer">{{ icon('close', 16) }}</button>
             </div>
             <div class="space-y-3 text-sm">
                 <div>
                     <label class="text-xs font-bold uppercase tracking-wider text-slate-500 block mb-0.5">Business
                         Category</label>
-                    <p id="profile-category" class="text-slate-300 font-medium"></p>
+                    <p id="profile-category" class="text-slate-300 font-semibold"></p>
                 </div>
                 <div class="grid grid-cols-2 gap-4">
                     <div>
@@ -162,7 +164,7 @@
                     <div>
                         <label class="text-xs font-bold uppercase tracking-wider text-slate-500 block mb-0.5">Total
                             Reviews</label>
-                        <p id="profile-reviews" class="text-slate-300 font-medium"></p>
+                        <p id="profile-reviews" class="text-slate-300 font-semibold"></p>
                     </div>
                 </div>
                 <div>
@@ -189,16 +191,16 @@
                 </div>
                 <hr class="border-slate-800 my-2">
                 <div>
-                    <label class="text-xs font-bold uppercase tracking-wider text-amber-400 block mb-1">Target
+                    <label for="profile-email-input" class="text-xs font-bold uppercase tracking-wider text-amber-400 block mb-1">Target
                         Contact Email</label>
-                    <input id="profile-email-input" type="email" placeholder="No email saved. Paste social find here..."
+                    <input id="profile-email-input" type="email" placeholder="No email saved. Paste social find here…"
                         class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-amber-500 font-mono">
                 </div>
             </div>
             <div class="flex items-center gap-3 pt-2">
-                <button onclick="toggleProfileModal(false)"
+                <button type="button" data-click-action="toggleProfileModal" data-click-argument="false" data-click-argument-type="boolean"
                     class="w-full bg-slate-950 border border-slate-800 text-slate-400 text-xs py-2 rounded-lg">Close</button>
-                <button onclick="saveProfileEmailUpdates()"
+                <button data-click-action="saveProfileEmailUpdates"
                     class="w-full bg-amber-500 text-slate-950 font-bold text-xs py-2 rounded-lg shadow-md shadow-amber-500/10">Update
                     Record</button>
             </div>
@@ -206,22 +208,24 @@
     </div>
 
     <div id="discovery-modal"
-        {% if page == 'discovery' %}role="region"{% else %}role="dialog" aria-modal="true"{% endif %} aria-label="Discover leads"
+        {% if page == 'discovery' %}role="region" aria-label="Discover leads"{% else %}role="dialog" aria-modal="true" aria-labelledby="discovery-title" tabindex="-1"{% endif %}
         class="{{ '' if page == 'discovery' else 'hidden' }} fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
         <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl space-y-4">
 
             <div class="flex items-center justify-between border-b border-slate-800 pb-3">
                 <h3 id="discovery-title" class="text-base font-bold text-emerald-400">Discover Leads</h3>
-                <button onclick="toggleDiscoveryModal(false)" aria-label="Close discovery"
-                    class="text-slate-500 hover:text-slate-300 text-sm cursor-pointer">✕</button>
+                <button data-click-action="toggleDiscoveryModal" data-click-argument="false" data-click-argument-type="boolean" aria-label="Close discovery"
+                    class="text-slate-500 hover:text-slate-300 text-sm cursor-pointer">{{ icon('close', 16) }}</button>
             </div>
 
             <div role="tablist" aria-label="Discovery type" class="grid grid-cols-2 gap-2">
                 <button id="discovery-tab-local" role="tab" aria-selected="true" aria-controls="discovery-panel-local"
-                    onclick="setDiscoveryMode('local')" onkeydown="handleDiscoveryTabKey(event)"
+                    data-click-action="setDiscoveryMode" data-click-argument="local"
+                    data-keydown-action="handleDiscoveryTabKey" data-keydown-argument="event"
                     class="rounded-lg border border-emerald-500 bg-emerald-950 text-emerald-300 px-3 py-2 text-sm font-semibold">Local Businesses</button>
                 <button id="discovery-tab-jobs" role="tab" aria-selected="false" aria-controls="discovery-panel-jobs" tabindex="-1"
-                    onclick="setDiscoveryMode('jobs')" onkeydown="handleDiscoveryTabKey(event)"
+                    data-click-action="setDiscoveryMode" data-click-argument="jobs"
+                    data-keydown-action="handleDiscoveryTabKey" data-keydown-argument="event"
                     class="rounded-lg border border-slate-700 text-slate-400 px-3 py-2 text-sm font-semibold">Hiring Companies</button>
             </div>
             <p id="discovery-description" class="text-xs text-slate-400">Find local businesses that may need a website or digital services. Results appear in Prospects.</p>
@@ -236,10 +240,10 @@
                         <div class="flex gap-2">
                             <input id="modal-location" type="text" placeholder="e.g., Bacolod City, PH"
                                 list="location-suggestions" autocomplete="off" aria-describedby="location-status"
-                                oninput="handleLocationInput()" onchange="selectLocationSuggestion()"
+                                data-input-action="handleLocationInput" data-change-action="selectLocationSuggestion"
                                 class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500">
-                            <button onclick="geocodeAddressTarget()"
-                                class="bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1 text-xs rounded-lg font-medium transition cursor-pointer">📍
+                            <button data-click-action="geocodeAddressTarget"
+                                class="inline-flex items-center gap-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1 text-xs rounded-lg font-semibold transition cursor-pointer">{{ icon('pin', 16) }}
                                 Pin</button>
                         </div>
                         <datalist id="location-suggestions"></datalist>
@@ -254,53 +258,64 @@
 
                     <div>
                         <div class="flex items-center justify-between mb-1">
-                            <label class="text-xs font-bold uppercase tracking-wider text-slate-400">Google Maps
+                            <label for="modal-radius" class="text-xs font-bold uppercase tracking-wider text-slate-400">Google Maps
                                 Radius</label>
                             <span id="radius-val-label" class="text-xs text-emerald-400 font-mono font-bold">10
                                 km</span>
                         </div>
                         <input id="modal-radius" type="range" min="2" max="50" value="10"
-                            oninput="updateMapProximityRadius(this.value)"
+                            data-input-action="updateMapProximityRadius" data-input-argument="value"
                             class="w-full accent-emerald-500 bg-slate-950 h-1 rounded cursor-pointer">
-                        <p class="text-xs text-slate-400 mt-1">
+                        <details class="discovery-help">
+                            <summary>How the search radius works</summary>
+                            <p>
                             Google Maps results must have GPS coordinates within this radius.
                             Yelp, Facebook, Instagram, and LinkedIn use the location text, not this boundary.
-                        </p>
+                            </p>
+                        </details>
                     </div>
 
                     <div>
                         <label
                             class="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-1.5">Discovery
                             Data Sources</label>
-                        <div
-                            class="grid grid-cols-3 gap-2 bg-slate-950 p-2.5 border border-slate-800 rounded-lg text-[11px] font-medium">
-                            <label class="flex items-center gap-1.5 cursor-pointer text-slate-300"><input
+                        <div id="discovery-source-options"
+                            class="grid grid-cols-3 gap-2 bg-slate-950 p-2.5 border border-slate-800 rounded-lg text-xs font-semibold">
+                            <label class="source-option flex items-center gap-1.5 cursor-pointer text-slate-300"><input
                                     type="checkbox" name="scan-source" value="google" checked
                                     class="accent-emerald-500"> Google Maps</label>
-                            <label class="flex items-center gap-1.5 cursor-pointer text-slate-300"><input
+                            <label class="source-option flex items-center gap-1.5 cursor-pointer text-slate-300"><input
                                     type="checkbox" name="scan-source" value="facebook" class="accent-blue-500">
                                 Facebook</label>
-                            <label class="flex items-center gap-1.5 cursor-pointer text-slate-300"><input
+                            <label class="source-option flex items-center gap-1.5 cursor-pointer text-slate-300"><input
                                     type="checkbox" name="scan-source" value="instagram" class="accent-pink-500">
                                 Instagram</label>
-                            <label class="flex items-center gap-1.5 cursor-pointer text-slate-300"><input
+                            <label class="source-option flex items-center gap-1.5 cursor-pointer text-slate-300"><input
                                     type="checkbox" name="scan-source" value="yelp" class="accent-red-500">
                                 Yelp</label>
-                            <label class="flex items-center gap-1.5 cursor-pointer text-slate-300"><input
+                            <label class="source-option flex items-center gap-1.5 cursor-pointer text-slate-300"><input
                                     type="checkbox" name="scan-source" value="linkedin"
                                     class="accent-indigo-500" aria-describedby="linkedin-source-note">
                                 LinkedIn Companies</label>
                         </div>
-                        <p id="linkedin-source-note" class="text-xs text-slate-400 mt-1">
-                            Searches public LinkedIn company pages. It does not access LinkedIn accounts or private profiles.
-                        </p>
+                        <details class="discovery-help" id="linkedin-source-note">
+                            <summary>About LinkedIn company searches</summary>
+                            <p>Searches public company pages only; it does not access LinkedIn accounts or private profiles.</p>
+                        </details>
                     </div>
 
                     <div>
-                        <label class="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-1.5">Target
-                            Industry Group (Select Multiple)</label>
-                        <div
-                            class="grid grid-cols-2 gap-2 bg-slate-950 p-3 border border-slate-800 rounded-lg text-xs text-slate-300 max-h-32 overflow-y-auto">
+                        <div role="group" aria-labelledby="biz-type-heading">
+                            <h4 id="biz-type-heading" class="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-1.5">Target Industry Group</h4>
+                            <div class="industry-picker-tools">
+                                <label for="biz-type-search" class="sr-only">Search industries</label>
+                                <input id="biz-type-search" type="search" aria-describedby="industry-search-results"
+                                    placeholder="Search industries…" data-input-action="filterBusinessTypes" data-input-argument="value">
+                                <button id="btn-select-visible-industries" type="button" class="secondary-button"
+                                    data-click-action="selectVisibleBusinessTypes">Select visible</button>
+                            </div>
+                            <p id="industry-search-results" role="status" aria-live="polite" class="sr-only"></p>
+                        <div id="biz-type-options" class="industry-picker-options">
                             <label class="flex items-center gap-2 cursor-pointer py-1"><input type="checkbox"
                                     name="biz-type" value="Roofing Contractor" class="accent-emerald-500">
                                 Roofers</label>
@@ -354,25 +369,26 @@
                             <label class="flex items-center gap-2 cursor-pointer py-1"><input type="checkbox" name="biz-type" value="Spa" class="accent-emerald-500"> Spas & Wellness</label>
                             <div id="custom-biz-tags" class="contents"></div>
                         </div>
+                        </div>
                         <p id="industry-limit-status" role="status" aria-live="polite" class="text-xs text-slate-400 mt-1"></p>
-                        <p class="text-xs text-slate-400 mt-1">
-                            Google Maps/Yelp require a matching business category.
-                            Facebook, Instagram, and LinkedIn use title or snippet evidence, not verified categories.
-                            Missing evidence is skipped; custom industries use phrase matching.
-                        </p>
+                        <details class="discovery-help">
+                            <summary>How industries are matched</summary>
+                            <p>Google Maps and Yelp use business categories. Facebook, Instagram, and LinkedIn use public page titles or snippets, which may not verify a category. Results without enough evidence are skipped. Custom industries are matched using phrases.</p>
+                        </details>
                         <!-- Custom business type input -->
                         <div class="flex gap-2 mt-2">
-                            <input id="custom-biz-input" type="text" maxlength="60" placeholder="Any business type... (e.g. Tattoo Shop)"
+                            <label for="custom-biz-input" class="sr-only">Custom business type</label>
+                            <input id="custom-biz-input" type="text" maxlength="60" placeholder="Any business type… (e.g. Tattoo Shop)"
                                 class="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500"
-                                onkeydown="if(event.key==='Enter'){addCustomBizType();event.preventDefault();}">
-                            <button onclick="addCustomBizType()"
+                                data-keydown-action="addCustomBizTypeOnEnter">
+                            <button data-click-action="addCustomBizType"
                                 class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg whitespace-nowrap">+ Add</button>
                         </div>
                     </div>
 
                     <div class="grid grid-cols-2 gap-3">
                         <div>
-                            <label class="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-1">Min
+                            <label for="modal-rating-min" class="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-1">Min
                                 Rating (Google Maps / Yelp)</label>
                             <select id="modal-rating-min"
                                 class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer">
@@ -383,7 +399,7 @@
                             </select>
                         </div>
                         <div>
-                            <label class="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-1">Max
+                            <label for="modal-reviews-max" class="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-1">Max
                                 Reviews (Google Maps / Yelp)</label>
                             <select id="modal-reviews-max"
                                 class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer">
@@ -402,8 +418,7 @@
                 </div>
 
                 <div class="flex flex-col h-full min-h-[300px] md:min-h-full">
-                    <label class="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-1">Interactive
-                        Target Range Matrix</label>
+                    <label class="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-1">Search area map</label>
                     <div id="modal-map-canvas"
                         class="w-full flex-1 bg-slate-950 rounded-xl border border-slate-800 overflow-hidden relative z-10">
                     </div>
@@ -411,7 +426,7 @@
 
             </div>
 
-            <div id="discovery-panel-jobs" role="tabpanel" aria-labelledby="discovery-tab-jobs" onchange="updateHiringSearchBudget()" class="hidden space-y-4">
+            <div id="discovery-panel-jobs" role="tabpanel" aria-labelledby="discovery-tab-jobs" data-change-action="updateHiringSearchBudget" class="hidden space-y-4">
             <div>
                 <label class="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-2">Service Offerings to Scan</label>
                 <div class="space-y-2 bg-slate-950 p-3 border border-slate-800 rounded-lg text-xs text-slate-300">
@@ -432,17 +447,23 @@
                         <label class="block">Required title-match phrases (1-12, one per line)
                             <textarea id="new-service-phrases" rows="3" class="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 mt-1" placeholder="bookkeeper&#10;accounts payable"></textarea>
                         </label>
-                        <p class="text-slate-400">A returned title must contain at least one match phrase. Matching ignores case, punctuation, and accents; phrases are literal, not regex. Use specific terms. Each phrase needs 3-100 characters. Saved services persist and cannot be edited or deleted here. Discovery only, not pitch generation.</p>
-                        <button id="btn-save-hiring-service" type="button" onclick="saveHiringService()" class="secondary-button">Save Service</button>
+                        <details class="discovery-help">
+                            <summary>How service matching works</summary>
+                            <p>At least one phrase must appear in a job title. Matching ignores case, punctuation, and accents; phrases are matched as written, not as patterns. Use specific phrases between 3 and 100 characters. Saved services cannot be edited or deleted here and are used for discovery, not pitch writing.</p>
+                        </details>
+                        <button id="btn-save-hiring-service" type="button" data-click-action="saveHiringService" class="secondary-button">Save Service</button>
                         <p id="hiring-service-save-message" role="status" class="text-slate-300"></p>
                     </div>
                 </details>
             </div>
             <div>
-                <label class="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-1">Target Country <span class="text-slate-600 normal-case font-normal">(optional — blank means no country filter)</span></label>
-                <input id="job-country-input" type="text" placeholder="e.g., United States, Australia, United Kingdom..."
+                <label for="job-country-input" class="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-1">Target Country <span class="text-slate-600 normal-case font-normal">(optional — blank means no country filter)</span></label>
+                <input id="job-country-input" type="text" placeholder="e.g., United States, Australia, United Kingdom…"
                     class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-purple-500">
-                <p class="text-[11px] text-slate-400 mt-2">Country names or ISO codes are accepted. Strict matching excludes unknown locations and remote jobs without explicit country evidence in their location. City-only results may be excluded. Blank does not guarantee worldwide coverage. Actual job titles must match a selected service.</p>
+                <details class="discovery-help">
+                    <summary>How country matching works</summary>
+                    <p>Enter a country name or its two-letter country code. Results need clear country evidence; listings with unknown locations or remote work without a stated country may be excluded. Leaving this blank does not guarantee worldwide results. Job titles must also match a selected service.</p>
+                </details>
             </div>
             <div>
                 <label for="job-pages-input" class="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-1">Pages per Role</label>
@@ -453,8 +474,11 @@
                     <option value="3">3 pages</option>
                     <option value="5">5 pages (maximum)</option>
                 </select>
-                <p id="job-pages-limit-status" role="status" class="text-[11px] text-slate-400 mt-1"></p>
-                <p class="text-[11px] text-slate-400 mt-1">The estimate near the search button reflects your selected roles and page depth. More pages use more search credits; results are not guaranteed and searches stop when no more results are available.</p>
+                <p id="job-pages-limit-status" role="status" class="text-xs text-slate-400 mt-1"></p>
+                <details class="discovery-help">
+                    <summary>About pages and search estimates</summary>
+                    <p>The estimate reflects your selected roles and page depth. More pages use more search credits. Results are not guaranteed, and a search stops when no more results are available.</p>
+                </details>
             </div>
             </div>
             <p id="discovery-error" role="alert" class="hidden text-sm text-red-400"></p>
@@ -469,26 +493,27 @@
             <p id="plan-discovery-policy" class="settings-hint" aria-live="polite"></p>
             <p id="discovery-search-estimate" role="status" aria-live="polite" class="text-xs text-amber-300"></p>
             <div class="flex items-center justify-end gap-3 border-t border-slate-800 pt-3">
-                <a href="/" class="secondary-button">Back to overview</a>
-                <button id="btn-discovery-submit" onclick="submitActiveDiscovery()"
+                <button id="btn-discovery-submit" data-click-action="submitActiveDiscovery"
                     class="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs px-6 py-2 rounded-lg transition cursor-pointer">Find Businesses</button>
             </div>
         </div>
     </div>
 
     <div class="workflow-toolbar {{ '' if page == 'prospects' else 'workspace-hidden' }}">
-            <button id="btn-score-leads" onclick="triggerScoreLeads()"
+            <button id="btn-score-leads" data-click-action="triggerScoreLeads"
                 class="secondary-button">
                 Score leads
             </button>
-            <button id="btn-followup-sweep" onclick="triggerFollowupSweep()"
+            <button id="btn-followup-sweep" data-click-action="triggerFollowupSweep"
                 class="secondary-button">
                 Check follow-ups
             </button>
-            <a href="/api/export" target="_blank"
-                class="secondary-button">
+            <a id="btn-export-csv" target="_blank" aria-label="Export prospects to CSV"
+                aria-describedby="export-csv-status" aria-disabled="true" tabindex="-1"
+                title="Add prospects before exporting" class="secondary-button is-disabled">
                 Export CSV
             </a>
+            <span id="export-csv-status" class="settings-hint" role="status">Export becomes available when prospects are in your list.</span>
     </div>
 
     <section aria-label="Lead workspace" class="space-y-6 {{ '' if page in ['prospects', 'jobs'] else 'workspace-hidden' }}">
@@ -525,9 +550,10 @@
                                 <h2 id="queue-title" class="text-lg font-semibold text-slate-300">Pipeline Master Log</h2>
                             </div>
                             <div class="relative max-w-xs w-full">
-                                <input id="table-search-input" type="text" oninput="handleSearchFilteringInput(this.value)"
-                                    placeholder="🔍 Search name, industry, email..."
-                                    class="w-full bg-slate-900 border border-slate-800 rounded-lg pl-3 pr-3 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-emerald-500">
+                                <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none">{{ icon('search', 16) }}</span>
+                                <input id="table-search-input" type="text" aria-label="Search leads" data-input-action="handleSearchFilteringInput" data-input-argument="value"
+                                    placeholder="Search name, industry, email…"
+                                    class="w-full bg-slate-900 border border-slate-800 rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-emerald-500">
                             </div>
                         </div>
 
@@ -535,24 +561,24 @@
                         <div class="flex flex-wrap items-center gap-2 p-2.5 bg-slate-900/60 border border-slate-800 rounded-xl">
                             <span class="text-xs font-bold uppercase tracking-widest text-slate-600 mr-1">Filter</span>
 
-                            <select id="filter-source" onchange="handleFilterChange()" aria-label="Source"
+                            <select id="filter-source" data-change-action="handleFilterChange" aria-label="Source"
                                 class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-slate-300 focus:outline-none focus:border-emerald-500 cursor-pointer">
                                 <option value="">All Sources</option>
                             </select>
 
-                            <select id="filter-lead-type" onchange="handleFilterChange()" aria-label="Industry"
+                            <select id="filter-lead-type" data-change-action="handleFilterChange" aria-label="Industry"
                                 class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-slate-300 focus:outline-none focus:border-purple-500 cursor-pointer">
                                 <option value="">All Industries</option>
                             </select>
 
-                            <select id="filter-status" onchange="handleFilterChange()" aria-label="Status"
+                            <select id="filter-status" data-change-action="handleFilterChange" aria-label="Status"
                                 class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-slate-300 focus:outline-none focus:border-amber-500 cursor-pointer">
                                 <option value="">All Active</option>
                             </select>
 
                             <div class="h-4 w-px bg-slate-800 mx-0.5"></div>
 
-                            <select id="filter-sort" onchange="handleFilterChange()"
+                            <select id="filter-sort" data-change-action="handleFilterChange" aria-label="Sort results"
                                 class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-slate-300 focus:outline-none focus:border-slate-500 cursor-pointer">
                                 <option value="date_desc">↓ Newest Discovery</option>
                                 <option value="date_asc">↑ Oldest Discovery</option>
@@ -562,9 +588,9 @@
                                 <option value="company" hidden>Company</option>
                             </select>
 
-                            <button id="btn-clear-filters" onclick="clearFilters()"
+                            <button id="btn-clear-filters" data-click-action="clearFilters"
                                 class="hidden ml-auto bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-400 text-xs px-2.5 py-1 rounded-lg transition cursor-pointer">
-                                ✕ Clear
+                                {{ icon('close', 12) }} Clear
                             </button>
                             <span id="filter-active-badge" class="hidden text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-900/50 text-emerald-400 border border-emerald-800">
                                 Filtered
@@ -593,12 +619,12 @@
                         Page <span id="page-num-indicator" class="text-slate-300 font-bold font-mono">1</span>
                     </div>
                     <div class="flex items-center gap-1.5">
-                        <button id="btn-page-prev" onclick="changePage(-1)"
+                        <button id="btn-page-prev" aria-label="Previous page" data-click-action="changePage" data-click-argument="-1" data-click-argument-type="number"
                             class="bg-slate-900 hover:bg-slate-800 border border-slate-800 px-2.5 py-1.5 rounded-lg text-slate-300 transition font-bold disabled:opacity-20 disabled:cursor-not-allowed cursor-pointer">
                             &lt;
                         </button>
                         <div id="numeric-pages-container" class="flex items-center gap-1"></div>
-                        <button id="btn-page-next" onclick="changePage(1)"
+                        <button id="btn-page-next" aria-label="Next page" data-click-action="changePage" data-click-argument="1" data-click-argument-type="number"
                             class="bg-slate-900 hover:bg-slate-800 border border-slate-800 px-2.5 py-1.5 rounded-lg text-slate-300 transition font-bold disabled:opacity-20 disabled:cursor-not-allowed cursor-pointer">
                             &gt;
                         </button>
@@ -609,26 +635,26 @@
             <div id="inspector-card"
                 class="bg-slate-950 border border-slate-800 rounded-xl p-5 flex flex-col h-[680px] shadow-xl">
                 <div class="flex items-center justify-between border-b border-slate-900 pb-2 mb-3">
-                    <h2 class="text-xs font-bold text-slate-300 uppercase tracking-wider">Inspector Panel</h2>
+                    <h2 class="text-xs font-bold text-slate-300 uppercase tracking-wider">Lead details</h2>
                     <div class="flex items-center gap-1.5">
-                        <button id="btn-view-more" disabled onclick="toggleProfileModal(true)"
-                            class="bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-[11px] font-bold px-2 py-1 rounded transition disabled:opacity-30">
-                            📋 View More Data
+                        <button id="btn-view-more" disabled data-click-action="toggleProfileModal" data-click-argument="true" data-click-argument-type="boolean"
+                            class="inline-flex items-center gap-1 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-xs font-bold px-2 py-1 rounded transition disabled:opacity-30">
+                            {{ icon('data', 16) }} View More Data
                         </button>
-                        <button id="btn-individual-ai" disabled onclick="generateSingleLeadPitch()"
-                            class="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[11px] font-bold px-2.5 py-1 rounded transition disabled:opacity-30">
-                            🤖 Draft with AI
+                        <button id="btn-individual-ai" disabled data-click-action="generateSingleLeadPitch"
+                            class="inline-flex items-center gap-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-bold px-2.5 py-1 rounded transition disabled:opacity-30">
+                            {{ icon('sparkles', 16) }} Draft with AI
                         </button>
                     </div>
                 </div>
 
-                <p id="inspector-hint" class="text-xs text-slate-500 mb-3">Select any lead row to engage workstation
-                    nodes.</p>
+                <p id="inspector-hint" class="text-xs text-slate-500 mb-3">Choose a lead from the table to review its details and draft.</p>
 
                 <div class="mb-3">
-                    <label for="test-email-input" class="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-1">Recipient email</label>
-                    <input id="test-email-input" type="email" disabled autocomplete="off" spellcheck="false"
+                    <label for="recipient-email-input" class="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-1">Send to email address</label>
+                    <input id="recipient-email-input" type="email" disabled autocomplete="off" spellcheck="false"
                         class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-amber-500 disabled:opacity-50">
+                    <p class="text-xs text-slate-500 mt-1">Sent to the address shown. Defaults to the prospect's saved email.</p>
                 </div>
 
                 <div class="mb-3">
@@ -637,35 +663,37 @@
                         Focus</span>
                     <p id="angle-box"
                         class="text-xs text-emerald-400 mt-1.5 italic bg-emerald-950/20 p-2 rounded border border-emerald-900/40">
-                        Select a candidate row...</p>
+                        Select a candidate row…</p>
                 </div>
 
                 <div id="inspector-screenshot-frame" class="mb-3 hidden">
                     <label class="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-1">Live
                         Captured Site Footprint Preview</label>
-                    <div class="w-full h-32 rounded-lg border border-slate-800 bg-slate-950 overflow-hidden relative group cursor-zoom-in"
-                        onclick="openExpandedScreenshotView()">
+                    <button type="button" aria-label="Expand lead screenshot"
+                        class="w-full h-32 p-0 text-left rounded-lg border border-slate-800 bg-slate-950 overflow-hidden relative group cursor-zoom-in"
+                        data-click-action="openExpandedScreenshotView">
                         <img id="inspector-img-placeholder" src=""
                             class="w-full h-full object-cover object-top transition duration-300 group-hover:scale-105"
                             alt="Prospect Site View">
                         <div
                             class="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-xs font-bold text-slate-200 uppercase tracking-widest gap-1 bg-slate-950/60">
-                            🔍 Expand Target Image
+                            {{ icon('expand', 16) }} Expand image
                         </div>
-                    </div>
+                    </button>
                 </div>
 
+                <label for="editor" class="sr-only">Outreach message</label>
                 <textarea id="editor" disabled
                     class="w-full flex-1 bg-slate-900 border border-slate-800 rounded-lg p-3 text-sm text-slate-300 focus:outline-none focus:border-emerald-500 font-mono resize-none disabled:opacity-50"></textarea>
 
                 <div class="grid grid-cols-3 gap-3 mt-4">
-                    <button id="btn-reject" disabled onclick="archiveLead()"
-                        class="bg-slate-900 hover:bg-red-950/40 border border-slate-800 hover:border-red-900 text-slate-400 hover:text-red-400 text-xs py-2.5 rounded-lg font-medium transition disabled:opacity-40">
+                    <button id="btn-reject" disabled data-click-action="archiveLead"
+                        class="bg-slate-900 hover:bg-red-950/40 border border-slate-800 hover:border-red-900 text-slate-400 hover:text-red-400 text-xs py-2.5 rounded-lg font-semibold transition disabled:opacity-40">
                         Reject
                     </button>
-                    <button id="btn-send" disabled onclick="dispatchLead()"
+                    <button id="btn-send" disabled data-click-action="dispatchLead"
                         class="col-span-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-sm py-2.5 rounded-lg transition disabled:opacity-40 shadow-lg">
-                        Approve & Send
+                        Approve &amp; Send Email
                     </button>
                 </div>
             </div>
@@ -704,6 +732,7 @@
         let activeStatusFilter = "";
         let activeSortBy = "date_desc";
         let activeQueueView = "prospects";
+        let prospectMetricsTotal = null;
         let debounceTimer = null;
         let queueFilterOptions = {};
 
@@ -720,13 +749,13 @@
         // this maps every select to the facet and request parameter for the view.
         const queueFilterConfig = {
             prospects: {
-                search: '🔍 Search name, industry, email, address...',
+                search: 'Search name, industry, email, address…',
                 source: { facet: 'source', param: 'source', all: 'All Sources', label: o => sourceLabels[o.value] || o.label },
                 type: { facet: 'category', param: 'category', all: 'All Industries', label: o => o.label },
                 status: { param: 'status_filter' }
             },
             jobs: {
-                search: '🔍 Search company, role, location, email...',
+                search: 'Search company, role, location, email…',
                 source: { facet: 'via', param: 'via', all: 'All Job Boards', label: o => o.label },
                 type: { facet: 'service', param: 'lead_type', all: 'All Services', label: o => hiringServiceLabel(o.value) },
                 status: { param: 'status' }
@@ -738,6 +767,7 @@
         let liveLogPollingInterval = null;
         let activeLocalRunId = null;
         let localRunTimer = null;
+        let screenshotImageErrorHandler = null;
 
         function discoveryResultsLabel() {
             return discoveryResultsView === 'jobs' ? 'Job Leads' : 'Prospects';
@@ -746,7 +776,7 @@
         function stopWaitingForLocalDiscovery(message = `Stopped monitoring. The worker may still be running; check ${discoveryResultsLabel()} before starting another search.`) {
             activeLocalRunId = null;
             clearTimeout(localRunTimer);
-            document.getElementById('loading-overlay').classList.add('hidden');
+            closeAccessibleModal('loading-overlay');
             document.getElementById('btn-stop-discovery-wait').classList.add('hidden');
             setGlobalLock(false);
             showDiscoveryError(message);
@@ -870,7 +900,7 @@
                 }
                 if (run.state === 'succeeded') {
                     activeLocalRunId = null;
-                    document.getElementById('loading-overlay').classList.add('hidden');
+                    closeAccessibleModal('loading-overlay');
                     document.getElementById('btn-stop-discovery-wait').classList.add('hidden');
                     setGlobalLock(false);
                     // Warnings mean leads were still saved, so the results are
@@ -891,7 +921,7 @@
                     stopWaitingForLocalDiscovery(`Unable to monitor discovery: ${error.message} The worker may still be running; check ${discoveryResultsLabel()} before retrying.`);
                     return;
                 }
-                document.getElementById('loading-overlay-text').innerText = 'Status connection interrupted. Retrying...';
+                document.getElementById('loading-overlay-text').innerText = 'Status connection interrupted. Retrying…';
                 localRunTimer = setTimeout(() => pollLocalDiscoveryRun(runId, failures + 1), 1000);
             }
         }
@@ -937,7 +967,7 @@
 
                                 // Give the operator 2 seconds to view the success message before closing the overlay
                                 setTimeout(async () => {
-                                    document.getElementById('loading-overlay').classList.add('hidden');
+                                    closeAccessibleModal('loading-overlay');
                                     setGlobalLock(false);
                                     if (workspacePage === 'discovery') {
                                         window.location.assign(discoveryResultsView === 'jobs' ? '/job-leads' : '/prospects');
@@ -1011,6 +1041,10 @@
                         globalMetricsTracker.followup = data.metrics.global_followup;
                     }
 
+                    if (activeQueueView === 'prospects') {
+                        prospectMetricsTotal = data.metrics.global_total;
+                    }
+                    syncCsvExport();
                     calculateMetrics();
                     updatePaginationUIControls();
                     renderTable();
@@ -1027,6 +1061,7 @@
         function setQueueView(view) {
             if (view !== 'prospects' && view !== 'jobs') return;
             activeQueueView = view;
+            syncCsvExport();
             currentPage = 1;
             searchFilterString = '';
             activeSourceFilter = '';
@@ -1084,15 +1119,15 @@
             for (let i = 1; i <= maxPages; i++) {
                 if (i === 1 || i === maxPages || (i >= currentPage - range && i <= currentPage + range)) {
                     pagesArray.push(i);
-                } else if (pagesArray[pagesArray.length - 1] !== '...') {
-                    pagesArray.push('...');
+                } else if (pagesArray[pagesArray.length - 1] !== '…') {
+                    pagesArray.push('…');
                 }
             }
 
             pagesArray.forEach(page => {
-                if (page === '...') {
+                if (page === '…') {
                     const span = document.createElement('span');
-                    span.innerText = '...';
+                    span.innerText = '…';
                     span.className = "text-slate-600 px-2 font-mono";
                     container.appendChild(span);
                 } else {
@@ -1103,7 +1138,7 @@
                         btn.disabled = true;
                     } else {
                         btn.className = "bg-slate-900 border border-slate-800 text-slate-300 w-7 h-7 rounded text-xs transition hover:bg-slate-800 cursor-pointer";
-                        btn.onclick = () => jumpDirectToPage(page);
+                        btn.addEventListener('click', () => jumpDirectToPage(page));
                     }
                     container.appendChild(btn);
                 }
@@ -1184,15 +1219,15 @@
         }
 
         const statusBadges = {
-            'discovered': '<span class="px-2 py-0.5 text-xs rounded font-medium bg-blue-950 text-blue-400 border border-blue-900">Discovered</span>',
-            'drafted': '<span class="px-2 py-0.5 text-xs rounded font-medium bg-amber-950 text-amber-400 border border-amber-900">Drafted</span>',
-            'sent': '<span class="px-2 py-0.5 text-xs rounded font-medium bg-emerald-950 text-emerald-400 border border-emerald-900">Sent</span>',
-            'followup_1': '<span class="px-2 py-0.5 text-xs rounded font-medium bg-purple-950 text-purple-400 border border-purple-900">Follow-Up 1</span>',
-            'followup_2': '<span class="px-2 py-0.5 text-xs rounded font-medium bg-violet-950 text-violet-400 border border-violet-900">Follow-Up 2</span>',
-            'sent_followup_1': '<span class="px-2 py-0.5 text-xs rounded font-medium bg-indigo-950 text-indigo-400 border border-indigo-900">Follow-Up Sent</span>',
-            'cold': '<span class="px-2 py-0.5 text-xs rounded font-medium bg-slate-900 text-slate-600 border border-slate-800">Cold</span>',
-            'closed_won': '<span class="px-2 py-0.5 text-xs rounded font-medium bg-emerald-900 text-emerald-300 border border-emerald-700">Closed Won 🎉</span>',
-            'rejected': '<span class="px-2 py-0.5 text-xs rounded font-medium bg-slate-900 text-slate-500 border border-slate-800">Archived</span>'
+            'discovered': '<span class="px-2 py-0.5 text-xs rounded font-semibold bg-blue-950 text-blue-400 border border-blue-900">Discovered</span>',
+            'drafted': '<span class="px-2 py-0.5 text-xs rounded font-semibold bg-amber-950 text-amber-400 border border-amber-900">Drafted</span>',
+            'sent': '<span class="px-2 py-0.5 text-xs rounded font-semibold bg-emerald-950 text-emerald-400 border border-emerald-900">Sent</span>',
+            'followup_1': '<span class="px-2 py-0.5 text-xs rounded font-semibold bg-purple-950 text-purple-400 border border-purple-900">Follow-Up 1</span>',
+            'followup_2': '<span class="px-2 py-0.5 text-xs rounded font-semibold bg-violet-950 text-violet-400 border border-violet-900">Follow-Up 2</span>',
+            'sent_followup_1': '<span class="px-2 py-0.5 text-xs rounded font-semibold bg-indigo-950 text-indigo-400 border border-indigo-900">Follow-Up Sent</span>',
+            'cold': '<span class="px-2 py-0.5 text-xs rounded font-semibold bg-slate-900 text-slate-600 border border-slate-800">Cold</span>',
+            'closed_won': '<span class="px-2 py-0.5 text-xs rounded font-semibold bg-emerald-900 text-emerald-300 border border-emerald-700">Closed Won 🎉</span>',
+            'rejected': '<span class="px-2 py-0.5 text-xs rounded font-semibold bg-slate-900 text-slate-500 border border-slate-800">Archived</span>'
         };
 
         function addCustomBizType() {
@@ -1222,7 +1257,45 @@
             label.append(checkbox, ' ', text);
             container.appendChild(label);
             input.value = '';
+            filterBusinessTypes(document.getElementById('biz-type-search').value);
             if (typeof window.applyAccountCapabilities === 'function') window.applyAccountCapabilities();
+        }
+
+        function filterBusinessTypes(value = '') {
+            const query = value.trim().toLocaleLowerCase();
+            const inputs = document.querySelectorAll('input[name="biz-type"]');
+            let visible = 0;
+            inputs.forEach(input => {
+                const label = input.closest('label');
+                if (!label) throw new Error('Industry checkbox must have an associated label.');
+                const text = `${input.value} ${label.textContent}`.toLocaleLowerCase();
+                label.hidden = Boolean(query) && !text.includes(query);
+                if (!label.hidden) visible += 1;
+            });
+            document.getElementById('industry-search-results').textContent = query
+                ? `${visible} of ${inputs.length} industries match "${value.trim()}".`
+                : `${inputs.length} industries available.`;
+            updateBusinessTypePicker();
+        }
+
+        function updateBusinessTypePicker() {
+            const button = document.getElementById('btn-select-visible-industries');
+            if (!button) return;
+            const visibleInputs = [...document.querySelectorAll('input[name="biz-type"]')]
+                .filter(input => !input.closest('label').hidden);
+            button.disabled = !visibleInputs.some(input => !input.checked && !input.disabled);
+        }
+
+        function selectVisibleBusinessTypes() {
+            const inputs = [...document.querySelectorAll('input[name="biz-type"]')];
+            for (const input of inputs) {
+                if (input.closest('label').hidden || input.checked || input.disabled) continue;
+                input.checked = true;
+                if (typeof window.applyAccountCapabilities === 'function') {
+                    window.applyAccountCapabilities();
+                }
+            }
+            updateBusinessTypePicker();
         }
 
         function renderSourceBadge(sourcePlatform, placeId) {
@@ -1250,6 +1323,28 @@
             document.getElementById('stat-followup').innerText = globalMetricsTracker.followup;
         }
 
+        function syncCsvExport() {
+            const button = document.getElementById('btn-export-csv');
+            if (!button) return;
+            const available = activeQueueView === 'prospects'
+                && prospectMetricsTotal > 0;
+            button.hidden = activeQueueView === 'jobs';
+            button.setAttribute('aria-disabled', String(!available));
+            button.title = available ? 'Export all prospects as a CSV file'
+                : 'Export becomes available when prospects are in your list';
+            if (available) {
+                button.href = '/api/export';
+                button.removeAttribute('tabindex');
+                button.classList.remove('is-disabled');
+            } else {
+                button.removeAttribute('href');
+                button.setAttribute('tabindex', '-1');
+                button.classList.add('is-disabled');
+            }
+            document.getElementById('export-csv-status').textContent = available
+                ? 'CSV export is available.' : 'Export becomes available when prospects are in your list.';
+        }
+
         function renderTable() {
             const tbody = document.getElementById('table-body');
             tbody.innerHTML = '';
@@ -1257,7 +1352,7 @@
             if (currentLeads.length === 0) {
                 const emptyMessage = activeQueueView === 'jobs'
                     ? 'No matching job-board leads found.'
-                    : 'No matching pipeline leads captured inside this view index.';
+                    : 'No leads match these filters.';
                 tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-500">${emptyMessage}</td></tr>`;
                 return;
             }
@@ -1266,11 +1361,11 @@
                 currentLeads.forEach(lead => {
                     const tr = document.createElement('tr');
                     tr.className = 'border-b border-slate-900 hover:bg-slate-900/50 cursor-pointer transition';
-                    tr.onclick = () => {
+                    tr.addEventListener('click', () => {
                         if (isWorking) return;
                         selectedLeadId = lead.id;
                         toggleJobProfileModal(true);
-                    };
+                    });
                     const values = [
                         lead.company_name,
                         lead.job_title,
@@ -1297,7 +1392,7 @@
                 const tr = document.createElement('tr');
                 tr.id = `row-lead-${lead.id}`;
                 tr.className = `border-b border-slate-900 hover:bg-slate-900/50 cursor-pointer transition ${selectedLeadId === lead.id ? 'bg-slate-900' : ''}`;
-                tr.onclick = () => { if (!isWorking) selectLead(lead); };
+                tr.addEventListener('click', () => { if (!isWorking) selectLead(lead); });
 
                 const score = lead.lead_score || 0;
                 const scoreColor = score >= 70 ? 'text-emerald-400' : (score >= 40 ? 'text-amber-400' : 'text-slate-500');
@@ -1310,7 +1405,7 @@
                     tr.appendChild(td);
                     return td;
                 };
-                const nameCell = cell('p-3 font-medium text-slate-200 max-w-[180px] truncate');
+                const nameCell = cell('p-3 font-semibold text-slate-200 max-w-[180px] truncate');
                 nameCell.textContent = lead.business_name || '—';
                 if (lead.email) {
                     const dot = document.createElement('span');
@@ -1408,9 +1503,9 @@
             const overlay = document.getElementById('loading-overlay');
             updateDiscoveryProgress();
             document.getElementById('terminal-stream-log').innerHTML = '';
-            appendTerminalLine(document.getElementById('terminal-stream-log'), 'Preparing your search...');
+            appendTerminalLine(document.getElementById('terminal-stream-log'), 'Preparing your search…');
             document.getElementById('loading-overlay-text').innerText = progressText;
-            overlay.classList.remove('hidden');
+            openAccessibleModal(overlay, { closeOnEscape: false });
             try {
                 if (!trackedDiscovery) {
                     const cleared = await fetch('/api/discovery/logs/clear', { method: 'POST' });
@@ -1444,7 +1539,7 @@
             } catch (err) {
                 console.error('Discovery request failed:', err);
                 clearInterval(liveLogPollingInterval);
-                overlay.classList.add('hidden');
+                closeAccessibleModal('loading-overlay');
                 setGlobalLock(false);
                 toggleDiscoveryModal(true);
                 showDiscoveryError(trackedDiscovery && !responseReceived
@@ -1468,15 +1563,17 @@
         }
 
         function toggleJobProfileModal(show) {
-            document.getElementById('job-profile-modal').classList.toggle('hidden', !show);
-            if (!show) return;
+            if (!show) {
+                closeAccessibleModal('job-profile-modal');
+                return;
+            }
             if (!selectedLeadId) return;
             const lead = currentLeads.find(l => l.id === selectedLeadId);
             if (!lead) return;
             document.getElementById('job-modal-company').innerText = lead.company_name || lead.business_name;
             document.getElementById('job-modal-platform').innerText = lead.job_via ? `via ${lead.job_via}` : 'Job Board';
             document.getElementById('job-modal-title').innerText = lead.job_title || lead.category || '—';
-            document.getElementById('job-modal-signal').innerText = lead.job_role_signal ? `Search signal: ${lead.job_role_signal}` : '';
+            document.getElementById('job-modal-signal').innerText = lead.job_role_signal ? `Matched search: ${lead.job_role_signal}` : '';
             document.getElementById('job-modal-service').innerText = hiringServiceLabel(lead.lead_type);
             document.getElementById('job-modal-location').innerText = lead.location || lead.formatted_address || 'Unknown';
             document.getElementById('job-modal-schedule').innerText = lead.job_schedule || 'Not specified';
@@ -1488,9 +1585,9 @@
             setJobLink(applyEl, lead.job_apply_link, 'View Job Posting ↗');
             const details = lead.job_details || {};
             const metadata = [
-                `Posted: ${details.posted_at || 'Not provided'} (provider text, not an exact date)`,
-                `Collected (UTC): ${details.collected_at || 'Not recorded'}`,
-                `Posting ID: ${details.provider_job_id || 'Not provided'}`,
+                `Posted: ${details.posted_at || 'Not provided'} (may be approximate)`,
+                `Added to workspace: ${details.collected_at || 'Not recorded'}`,
+                `Listing reference: ${details.provider_job_id || 'Not provided'}`,
             ];
             Object.entries(details.detected_extensions || {}).forEach(([key, value]) => {
                 metadata.push(`${key.replace(/_/g, ' ')}: ${String(value)}`);
@@ -1502,7 +1599,7 @@
             document.getElementById('job-modal-highlights').innerText = (details.job_highlights || [])
                 .map(section => `${section.title || 'Highlights'}\n${(section.items || []).join('\n')}`).join('\n\n');
             const applications = (details.apply_options || []).slice();
-            if (details.share_link) applications.push({ title: 'Provider posting', link: details.share_link });
+            if (details.share_link) applications.push({ title: 'Original job listing', link: details.share_link });
             document.getElementById('job-modal-applications').replaceChildren(...applications.flatMap(option => {
                 const link = document.createElement('a');
                 return setJobLink(link, option.link, option.title || 'Apply') ? [link] : [];
@@ -1532,6 +1629,9 @@
                 return setJobLink(link, url, `Source: ${url}`) ? [link] : [];
             }));
             document.getElementById('job-modal-email-input').value = lead.email || '';
+            openAccessibleModal('job-profile-modal', {
+                onEscape: () => toggleJobProfileModal(false)
+            });
         }
 
         async function saveJobEmailUpdate() {
@@ -1553,7 +1653,7 @@
                 }
                 toggleJobProfileModal(false);
                 if (activeQueueView !== 'jobs') {
-                    document.getElementById('test-email-input').value = updatedEmail;
+                    document.getElementById('recipient-email-input').value = updatedEmail;
                 }
                 showQueueNotice('Email address updated.');
                 await loadQueue();
@@ -1563,6 +1663,11 @@
         }
 
         function toggleProfileModal(show) {
+            if (!show) {
+                closeAccessibleModal('profile-modal');
+                closeAccessibleModal('job-profile-modal');
+                return;
+            }
             if (!selectedLeadId) return;
             const targetLead = currentLeads.find(l => l.id === selectedLeadId);
             if (!targetLead) return;
@@ -1571,29 +1676,29 @@
                 toggleJobProfileModal(show);
                 return;
             }
-            if (show) {
-                document.getElementById('modal-profile-title').innerText = targetLead.business_name;
-                document.getElementById('profile-category').innerText = targetLead.category;
-                const socialMetrics = ['facebook', 'instagram'].includes(targetLead.source_platform) ||
-                    /^(fb_|ig_)/.test(targetLead.google_place_id || '');
-                document.getElementById('profile-rating').innerText = socialMetrics || targetLead.rating == null
-                    ? 'Not available' : `★ ${targetLead.rating}`;
-                document.getElementById('profile-reviews').innerText = socialMetrics || targetLead.review_count == null
-                    ? 'Not available' : `${targetLead.review_count} Total Reviews`;
-                document.getElementById('profile-phone').innerText = targetLead.phone || "No Public Phone Listed";
-                document.getElementById('profile-address').innerText = targetLead.formatted_address || "No Address Synced";
-                [['profile-website-link', targetLead.website_url], ['profile-social-link', targetLead.profile_url]]
-                    .forEach(([id, url]) => {
-                        const link = document.getElementById(id);
-                        const valid = typeof url === 'string' && /^https?:\/\//i.test(url);
-                        link.href = valid ? url : '#';
-                        link.innerText = valid ? url : 'Not found';
-                        link.setAttribute('aria-disabled', String(!valid));
-                        link.tabIndex = valid ? 0 : -1;
-                    });
-                document.getElementById('profile-email-input').value = targetLead.email || "";
-                document.getElementById('profile-modal').classList.remove('hidden');
-            } else { document.getElementById('profile-modal').classList.add('hidden'); }
+            document.getElementById('modal-profile-title').innerText = targetLead.business_name;
+            document.getElementById('profile-category').innerText = targetLead.category;
+            const socialMetrics = ['facebook', 'instagram'].includes(targetLead.source_platform) ||
+                /^(fb_|ig_)/.test(targetLead.google_place_id || '');
+            document.getElementById('profile-rating').innerText = socialMetrics || targetLead.rating == null
+                ? 'Not available' : `★ ${targetLead.rating}`;
+            document.getElementById('profile-reviews').innerText = socialMetrics || targetLead.review_count == null
+                ? 'Not available' : `${targetLead.review_count} Total Reviews`;
+            document.getElementById('profile-phone').innerText = targetLead.phone || "No Public Phone Listed";
+            document.getElementById('profile-address').innerText = targetLead.formatted_address || "No Address Synced";
+            [['profile-website-link', targetLead.website_url], ['profile-social-link', targetLead.profile_url]]
+                .forEach(([id, url]) => {
+                    const link = document.getElementById(id);
+                    const valid = typeof url === 'string' && /^https?:\/\//i.test(url);
+                    link.href = valid ? url : '#';
+                    link.innerText = valid ? url : 'Not found';
+                    link.setAttribute('aria-disabled', String(!valid));
+                    link.tabIndex = valid ? 0 : -1;
+                });
+            document.getElementById('profile-email-input').value = targetLead.email || "";
+            openAccessibleModal('profile-modal', {
+                onEscape: () => toggleProfileModal(false)
+            });
         }
 
         async function saveProfileEmailUpdates() {
@@ -1611,7 +1716,7 @@
                     throw new Error(data.message || 'Email address could not be updated.');
                 }
                 toggleProfileModal(false);
-                document.getElementById('test-email-input').value = updatedEmail;
+                document.getElementById('recipient-email-input').value = updatedEmail;
                 showQueueNotice('Email address updated.');
                 await loadQueue();
             } catch (err) {
@@ -1659,7 +1764,7 @@
                 payload.radius_km = scanRadiusKm;
             }
             return startDiscoveryRequest(
-                '/api/trigger/discover', payload, 'prospects', 'Finding local businesses...'
+                '/api/trigger/discover', payload, 'prospects', 'Finding local businesses…'
             );
         }
 
@@ -1667,8 +1772,9 @@
             if (!selectedLeadId || isWorking) return;
             updateDiscoveryProgress();
             document.getElementById('terminal-stream-log').innerHTML = '';
-            document.getElementById('loading-overlay-text').innerText = 'Generating your personalized pitch...';
-            setGlobalLock(true); const overlay = document.getElementById('loading-overlay'); overlay.classList.remove('hidden');
+            document.getElementById('loading-overlay-text').innerText = 'Generating your personalized pitch…';
+            setGlobalLock(true); const overlay = document.getElementById('loading-overlay');
+            openAccessibleModal(overlay, { closeOnEscape: false });
             const leadId = selectedLeadId;
             try {
                 const res = await fetch(`/api/trigger/pitch-single/${leadId}`, { method: 'POST' });
@@ -1687,31 +1793,35 @@
                 console.error(err);
                 showToast('The pitch could not be drafted. Check your connection and try again.', true);
             } finally {
-                overlay.classList.add('hidden'); setGlobalLock(false);
+                closeAccessibleModal('loading-overlay'); setGlobalLock(false);
                 if (window.refreshAccountPlan) window.refreshAccountPlan();
             }
         }
 
-        async function jumpDirectToPage(targetPageNumber) { if (isWorking || targetPageNumber === currentPage) return; currentPage = targetPageNumber; resetWorkspace(); const tbody = document.getElementById('table-body'); tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-500 animate-pulse">Shifting data view scope...</td></tr>`; await loadQueue(); }
+        async function jumpDirectToPage(targetPageNumber) { if (isWorking || targetPageNumber === currentPage) return; currentPage = targetPageNumber; resetWorkspace(); const tbody = document.getElementById('table-body'); tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-500 animate-pulse">Loading leads…</td></tr>`; await loadQueue(); }
         async function changePage(direction) { if (isWorking) return; const maxPages = Math.ceil(globalMetricsTracker.total / rowsPerPage) || 1; const nextTargetPage = currentPage + direction; if (nextTargetPage < 1 || nextTargetPage > maxPages) return; await jumpDirectToPage(nextTargetPage); }
 
         function selectLead(lead) {
             selectedLeadId = lead.id; renderTable();
-            document.getElementById('inspector-hint').innerText = `Reviewing System ID: #${lead.id}`;
-            document.getElementById('angle-box').innerText = lead.suggested_angle || "Awaiting AI conversion mapping.";
-            document.getElementById('test-email-input').value = lead.email || ""; document.getElementById('test-email-input').disabled = false;
+            document.getElementById('inspector-hint').innerText = `Reviewing lead #${lead.id}`;
+            document.getElementById('angle-box').innerText = lead.suggested_angle || "No pitch suggestion is available yet.";
+            document.getElementById('recipient-email-input').value = lead.email || ""; document.getElementById('recipient-email-input').disabled = false;
 
             const editor = document.getElementById('editor'); editor.value = lead.ai_pitch_draft || ""; editor.disabled = false;
             const btnSend = document.getElementById('btn-send'); const btnReject = document.getElementById('btn-reject'); const btnAi = document.getElementById('btn-individual-ai'); const btnViewMore = document.getElementById('btn-view-more');
             const screenshotContainer = document.getElementById('inspector-screenshot-frame');
             const screenshotImg = document.getElementById('inspector-img-placeholder');
 
+            if (screenshotImageErrorHandler) {
+                screenshotImg.removeEventListener('error', screenshotImageErrorHandler);
+                screenshotImageErrorHandler = null;
+            }
             if (lead.screenshot_url) {
-                screenshotImg.onerror = () => screenshotContainer.classList.add('hidden');
+                screenshotImageErrorHandler = () => screenshotContainer.classList.add('hidden');
+                screenshotImg.addEventListener('error', screenshotImageErrorHandler, { once: true });
                 screenshotImg.src = lead.screenshot_url;
                 screenshotContainer.classList.remove('hidden'); // Fade into view layout
             } else {
-                screenshotImg.onerror = null;
                 screenshotImg.src = "";
                 screenshotContainer.classList.add('hidden'); // Fold array space clean if missing
             }
@@ -1721,7 +1831,7 @@
             else if (lead.status === 'followup_1') { btnSend.innerText = "Send Follow-Up 1"; btnSend.className = "col-span-2 bg-fuchsia-600 text-white font-bold text-sm py-2.5 rounded-lg cursor-pointer shadow-lg"; }
             else if (lead.status === 'followup_2') { btnSend.innerText = "Send Final Follow-Up"; btnSend.className = "col-span-2 bg-violet-600 text-white font-bold text-sm py-2.5 rounded-lg cursor-pointer shadow-lg"; }
             else if (lead.status === 'sent_followup_1' || lead.status === 'cold') { btnSend.innerText = lead.status === 'cold' ? 'Sequence Ended' : 'Sequence Completed'; btnSend.disabled = true; btnSend.className = "col-span-2 bg-slate-800 text-slate-500 font-bold text-sm py-2.5 rounded-lg cursor-not-allowed"; }
-            else { btnSend.innerText = "Approve & Send"; btnSend.className = "col-span-2 bg-amber-500 text-slate-950 font-bold text-sm py-2.5 rounded-lg cursor-pointer shadow-lg"; if (!lead.ai_pitch_draft) btnSend.disabled = true; }
+            else { btnSend.innerText = "Approve & Send Email"; btnSend.className = "col-span-2 bg-amber-500 text-slate-950 font-bold text-sm py-2.5 rounded-lg cursor-pointer shadow-lg"; if (!lead.ai_pitch_draft) btnSend.disabled = true; }
         }
 
         async function dispatchLead() {
@@ -1744,7 +1854,7 @@
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    Transmitting Assets...
+                    Transmitting Assets…
                 </span>
             `;
 
@@ -1755,7 +1865,7 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         final_pitch: document.getElementById('editor').value,
-                        destination_email: document.getElementById('test-email-input').value
+                        destination_email: document.getElementById('recipient-email-input').value
                     })
                 });
 
@@ -1771,7 +1881,7 @@
                         return;
                     }
                     showToast(data.message || 'Your message could not be sent.', true);
-                    if (data.code === 'invalid_recipient') document.getElementById('test-email-input').focus();
+                    if (data.code === 'invalid_recipient') document.getElementById('recipient-email-input').focus();
                     // Restore original button states if rejected or broken
                     btnSend.disabled = false;
                     btnSend.style.opacity = "1";
@@ -1809,16 +1919,16 @@
 
         function resetWorkspace() {
             selectedLeadId = null;
-            document.getElementById('inspector-hint').innerText = "Select any lead row to engage workstation nodes.";
-            document.getElementById('angle-box').innerText = "Select a business from the queue table to inspect its pitch draft...";
+            document.getElementById('inspector-hint').innerText = "Choose a lead from the table to review its details and draft.";
+            document.getElementById('angle-box').innerText = "Select a business from the queue table to inspect its pitch draft…";
 
             // Wipe preview layers during clean reset routine passes
             document.getElementById('inspector-screenshot-frame').classList.add('hidden');
             document.getElementById('inspector-img-placeholder').src = "";
 
-            document.getElementById('test-email-input').value = ''; document.getElementById('test-email-input').disabled = true; document.getElementById('editor').value = ''; document.getElementById('editor').disabled = true;
+            document.getElementById('recipient-email-input').value = ''; document.getElementById('recipient-email-input').disabled = true; document.getElementById('editor').value = ''; document.getElementById('editor').disabled = true;
             document.getElementById('btn-reject').disabled = true; document.getElementById('btn-individual-ai').disabled = true; document.getElementById('btn-view-more').disabled = true;
-            document.getElementById('btn-send').disabled = true; document.getElementById('btn-send').innerText = "Approve & Send Test"; document.getElementById('btn-send').className = "col-span-2 bg-slate-800 text-slate-500 font-bold text-sm py-2.5 rounded-lg opacity-50";
+            document.getElementById('btn-send').disabled = true; document.getElementById('btn-send').innerText = "Approve & Send Email"; document.getElementById('btn-send').className = "col-span-2 bg-slate-800 text-slate-500 font-bold text-sm py-2.5 rounded-lg opacity-50";
         }
 
         function hiringServiceLabel(id) {
@@ -1911,7 +2021,7 @@
             }
             hiringServiceSaving = true;
             document.getElementById('btn-save-hiring-service').disabled = true;
-            message.innerText = 'Saving service...';
+            message.innerText = 'Saving service…';
             try {
                 const response = await fetch('/api/hiring-services', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1977,7 +2087,7 @@
             return startDiscoveryRequest('/api/trigger/discover-jobs', {
                 service_types: serviceTypes, country, pages_per_role: pagesPerRole
             },
-                'jobs', 'Finding hiring companies...');
+                'jobs', 'Finding hiring companies…');
         }
 
         async function triggerScoreLeads() { await triggerMaintenanceJob('score-leads'); }
@@ -2043,7 +2153,7 @@
 
         function showToast(message, isError = false) {
             const toast = document.createElement('div');
-            toast.className = `fixed bottom-6 right-6 z-50 bg-slate-800 border ${isError ? 'border-rose-500/60 text-rose-100' : 'border-slate-700 text-slate-200'} text-xs font-medium px-4 py-3 rounded-xl shadow-2xl`;
+            toast.className = `fixed bottom-6 right-6 z-50 bg-slate-800 border ${isError ? 'border-rose-500/60 text-rose-100' : 'border-slate-700 text-slate-200'} text-xs font-semibold px-4 py-3 rounded-xl shadow-2xl`;
             toast.setAttribute('role', isError ? 'alert' : 'status');
             toast.innerText = message;
             document.body.appendChild(toast);
@@ -2052,7 +2162,7 @@
 
         function showUpgradeToast(message) {
             const toast = document.createElement('div');
-            toast.className = 'fixed bottom-6 right-6 z-50 max-w-sm bg-slate-800 border border-amber-500/40 text-slate-200 text-xs font-medium px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3';
+            toast.className = 'fixed bottom-6 right-6 z-50 max-w-sm bg-slate-800 border border-amber-500/40 text-slate-200 text-xs font-semibold px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3';
             toast.setAttribute('role', 'status');
             const text = document.createElement('span');
             text.textContent = message;
@@ -2238,20 +2348,20 @@
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(emailSettingsPayload()),
-            }, 'Saving...', document.getElementById('btn-save-email-settings'));
+            }, 'Saving…', document.getElementById('btn-save-email-settings'));
         }
 
         function sendEmailSettingsTest() {
             return submitEmailSettings('/api/email-settings/test', { method: 'POST' },
-                'Sending a test message...', document.getElementById('btn-test-email-settings'));
+                'Sending a test message…', document.getElementById('btn-test-email-settings'));
         }
 
         function removeEmailSettings() {
             return submitEmailSettings('/api/email-settings', { method: 'DELETE' },
-                'Removing...', document.getElementById('btn-clear-email-settings'));
+                'Removing…', document.getElementById('btn-clear-email-settings'));
         }
 
-        window.onload = () => {
+        window.addEventListener('load', () => {
             if (workspacePage === 'discovery' || workspacePage === 'jobs') loadHiringServices();
             if (workspacePage === 'settings') loadEmailSettings();
             else if (workspacePage === 'overview') loadOverview();
@@ -2261,7 +2371,7 @@
                 showDiscoveryOutcome();
                 if (workspacePage === 'prospects') refreshJobStatus();
             }
-        };
+        });
 
         // LEAFLET INTERACTIVE MAP GLOBALS
         let mapInstance = null;
@@ -2325,7 +2435,7 @@
             locationSuggestions = [];
             document.getElementById('location-suggestions').replaceChildren();
             document.getElementById('location-status').innerText = query.length < 3
-                ? 'Type at least 3 characters for suggestions.' : 'Searching locations...';
+                ? 'Type at least 3 characters for suggestions.' : 'Searching locations…';
             if (query.length < 3) return;
             locationSuggestionTimer = setTimeout(async () => {
                 try {
@@ -2373,7 +2483,7 @@
                 window.location.assign('/discovery');
                 return;
             }
-            document.getElementById('discovery-modal').classList.toggle('hidden', !show);
+            closeAccessibleModal('discovery-modal');
 
             if (show) {
                 document.getElementById('discovery-error').classList.add('hidden');
@@ -2430,7 +2540,7 @@
             if (confirmedLocation === queryLocationStr) return true;
             clearTimeout(locationSuggestionTimer);
             const revision = ++locationRevision;
-            document.getElementById('location-status').innerText = 'Resolving location...';
+            document.getElementById('location-status').innerText = 'Resolving location…';
             try {
                 const matches = await searchLocations(queryLocationStr);
                 if (revision !== locationRevision || document.getElementById('modal-location').value.trim() !== queryLocationStr) {
@@ -2486,18 +2596,26 @@
 
         function toggleScreenshotLightbox(show) {
             const lightbox = document.getElementById('screenshot-lightbox');
-            lightbox.classList.toggle('hidden', !show);
+            if (show) {
+                openAccessibleModal(lightbox, {
+                    onEscape: () => toggleScreenshotLightbox(false)
+                });
+            } else {
+                closeAccessibleModal(lightbox);
+            }
         }
     </script>
     <div id="screenshot-lightbox"
+        role="dialog" aria-modal="true" aria-labelledby="screenshot-lightbox-title" tabindex="-1"
         class="hidden fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4"
-        onclick="toggleScreenshotLightbox(false)">
+        data-click-action="toggleScreenshotLightbox" data-click-argument="false" data-click-argument-type="boolean" data-click-self-only="true">
 
-        <button
-            class="absolute top-4 right-4 text-slate-400 hover:text-slate-100 text-xl font-mono cursor-pointer bg-slate-900 border border-slate-800 rounded-full w-10 h-10 flex items-center justify-center shadow-lg transition">✕</button>
+        <h2 id="screenshot-lightbox-title" class="sr-only">Expanded lead screenshot</h2>
+        <button type="button" aria-label="Close expanded screenshot"
+            data-click-action="toggleScreenshotLightbox" data-click-argument="false" data-click-argument-type="boolean"
+            class="absolute top-4 right-4 text-slate-400 hover:text-slate-100 text-xl font-mono cursor-pointer bg-slate-900 border border-slate-800 rounded-full w-10 h-10 flex items-center justify-center shadow-lg transition">{{ icon('close', 18) }}</button>
 
-        <div class="max-w-5xl max-h-[85vh] w-full rounded-xl overflow-hidden border border-slate-800 bg-slate-950 p-1 shadow-2xl relative"
-            onclick="event.stopPropagation()">
+        <div class="max-w-5xl max-h-[85vh] w-full rounded-xl overflow-hidden border border-slate-800 bg-slate-950 p-1 shadow-2xl relative">
             <div class="w-full overflow-y-auto max-h-[84vh] scrollbar-thin rounded-lg">
                 <img id="lightbox-expanded-img" src="" class="w-full h-auto object-contain block"
                     alt="Full Pipeline Lead Capture Surface">

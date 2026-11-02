@@ -1,10 +1,9 @@
 <section aria-label="Workspace overview">
     <div id="overview-error" class="data-error hidden" role="alert">
-        <span id="overview-error-message"></span><button onclick="loadOverview()">Try again</button>
+        <span id="overview-error-message"></span><button data-click-action="loadOverview">Try again</button>
     </div>
     <div class="overview-hero">
         <div><p class="eyebrow">LESS SEARCHING. MORE CONNECTING.</p><h2>Turn opportunities into conversations.</h2><p>Build a focused pipeline of local businesses and hiring companies. Start with discovery, then make every introduction count.</p></div>
-        <a class="primary-button" href="/discovery">Start a new search <span aria-hidden="true">&rarr;</span></a>
     </div>
     <div class="metric-grid" aria-label="Pipeline metrics" aria-live="polite">
         {% for key, label, note in [('leads', 'Total leads', 'Prospects + job leads'), ('review', 'Ready for review', 'Discovered and drafted leads'), ('sent', 'Outreach sent', 'Initial and follow-up sends'), ('followup', 'Follow-up queue', 'Prospects awaiting follow-up')] %}

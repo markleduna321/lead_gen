@@ -1,10 +1,103 @@
 const themeMedia = window.matchMedia('(prefers-color-scheme: dark)');
+const modalFocusableSelector = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+let activeAccessibleModal = null;
+
+function getModalElement(modal) {
+    const element = typeof modal === 'string' ? document.getElementById(modal) : modal;
+    if (!element) throw new Error('Accessible modal element was not found.');
+    return element;
+}
+
+function getModalFocusableElements(modal) {
+    return [...modal.querySelectorAll(modalFocusableSelector)].filter(element =>
+        !element.disabled && !element.closest('[hidden], .hidden, [inert], [aria-hidden="true"]')
+    );
+}
+
+function openAccessibleModal(modal, { onEscape, closeOnEscape = true } = {}) {
+    const element = getModalElement(modal);
+    if (activeAccessibleModal?.element === element) {
+        activeAccessibleModal.onEscape = onEscape;
+        activeAccessibleModal.closeOnEscape = closeOnEscape;
+        return;
+    }
+    const previousFocus = activeAccessibleModal
+        ? activeAccessibleModal.previousFocus : document.activeElement;
+    if (activeAccessibleModal) closeAccessibleModal(activeAccessibleModal.element, { restoreFocus: false });
+
+    activeAccessibleModal = {
+        element,
+        previousFocus,
+        onEscape,
+        closeOnEscape
+    };
+    element.classList.remove('hidden');
+    element.setAttribute('role', 'dialog');
+    element.setAttribute('aria-modal', 'true');
+    const focusable = getModalFocusableElements(element);
+    if (focusable.length) focusable[0].focus();
+    else {
+        element.setAttribute('tabindex', '-1');
+        element.focus();
+    }
+}
+
+function closeAccessibleModal(modal, { restoreFocus = true } = {}) {
+    const element = getModalElement(modal);
+    element.classList.add('hidden');
+    if (activeAccessibleModal?.element !== element) return;
+
+    const { previousFocus } = activeAccessibleModal;
+    activeAccessibleModal = null;
+    if (restoreFocus && previousFocus?.isConnected && typeof previousFocus.focus === 'function') {
+        previousFocus.focus();
+    }
+}
+
+function handleAccessibleModalKeydown(event) {
+    const modalState = activeAccessibleModal;
+    if (!modalState) return false;
+    const { element, onEscape, closeOnEscape } = modalState;
+
+    if (event.key === 'Escape') {
+        event.preventDefault();
+        if (closeOnEscape) {
+            if (typeof onEscape === 'function') onEscape();
+            else closeAccessibleModal(element);
+        }
+        return true;
+    }
+    if (event.key !== 'Tab') return false;
+
+    const focusable = getModalFocusableElements(element);
+    if (!focusable.length) {
+        event.preventDefault();
+        element.focus();
+        return true;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (!element.contains(document.activeElement)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+    } else if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+    }
+    return true;
+}
 
 function setThemePreference(preference, persist = true) {
     const validPreference = ['system', 'light', 'dark'].includes(preference) ? preference : 'system';
     document.documentElement.dataset.themePreference = validPreference;
-    document.documentElement.dataset.theme = validPreference === 'system'
+    const theme = validPreference === 'system'
         ? (themeMedia.matches ? 'dark' : 'light') : validPreference;
+    document.documentElement.dataset.theme = theme;
+    const themeColor = document.getElementById('theme-color-meta');
+    if (themeColor) themeColor.content = theme === 'dark' ? '#101619' : '#f5f7f9';
     if (persist) {
         try {
             localStorage.setItem('asuratech-theme', validPreference);
@@ -71,15 +164,76 @@ function onSidebarBrandClick(event) {
 }
 
 function toggleSidebar(show) {
-    if (!document.getElementById('menu-toggle')) return;
+    const menuToggle = document.getElementById('menu-toggle');
+    if (!menuToggle) return;
     const open = show === undefined ? !document.body.classList.contains('nav-open') : show;
     document.body.classList.toggle('nav-open', open);
-    document.getElementById('menu-toggle').setAttribute('aria-expanded', String(open));
+    menuToggle.setAttribute('aria-expanded', String(open));
     document.getElementById('sidebar-backdrop').hidden = !open;
+    if (!window.matchMedia('(max-width: 900px)').matches) return;
+    const sidebar = document.getElementById('sidebar');
+    if (open) {
+        sidebar?.querySelector('.side-nav a[href]:not([hidden])')?.focus();
+    } else if (sidebar?.contains(document.activeElement)) {
+        menuToggle.focus();
+    }
 }
+
+function dispatchWorkspaceAction(element, eventType, event) {
+    if (element.dataset[`${eventType}SelfOnly`] === 'true' && event.target !== element) return;
+    const actionName = element.dataset[`${eventType}Action`];
+    const action = globalThis[actionName];
+    if (typeof action !== 'function') {
+        throw new Error(`Workspace action "${actionName}" is not available.`);
+    }
+
+    const argument = element.dataset[`${eventType}Argument`];
+    if (argument === 'event') {
+        action(event);
+    } else if (argument === 'value') {
+        action(element.value);
+    } else if (argument !== undefined) {
+        const type = element.dataset[`${eventType}ArgumentType`];
+        action(type === 'boolean' ? argument === 'true' : type === 'number' ? Number(argument) : argument);
+    } else {
+        action();
+    }
+}
+
+function findWorkspaceActionElement(event, selector) {
+    const target = event.target;
+    return target && typeof target.closest === 'function' ? target.closest(selector) : null;
+}
+
+function addCustomBizTypeOnEnter(event) {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    globalThis.addCustomBizType();
+}
+
+document.addEventListener('click', event => {
+    const element = findWorkspaceActionElement(event, '[data-click-action]');
+    if (element) dispatchWorkspaceAction(element, 'click', event);
+});
+document.addEventListener('input', event => {
+    const element = findWorkspaceActionElement(event, '[data-input-action]');
+    if (element) dispatchWorkspaceAction(element, 'input', event);
+});
+document.addEventListener('change', event => {
+    const element = findWorkspaceActionElement(event, '[data-change-action]');
+    if (element) dispatchWorkspaceAction(element, 'change', event);
+    if (event.target.id === 'theme-preference') setThemePreference(event.target.value);
+});
+document.addEventListener('submit', event => {
+    const element = findWorkspaceActionElement(event, 'form[data-submit-action]');
+    if (element) dispatchWorkspaceAction(element, 'submit', event);
+});
 
 document.addEventListener('DOMContentLoaded', () => {
     setThemePreference(document.documentElement.dataset.themePreference, false);
+    if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+        document.querySelector('[data-autofocus]')?.focus();
+    }
     const isCollapsed = document.documentElement.dataset.sidebar === 'collapsed';
     const collapseBtn = document.getElementById('sidebar-collapse');
     if (collapseBtn) {
@@ -90,10 +244,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 document.addEventListener('keydown', event => {
+    const element = findWorkspaceActionElement(event, '[data-keydown-action]');
+    if (element) dispatchWorkspaceAction(element, 'keydown', event);
+    const modalHandled = handleAccessibleModalKeydown(event);
     if (event.key === 'Escape') {
-        toggleSidebar(false);
-        if (typeof toggleDiscoveryModal === 'function' && document.body.dataset.page !== 'discovery') {
-            toggleDiscoveryModal(false);
+        if (!modalHandled) {
+            toggleSidebar(false);
+            if (typeof toggleDiscoveryModal === 'function' && document.body.dataset.page !== 'discovery') {
+                toggleDiscoveryModal(false);
+            }
         }
     }
 });

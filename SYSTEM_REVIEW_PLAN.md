@@ -32,10 +32,12 @@ trust problem · **P2** quality and consistency · **P3** polish.
 
 | Token / pair | Ratio | Result |
 |---|---|---|
-| Light `--subtle` `#87959e` on `--surface` `#fff` | 3.08 | ❌ Fail |
-| Light `--subtle` on `--canvas` `#f5f7f9` | 2.87 | ❌ Fail |
-| Light `--muted` `#647782` on `--canvas` | 4.34 | ❌ Fail (borderline) |
-| Light `--muted` on `--surface` | 4.66 | ✅ |
+| Light `--subtle` `#626f78` on `--surface` `#fff` | 5.17 | ✅ |
+| Light `--subtle` on `--canvas` `#f5f7f9` | 4.81 | ✅ |
+| Light `--subtle` on `--surface-soft` `#f7f9fa` | 4.89 | ✅ |
+| Light `--subtle` on `--surface-hover` `#edf2f3` | 4.58 | ✅ |
+| Light `--muted` `#5a6c76` on `--canvas` | 5.09 | ✅ |
+| Light `--muted` on `--surface-hover` | 4.84 | ✅ |
 | Light `--accent` `#087f68` on `--surface` | 4.95 | ✅ |
 | White on primary button `#13795f` | 5.35 | ✅ |
 | Dark `--subtle` on `--surface` / `--canvas` | 5.08 / 5.61 | ✅ |
@@ -67,13 +69,13 @@ horizontal overflow.
 | ID | Sev | Finding | Evidence |
 |---|---|---|---|
 | UI-01 | P1 | Text is too small across the product. Primary CTAs and nav links render at 9–11px; kickers, badges, and captions at 7–8px. This hurts readability, especially on mobile. | [home.css](static/home.css) (`.home-kicker` 9px, `.home-nav-cta` 11px, 7px badges); [dashboard.css](static/dashboard.css) (`.brand small` 8px) |
-| UI-02 | P1 | Light-theme `--subtle` fails contrast (2.87–3.08:1), and `--muted` fails on the canvas (4.34:1). Both are used for hints, captions, and labels. | [dashboard.css](static/dashboard.css) `:root` |
-| UI-03 | P1 | Two styling systems run side by side. Workspace pages load the **Tailwind browser CDN at runtime** and use hard-coded `slate/emerald/amber…` classes (259 `slate` uses), while CSS attribute selectors remap them onto theme tokens. This makes styling fragile, causes a flash of unstyled content, adds a third-party runtime dependency, and needs a CSP exception. | [base.html](src/templates/base.html), [auth.html](src/templates/auth.html), [dashboard.css](static/dashboard.css) (`[class*="bg-slate-950"]`…) |
+| UI-02 | P1 | Resolved in C12: light-theme `--subtle` and `--muted` now meet 4.5:1 on the canvas, surface, soft surface, and hover surface. | [dashboard.css](static/dashboard.css) `:root`; current contrast ratios above |
+| UI-03 | P1 | ✅ Resolved in C13. Tailwind utilities are compiled from templates into a self-hosted stylesheet; runtime scanning and attribute-selector theme remapping are removed. | [tailwind.input.css](static/tailwind.input.css), [tailwind.css](static/tailwind.css) |
 | UI-04 | P2 | There is no type scale: 17 and 21 distinct pixel sizes, many one-off `font:` shorthands, and heading sizes differ by page (for example, the Billing current-plan `h2` is visually smaller than its body copy). | CSS files; Billing summary |
-| UI-05 | P2 | Google Fonts loads through a CSS `@import`, which blocks rendering and chains requests, with 7 + 7 weights. There is no `preconnect` or `preload`. | [dashboard.css](static/dashboard.css) line 1 |
-| UI-06 | P2 | Neither theme has a `<meta name="theme-color">`, and native `<select>` styling is inconsistent (the home theme select is 11px on a transparent background). | [public_nav.html](src/templates/public_nav.html), [base.html](src/templates/base.html) |
-| UI-07 | P2 | Number and date formats are inconsistent. The top bar shows `30.00` credits while the sidebar shows `30`, and Billing shows `11/3/2026` while the sidebar shows `Nov 3, 2026`. | [account_plan.js](static/account_plan.js) line 75, [billing.js](static/billing.js) |
-| UI-08 | P3 | Text uses `...` instead of `…` (51 occurrences in `dashboard.html`), and labels mix "Best Value" and "Best value". | dashboard.html, plans.html, billing.html |
+| UI-05 | P2 | ✅ Resolved in C14. Self-hosted variable fonts load from explicit stylesheet links; DM Sans uses 400/600/700 and Manrope 600/700/800. Latin subsets are preloaded, with Latin-ext subsets retained for fallback. | [fonts.css](static/vendor/fonts/fonts.css), shared template heads |
+| UI-06 | P2 | ✅ Resolved in D23. Add a theme-color meta tag to every page template, update it when the theme changes, and use consistent theme-aware styling for native selects. | [workspace.js](static/workspace.js), workspace/public templates, [dashboard.css](static/dashboard.css), [home.css](static/home.css) |
+| UI-07 | P2 | ✅ Resolved in D21. Format all customer-facing credit amounts with `Intl.NumberFormat` and use the sidebar's explicit `Intl.DateTimeFormat` options in Billing. | [account_plan.js](static/account_plan.js), [billing.js](static/billing.js) |
+| UI-08 | P3 | ✅ Resolved in D21. Replace user-facing `...` with `…` and standardize the plan badge capitalization to "Best Value". | [dashboard.html](src/templates/dashboard.html), [plans.html](src/templates/plans.html), [billing.html](src/templates/billing.html) |
 | UI-09 | P3 | Reduced motion is honored for the main animations, but `.home-button:hover` lift and other transitions should be audited together. Animated pulses ("Updating live") have no reduced-motion variant. | home.css, dashboard.css |
 
 #### Copy & content
@@ -82,15 +84,15 @@ horizontal overflow.
 |---|---|---|---|
 | CP-01 | **P0** | **Provider internals and costs are shown to customers.** Hiring discovery says *"4 Google Jobs + 4 LinkedIn Jobs API requests… Job-search requests use 5 Scrapingdog credits each"*, and the local sources mention *"indexed by Google via Scrapingdog"*. This reveals your vendor and cost model and conflicts with the site's own pricing (15 credits per role-page). The hint also reads "Up to 4 pages" while "1 page" is selected. | [dashboard.html](src/templates/dashboard.html) line 1843; discovery sources hint |
 | CP-02 | **P0** | **Pricing advertises features that don't exist.** The comparison table lists *Ad Pixel Check, Bulk CSV Enrichment, and Webhook/API Export* as included, while the disclaimer below says they are "planned". This is a consumer-protection risk for paid plans. | [plans.html](src/templates/plans.html) "Other Included Features" row |
-| CP-03 | P1 | Internal jargon in the workspace: *"No matching pipeline leads captured inside this view index"*, *"Select any lead row to engage workstation nodes"*, *"Shifting data view scope..."*, *"Transmission Error"*, *"Interactive Target Range Matrix"*, *"Target Test Destination Address"*, *"Inspector Panel"*, *"LEAD ENGINE"*. | [dashboard.html](src/templates/dashboard.html) lines 1224, 1601, 1677, 1705 |
-| CP-04 | P1 | Customer pages contain specification-style text. Plans and Billing say *"when payments are configured"*, *"remain visible but locked with an Upgrade to Small Team prompt"*, *"Payments are not configured yet"*. These describe implementation, not customer value. | plans.html "How search credits work"; billing.html |
+| CP-03 | P1 | ✅ Resolved in D19. Replace workspace jargon in empty/loading states, the lead details panel, discovery map, and progress title with plain-language labels and instructions. | [dashboard.html](src/templates/dashboard.html) |
+| CP-04 | P1 | ✅ Resolved in D19. Explain payment availability and plan access in customer-facing terms; remove configuration and locked-control implementation language from Plans and Billing. | [plans.html](src/templates/plans.html), [billing.html](src/templates/billing.html) |
 | CP-05 | P1 | Out-of-date marketing copy. Home says hiring discovery uses Google Jobs only (LinkedIn Jobs is also used) and lists 4 local sources (there are 5, including LinkedIn). Home never mentions the free trial or pricing. | [home.html](src/templates/home.html) |
 | CP-06 | P1 | Trial and Solo users see team-only wording: *"shared search credits"*, *"Live shared wallet"*, *"All members share the owner balance and daily cap."* | [account_plan.js](static/account_plan.js) lines 75, 118 |
 | CP-07 | P2 | Grammar: *"maximum 1 industries"*. | [account_plan.js](static/account_plan.js) line 118 |
-| CP-08 | P2 | Long blocks of help text sit under almost every discovery control (matching evidence, phrase matching, ISO codes, provider pagination). Move it to progressive disclosure ("How this works"). | Discovery page |
-| CP-09 | P2 | Emoji used as UI icons (`🔍` in a placeholder, `📋 View More Data`, `🤖 Draft with AI`), and bare `✕` buttons. These are inconsistent with the SVG icon set and read poorly with screen readers. | dashboard.html |
-| CP-10 | P2 | "Approve & Send Test" is ambiguous: it doesn't say whether this sends to the prospect or only to a test address. | Prospects inspector |
-| CP-11 | P3 | Trial naming is inconsistent: "Site Email/Phone" vs "Website Email/Phone", "Maps / Location Search". | plans.html |
+| CP-08 | P2 | ✅ Resolved in D19. Move detailed industry/source matching, country, radius, custom-service phrase, and search-page explanations into native expandable help sections while keeping core controls and estimates visible. | [dashboard.html](src/templates/dashboard.html) |
+| CP-09 | P2 | ✅ Resolved in D20. Replace dashboard emoji and bare close characters with the shared SVG icon set, including decorative icons hidden from assistive technology. | [dashboard.html](src/templates/dashboard.html), [base.html](src/templates/base.html) |
+| CP-10 | P2 | ✅ Resolved in D20. Identify the destination as the email address that will receive the real outreach, note that it defaults to the prospect's saved email, and remove stale test-email wording. | [dashboard.html](src/templates/dashboard.html) |
+| CP-11 | P3 | ✅ Resolved in D21. Use "Website Email/Phone" consistently across trial and paid-plan comparison, and name Google Maps discovery directly in the trial summary. | [plans.html](src/templates/plans.html), [control_gate_api.py](src/control_gate_api.py) |
 
 #### Navigation & link destinations
 
@@ -101,22 +103,22 @@ horizontal overflow.
 | NV-03 | P1 | **Plan CTAs lose the buyer.** "Choose Solo" on `/plans` → `/billing#buy-solo` → `/login?next=/billing` (the `#buy-solo` anchor is lost). A new visitor who clicks "Create an account" loses `next` and lands on Overview instead of checkout. | plans.html; [auth.html](src/templates/auth.html) (register link drops `next`) |
 | NV-04 | P1 | Locked pages show raw JSON. A Trial or Solo user opening `/user-management` gets `{"code":"team_owner_required",…}` instead of an upgrade page. | Rendered `/user-management` (403) |
 | NV-05 | P1 | The hiring "Upgrade to Small Team" link goes to the public `/plans` page (public nav, no sidebar) instead of in-app `/billing`. | Discovery hiring tab |
-| NV-06 | P2 | Discovery CTAs are repeated: the page header "Discover leads" button appears on every page, including Billing and Settings, and Overview shows 3 discovery CTAs at once. Discovery has a "Back to overview" secondary action. | [base.html](src/templates/base.html) `page-heading` |
-| NV-07 | P2 | Sidebar structure: "Billing & Plans" sits outside both `<nav>` groups, and "User Management" sits outside the scroll area with no active or `aria-current` state. | base.html |
-| NV-08 | P2 | There's no account menu. The profile initials are a non-interactive `<span>`, and there's nowhere to see the signed-in email, change the password, or manage the account. Home and Plans footers don't link to each other consistently. | base.html; home.html footer |
-| NV-09 | P3 | The top bar duplicates information already shown in the sidebar: the "AsuraTECH / Lead Gen" tag repeats the brand, and the plan/credit status repeats the sidebar credit card. | base.html |
+| NV-06 | P2 | ✅ Resolved in D22. Remove the repeated page-header discovery CTA and Overview's duplicate hero action; keep the single contextual discovery action and remove Discovery's "Back to overview" secondary action. | [base.html](src/templates/base.html), [overview.html](src/templates/overview.html), [dashboard.html](src/templates/dashboard.html) |
+| NV-07 | P2 | ✅ Resolved in D22. Place Billing & Plans and User Management inside the scrollable More navigation group with active and `aria-current` states. | [base.html](src/templates/base.html) |
+| NV-08 | P2 | ✅ Resolved in D22. Add an account menu with signed-in email, account settings, password change, and sign-out; give the shared public footer consistent Home and Plans & Pricing links. | [base.html](src/templates/base.html), [public_footer.html](src/templates/public_footer.html) |
+| NV-09 | P3 | ✅ Resolved in D22. Remove the duplicate brand tag and top-bar credit/plan status; retain the sidebar credit card as the source of plan and balance information. | [base.html](src/templates/base.html), [account_plan.js](static/account_plan.js) |
 
 #### Accessibility & interaction
 
 | ID | Sev | Finding | Evidence |
 |---|---|---|---|
-| AX-01 | P1 | The prospect and job-profile modals lack `role="dialog"`, `aria-modal`, Escape-to-close, focus trapping, and focus return, and their `✕` close buttons have no `aria-label`. | [dashboard.html](src/templates/dashboard.html) `#job-profile-modal`, `#profile-modal` |
-| AX-02 | P1 | Locked states aren't visually distinct. On the hiring tab for a Trial user, the controls look enabled and "Find Hiring Companies" stays bright green even though it is disabled. The upgrade message is small gray text. Locked source checkboxes squeeze "Upgrade to … to unlock" into 3-line fragments. | Rendered Discovery |
-| AX-03 | P1 | 8 inputs have no label: `table-search-input`, `filter-sort`, `test-email-input`, `editor`, `modal-radius`, `custom-biz-input`, `modal-rating-min`, `modal-reviews-max`. | Rendered Prospects, Job Leads, Discovery |
-| AX-04 | P2 | Pagination buttons `<` and `>` have no accessible names. 27 inline `onclick` handlers in dashboard.html, plus others in base.html, overview.html, and settings.html, block a strict CSP. | dashboard.html |
-| AX-05 | P2 | `outline: none` on focused auth and settings inputs relies only on a border-color change. | [dashboard.css](static/dashboard.css) lines 384, 410 |
-| AX-06 | P2 | The industry picker is a small nested scroll box with 10+ options, which is hard to scan and touch. There is no select-all or search. | Discovery |
-| AX-07 | P3 | `autofocus` on the auth email field opens the keyboard on mobile. | auth.html |
+| AX-01 | P1 | ✅ Resolved in C15. Prospect/job-profile, screenshot, and progress dialogs use shared modal semantics, focus management, Escape behavior where appropriate, focus return, and labeled icon-only close buttons; the dedicated discovery form remains a labeled region. | [workspace.js](static/workspace.js), [dashboard.html](src/templates/dashboard.html) |
+| AX-02 | P1 | ✅ Resolved in C16. Locked discovery sources and hiring/custom-service panels have distinct muted styling, upgrade links are compact and prominent, and the disabled hiring submit action no longer looks active. | [dashboard.css](static/dashboard.css), [account_plan.js](static/account_plan.js) |
+| AX-03 | P1 | ✅ Resolved in C17. All rendered workspace form controls now have a visible associated label or an explicit accessible name, including additional unnamed email and country fields discovered during the expanded rendered-page audit. | [dashboard.html](src/templates/dashboard.html), [test_dashboard_pages.py](tests/test_dashboard_pages.py) |
+| AX-04 | P2 | ✅ Resolved in C17. Pagination controls have descriptive names and templates contain no inline event-handler attributes; interactions use delegated or direct `addEventListener` listeners. The inline dashboard script remains a separate CSP follow-up. | [workspace.js](static/workspace.js), workspace templates |
+| AX-05 | P2 | ✅ Resolved in C18. Auth, settings, and workspace form controls retain a 3px accent focus-visible outline instead of relying on border color alone. | [dashboard.css](static/dashboard.css) |
+| AX-06 | P2 | ✅ Resolved in C18. Industry options have a larger scroll area, search with live result counts, and a select-visible action that respects plan caps and preserves filtered selections. | [dashboard.html](src/templates/dashboard.html), [account_plan.js](static/account_plan.js) |
+| AX-07 | P3 | ✅ Resolved in D23. Replace native autofocus with JavaScript focus only on fine-pointer devices, avoiding automatic keyboard opening on touch-first mobile devices. | [auth.html](src/templates/auth.html), [workspace.js](static/workspace.js) |
 
 #### Pricing presentation
 
@@ -155,8 +157,8 @@ Test accounts were disposable (`review@`, `weak@`, `long@example.test`).
 | FL-01 | **P0\*** | **Lockout duration depends on the database time zone.** `users.locked_until` is `timestamp without time zone`. The app writes a UTC-aware time; PostgreSQL stores it in the session time zone; `_lockout_remaining` reads it back as UTC. With a UTC+8 database, the 15-minute lock showed **"Try again in 495 minute(s)"** (about 8h15m). With a database west of UTC, the lock would expire immediately and give no protection. \*P0 if the production database time zone is not UTC; check with `SHOW timezone`. | [auth.py](src/auth.py) `_lockout_remaining`, `authenticate`; schema `users.locked_until` |
 | FL-02 | P1 | **Account enumeration and targeted lockout.** After 8 wrong passwords, a real account shows the lockout message, while an unknown email never does. Registration also says "An account already exists for that email address". Anyone can lock any known account for 15 minutes (or 8h, see FL-01) just by knowing the email. | Observed: 9 attempts against a real vs an unknown email |
 | FL-03 | P1 | No **forgot-password / reset**, no **change password**, and no **email verification**. A user who is locked out or forgets their password has no self-service path, and there's no support link (NV-02). | auth.html; route list |
-| FL-04 | P2 | Password strength is length-only: `aaaaaaaaaa` was accepted. There's no check against common or breached passwords and no strength meter. | Registered `weak@example.test` |
-| FL-05 | P2 | Registration errors show as a single banner above the form, not next to the field that caused them. There's no `aria-invalid`, the error isn't linked to its field, and focus isn't moved to the problem field. Good: name and email are kept, and passwords are cleared. Display names over 120 characters are silently truncated. | Rendered `/register` errors |
+| FL-04 | P2 | ✅ Resolved in D24. Enforce minimum password strength and a known-common-password blocklist on the server; display live password-strength feedback. This does not query a breached-password database. | [auth.py](src/auth.py), [auth.js](static/auth.js) |
+| FL-05 | P2 | ✅ Resolved in D24. Link registration errors to the affected fields with `aria-invalid`, announce them, focus the first invalid field on fine-pointer devices, preserve the entered name/email, and reject overlong names instead of silently truncating them. | [auth.html](src/templates/auth.html), [control_gate_api.py](src/control_gate_api.py) |
 | FL-06 | P1 | **`next` is lost when switching between Sign in and Create account.** The login page's "Create an account" link is plain `/register`. A visitor sent to `/login?next=/billing` who has no account ends up on Overview after registering. (Extends NV-03.) | [auth.html](src/templates/auth.html) lines 61–63 |
 
 #### Team invitations
@@ -182,10 +184,10 @@ Test accounts were disposable (`review@`, `weak@`, `long@example.test`).
 
 | ID | Sev | Finding | Evidence |
 |---|---|---|---|
-| FL-16 | P2 | "Export CSV" is active with zero leads and opens a header-only CSV in a new tab. Empty-state and inspector text is jargon ("No matching pipeline leads captured inside this view index.", "Select any lead row to engage workstation nodes."). | Rendered `/prospects` |
+| FL-16 | P2 | ✅ Resolved in D25: CSV export starts disabled, becomes available only when the account has prospects, and is hidden in Job Leads. The empty-state and inspector copy is also plain language. | [dashboard.html](src/templates/dashboard.html), export UI tests |
 | FL-17 | P2 | `/billing#buy-solo` scrolls to the plans but doesn't highlight or pre-select Solo, so the intent from `/plans` is only partly kept. When payments are off, every buy button is disabled, and "Contact support" has no link. | Rendered `/billing#buy-solo` |
-| FL-18 | P3 | Dates are formatted inconsistently: Billing shows "Plan expiry: 11/3/2026" while the sidebar shows "Nov 3, 2026". The disabled top-up button is labelled "Active paid plan required" instead of an action with a helper note. | Billing vs sidebar |
-| FL-19 | P3 | The mobile drawer opens correctly (Escape and an outside click close it, and focus returns to ☰), but focus isn't moved into the drawer when it opens. | 390px Discovery |
+| FL-18 | P3 | ✅ Resolved in D25: Billing and sidebar dates use the same explicit locale-aware month/day/year format. An ineligible top-up button retains the action label "Add search credits"; helper copy explains eligibility. | [billing.js](static/billing.js), [account_plan.js](static/account_plan.js), Billing UI tests |
+| FL-19 | P3 | ✅ Resolved in D25: opening the mobile drawer focuses its first navigation link; closing it restores focus to the menu button when focus is inside the drawer. | [workspace.js](static/workspace.js), workspace UI tests |
 
 ### What already works well
 
@@ -242,7 +244,7 @@ Severity for security items: **P0** exploitable now with real impact · **P1** s
 | ID | Sev | Finding | Evidence |
 |---|---|---|---|
 | SEC-13 | P1 | **The global error handler returns raw exception text with HTTP 500 for everything**, including 404 and 405. Bad input such as `page=abc` or `page=0` leaks Python and PostgreSQL messages ("invalid literal for int()", "OFFSET must not be negative"). Monitoring also logs every 404 as a "SERVER CRASH". (Extends NV-01.) | **Verified:** `/nope` → 500; `page=abc` → 500 with the ValueError text |
-| SEC-14 | P1 | **No security headers.** Responses have no `Content-Security-Policy`, `X-Frame-Options`/`frame-ancestors` (clickjacking on Billing and Team), `X-Content-Type-Options`, `Referrer-Policy`, or HSTS. Third-party scripts (Tailwind browser build from jsDelivr, Leaflet from unpkg) load with no `integrity` attribute, so a CDN compromise means full XSS. The `Server: Werkzeug/…` header shows versions. | **Verified** headers on `/prospects`; [base.html](src/templates/base.html), [dashboard.html](src/templates/dashboard.html) |
+| SEC-14 | P1 | Most original findings are addressed: security headers are configured, assets are self-hosted, and Tailwind is compiled at build time (C13). The remaining `Server: Werkzeug/…` response header discloses server version details. | Preview response headers; [security_headers.py](src/security_headers.py), [base.html](src/templates/base.html) |
 | SEC-15 | P2 | **CSRF tokens are checked only on some routes**: team, purchases, paid discovery, and hiring services. These have no token check: dispatch, reject, update-email, email-settings (save, delete, test), every `/api/trigger/*`, logs clear, login, register, and logout. SameSite=Lax cookies and JSON-only bodies prevent most cross-site use today, but bodyless POSTs rely on SameSite alone, and login CSRF is possible. | **Verified:** `POST /api/reject/<id>` without a token is accepted (404 only because the id didn't exist) |
 | SEC-16 | P2 | **Sessions can't be revoked.** These are signed client-side cookies valid for 14 days. Logout doesn't invalidate a stolen cookie, and there's no "sign out everywhere" or password-change revocation. Add a `session_version` column checked on every request. | [control_gate_api.py](src/control_gate_api.py) config |
 | SEC-17 | P2 | **Unsafe production default.** `APP_ENV` defaults to `local`, which falls back to the development secret key and turns off Secure cookies. A production deploy that forgets the variable is silently insecure. The app should refuse to start without `FLASK_SECRET_KEY` unless it's explicitly local. | Startup log: "FLASK_SECRET_KEY is unset — using the local development key." |
@@ -287,7 +289,7 @@ S10. ✅ **Done**: export cells that start with `= + - @`, tab or CR get a `'` p
 S11. ✅ **Done (resolved by S9)**: the account lockout that read `locked_until` is gone, and the rate-limit table uses `TIMESTAMPTZ` with Unix-epoch windows, so the database time zone no longer matters. The unused `failed_login_count`/`locked_until` columns were removed from `schema.sql` and the startup `CREATE TABLE` for new installs; existing databases keep them untouched (harmless) (FL-01).
 
 ### Milestone T: Hardening (P2)
-T1. ✅ Done. `src/security_headers.py` sets an enforced CSP (only cartocdn tiles, Photon and R2 images allowed from outside; `'unsafe-inline'` kept for the inline handlers), a strict report-only CSP that reports to `/api/csp-report` (deduped, rate-limited, logged), `nosniff`, `X-Frame-Options: DENY`, `frame-ancestors 'none'`, Referrer-Policy, Permissions-Policy, COOP, and HSTS (1 year, this host only, HTTPS outside local mode). Leaflet, Tailwind browser 4.3.3 and the fonts are self-hosted under `static/vendor/` (SEC-14). `gunicorn.conf.py` hides the server version and runs one worker. Follow-up: once the inline `on*=` handlers and the inline dashboard script are moved to files, enforce the report-only policy.
+T1. ✅ Done. `src/security_headers.py` sets an enforced CSP (only cartocdn tiles, Photon and R2 images allowed from outside; `'unsafe-inline'` retained for remaining inline dashboard script/styles), a strict report-only CSP that reports to `/api/csp-report` (deduped, rate-limited, logged), `nosniff`, `X-Frame-Options: DENY`, `frame-ancestors 'none'`, Referrer-Policy, Permissions-Policy, COOP, and HSTS (1 year, this host only, HTTPS outside local mode). Leaflet, Tailwind browser 4.3.3 and the fonts are self-hosted under `static/vendor/` (SEC-14). `gunicorn.conf.py` hides the server version and runs one worker. C17 removed inline event-handler attributes; follow-up: move the remaining inline dashboard script/styles to files, review reports, then enforce the report-only policy.
 T2. ✅ Done. `src/csrf.py` runs one app-wide `before_request` check (after the sign-in guard) on every POST/PUT/PATCH/DELETE: the session token must come in `X-CSRF-Token` or a hidden `csrf_token` field (added to login, register and logout), and a cross-site `Origin`/`Referer` is rejected even with a token (`APP_BASE_URL` host also trusted). The per-module checks in team_api, purchase_api and the hiring-service route were removed. Expired auth forms re-render with the email kept; a stale logout keeps the user signed in. Exempt: PayMongo webhook and CSP reports. Unmatched routes still return 404/405 (SEC-15).
 T3. ✅ Done. `users.session_version` (startup ALTER for existing databases, plus schema.sql) is stored in the session at sign-in and compared on every request by the existing user lookup; a mismatch signs the session out. Sessions from before this change are adopted only while the account's version is still 1. Settings → Account security adds Change password (5 attempts per 15 min; other devices are signed out, this one stays) and Sign out of all devices. The forgot-password reset was moved to T9 (SEC-16, FL-03).
 T4. Refuse to start without `FLASK_SECRET_KEY` unless `APP_ENV` is explicitly `local` or `desktop`; document `APP_ENV=production` (SEC-17). ✅ Done: unset APP_ENV = production; allowed values local/desktop/production/staging; desktop launcher forces desktop; key-strength check skipped by choice.
@@ -328,22 +330,22 @@ T9. The IP-based free-trial protection plan (already agreed), together with emai
 
 ### Milestone C: Visual system & accessibility (P1–P2)
 11. ✅ **Done in C11.** Define a shared type scale (12 / 13 / 14 / 16 / 18 / 22 / 28 / 36 / clamp hero), raise all text to at least 12px and buttons/navigation to 14px (UI-01, UI-04).
-12. Darken light-theme `--subtle` (about `#6b7a83`, ≥4.5:1) and `--muted` (about `#5a6c76`) (UI-02).
-13. Replace the runtime Tailwind CDN with token-based component classes (or a build-time Tailwind compile), and remove the attribute-selector remapping (UI-03).
-14. Self-host or `preconnect`/`preload` fonts and reduce weights to 3 per family (UI-05).
-15. Build one accessible modal helper (dialog role, Escape, focus trap and return, labeled close) for all modals (AX-01).
-16. Add a clear locked-state style (dimmed panel, lock badge, prominent upgrade CTA) and relayout locked source chips (AX-02).
-17. Label all inputs, name the pagination buttons, and move inline `onclick` handlers to listeners (AX-03, AX-04).
-18. Restore focus outlines on inputs (AX-05); add search and select-all to the industry picker (AX-06).
+12. ✅ **Done in C12.** Darken light-theme `--subtle` and `--muted`; both now meet 4.5:1 against the canvas, surface, soft surface, and hover surface (UI-02).
+13. ✅ **Done in C13.** Compile Tailwind utilities from templates into `static/tailwind.css`; remove the browser runtime and attribute-selector remapping (UI-03).
+14. ✅ **Done in C14.** Use three CSS weight stops per family, preload self-hosted Latin subsets, and avoid the font stylesheet `@import` (UI-05).
+15. ✅ **Done in C15.** Build a shared accessible dialog helper with dialog semantics, Escape handling, focus trapping and return, and labeled close controls (AX-01).
+16. ✅ **Done in C16.** Distinguish locked discovery controls and provide clear upgrade prompts (AX-02).
+17. ✅ **Done in C17.** Give all rendered workspace form controls and pagination buttons accessible names, and replace inline event-handler attributes with delegated/direct listeners (AX-03, AX-04). The inline dashboard script/styles remain a separate CSP follow-up.
+18. ✅ **Done in C18.** Restore focus-visible outlines on auth/settings/workspace form controls; add industry search and select-visible actions that honor plan caps (AX-05, AX-06).
 
 ### Milestone D: Copy polish & consistency (P2–P3)
-19. Rewrite jargon strings (CP-03) and spec-style paragraphs (CP-04); move long help text into collapsible "How this works" sections (CP-08).
-20. Replace emoji icons with the SVG icon set; clarify "Approve & Send Test" (CP-09, CP-10).
-21. Format credits and dates with `Intl`, use `…`, and standardize capitalization (UI-07, UI-08, CP-11).
-22. Simplify the header (remove duplicate brand tag and status, page-specific CTAs) and add an account menu with email and password change (NV-06–NV-09).
-23. Add `theme-color` meta and select styling; remove `autofocus` on mobile (UI-06, AX-07).
-24. Show field-level registration errors with `aria-invalid` and focus; add a password strength and common-password check (FL-04, FL-05).
-25. Disable Export when there are no leads; one date format everywhere; move focus into the mobile drawer (FL-16, FL-18, FL-19).
+19. ✅ **Done in D19.** Replace workspace jargon and setup-heavy purchase copy with plain language, and move detailed discovery guidance into expandable "How this works" sections (CP-03, CP-04, CP-08).
+20. ✅ **Done in D20.** Replace dashboard emoji and bare close characters with the shared SVG icons; make clear the send action emails the displayed recipient address (CP-09, CP-10).
+21. ✅ **Done in D21.** Format credits and dates consistently with `Intl`, use `…` in user-facing dashboard text, and standardize plan feature naming and "Best Value" capitalization (UI-07, UI-08, CP-11).
+22. ✅ **Done in D22.** Consolidate workspace navigation, reduce repeated discovery CTAs, remove duplicated top-bar branding/status, and add the account menu and consistent public-footer links (NV-06–NV-09).
+23. ✅ **Done in D23.** Add theme-aware browser chrome color and consistent select styling; restrict auth autofocus to fine-pointer devices (UI-06, AX-07).
+24. ✅ **Done in D24.** Add field-linked registration errors, accessible focus and live password feedback; enforce strength and common-password checks server-side (FL-04, FL-05).
+25. ✅ **Done in D25.** Keep CSV export unavailable until prospects exist and hide it in Job Leads; retain consistent Billing/sidebar date formatting and actionable disabled top-up copy; move focus into the mobile drawer and restore it on close (FL-16, FL-18, FL-19).
 
 ### Verification for every milestone
 - Existing Python and JS suites, plus new UI tests for the error pages, the purchase-intent redirect, and the modal helper.

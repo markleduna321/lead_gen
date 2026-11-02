@@ -11,7 +11,7 @@
         <p id="email-settings-error" role="alert" class="settings-error hidden"></p>
         <p id="email-settings-notice" role="status" class="settings-notice hidden"></p>
 
-        <form id="email-settings-form" class="settings-form" onsubmit="saveEmailSettings(event)">
+        <form id="email-settings-form" class="settings-form" data-submit-action="saveEmailSettings">
             <div class="settings-row">
                 <label for="smtp-host">Mail server</label>
                 <input id="smtp-host" name="smtp_host" type="text" required maxlength="255"
@@ -20,7 +20,7 @@
             <div class="settings-row settings-row-split">
                 <div>
                     <label for="smtp-security">Security</label>
-                    <select id="smtp-security" name="smtp_security" onchange="syncDefaultMailPort()">
+                    <select id="smtp-security" name="smtp_security" data-change-action="syncDefaultMailPort">
                         <option value="starttls">STARTTLS (587)</option>
                         <option value="ssl">SSL/TLS (465)</option>
                     </select>
@@ -81,8 +81,8 @@
 
             <div class="settings-actions">
                 <button type="submit" id="btn-save-email-settings" class="primary-button">Save settings</button>
-                <button type="button" id="btn-test-email-settings" class="secondary-button" onclick="sendEmailSettingsTest()">Send test message</button>
-                <button type="button" id="btn-clear-email-settings" class="secondary-button settings-danger hidden" onclick="removeEmailSettings()">Remove</button>
+                <button type="button" id="btn-test-email-settings" class="secondary-button" data-click-action="sendEmailSettingsTest">Send test message</button>
+                <button type="button" id="btn-clear-email-settings" class="secondary-button settings-danger hidden" data-click-action="removeEmailSettings">Remove</button>
             </div>
         </form>
     </div>

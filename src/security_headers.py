@@ -1,9 +1,9 @@
 """Browser security headers applied to every response.
 
-The enforced CSP only allows this site plus the map tile, geocoding and R2
-screenshot hosts. It still needs 'unsafe-inline' because templates use inline
-handlers; a stricter report-only policy measures what a nonce-based CSP would
-break, so it can be enforced once those handlers are gone.
+The enforced CSP allows this site plus the map tile, geocoding and R2
+screenshot hosts. Inline event-handler attributes have been removed, but the
+dashboard script and styles still require 'unsafe-inline'. The stricter
+report-only script policy remains until that inline content is extracted.
 """
 
 from flask import request

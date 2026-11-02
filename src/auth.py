@@ -23,6 +23,12 @@ SESSION_USER_KEY = "user_id"
 SESSION_VERSION_KEY = "session_version"
 MIN_PASSWORD_LENGTH = 10
 MAX_PASSWORD_LENGTH = 200
+COMMON_WEAK_PASSWORDS = frozenset({
+    "password", "password1", "password123", "passw0rd", "p@ssw0rd",
+    "1234567890", "123456789", "qwerty123", "qwerty12345", "letmein123",
+    "welcome123", "admin12345", "iloveyou123", "changeme123", "monkey12345",
+    "abc1234567", "football123", "dragon12345", "sunshine123", "trustno1",
+})
 
 # Paths reachable without a session. Everything else requires sign-in.
 PUBLIC_ENDPOINTS = frozenset({
@@ -69,6 +75,21 @@ def validate_password(value: object) -> str:
         raise AuthError(
             f"Use a password between {MIN_PASSWORD_LENGTH} and {MAX_PASSWORD_LENGTH} characters."
         )
+    normalized = value.casefold()
+    normalized_common_check = re.sub(r"[^a-z0-9]", "", normalized.strip())
+    if normalized.strip() in COMMON_WEAK_PASSWORDS or normalized_common_check in COMMON_WEAK_PASSWORDS:
+        raise AuthError("That password is too common. Choose a less common password.")
+    if re.fullmatch(r"(.)\1{9,}", value, re.IGNORECASE):
+        raise AuthError("That password is too easy to guess. Use a stronger password.")
+    classes = sum((
+        bool(re.search(r"[a-z]", value)),
+        bool(re.search(r"[A-Z]", value)),
+        bool(re.search(r"\d", value)),
+        bool(re.search(r"[^A-Za-z0-9]", value)),
+    ))
+    passphrase = len(value) >= 16 and len(re.findall(r"[a-z]{3,}", normalized)) >= 3
+    if classes < 3 and not passphrase:
+        raise AuthError("Use a longer passphrase or a mix of letters, numbers, and symbols.")
     return value
 
 

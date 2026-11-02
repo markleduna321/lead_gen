@@ -12,11 +12,11 @@ Last updated: 2026-11-02. Nothing has been committed yet; all changes are in the
 | S: Security hotfix (S1–S11) | ✅ Done |
 | T: Hardening (T1–T9) | ✅ Done |
 | A: Trust, legal & broken paths | ✅ Done |
-| B: Conversion & navigation | Partly done (B5–B10/B10a/b/c, 10d, 10e) |
-| C: Visual system & accessibility | Not started |
-| D: Copy polish & consistency | Not started |
+| B: Conversion & navigation | ✅ Done |
+| C: Visual system & accessibility | ✅ Done (C11–C18) |
+| D: Copy polish & consistency | ✅ Done (D19–D25) |
 
-Prior full-suite baseline: **355 Python tests (including PostgreSQL integrations) and 86 JavaScript tests pass.** B8's focused tests pass: 27 dashboard-page tests and 7 payment tests.
+Latest full-suite validation: **372 Python tests (52 skipped) and 108 JavaScript tests pass.**
 
 ## How each fix was done
 
@@ -90,5 +90,19 @@ For every item: plan and clarifying questions first, then the change, tests (uni
 - **B10** (home marketing copy): name Google Maps, Yelp, Facebook, Instagram, and LinkedIn company pages; identify Google Jobs and LinkedIn Jobs; add a plans link and a free-trial CTA to registration, with trial timing tied to email verification.
 - **B10c** (discovery outcomes and action errors): explicitly say when zero leads were found and no credits were charged; show only customer-facing progress instead of worker/provider logs; hide raw provider errors in failure notices; make email-update, archive, and send failures visible with retry guidance.
 - **C11** (typography): added a shared 12/13/14/16/18/22/28/36px scale, raised smaller text to 12px, and set navigation and action controls to 14px. The dashboard page suite and all 92 JavaScript tests pass.
+- **C12** (light-theme contrast): changed `--subtle` to `#626f78` and `--muted` to `#5a6c76`. A regression test checks both colors against all four light surfaces; the lowest ratio is 4.58:1.
+- **C13** (Tailwind runtime): compile template utilities into `static/tailwind.css` at build time, with theme-aware color overrides; remove the browser runtime asset and attribute-selector remapping. The compiled CSS is 34.6 KB.
+- **C14** (fonts): standardize DM Sans on 400/600/700 and Manrope on 600/700/800, map Tailwind's medium utility to semibold, replace the CSS import with explicit stylesheet links, and preload the self-hosted Latin subsets while retaining Latin-ext fallback. Dashboard tests verify all font assets, preload tags, and the reduced weight set.
+- **C15** (accessible dialogs): add a shared dialog helper that sets modal semantics, moves focus into the dialog, traps Tab navigation, handles Escape according to dialog behavior, and restores focus on close. Apply it to prospect/job profiles, screenshot lightbox, and discovery progress; keep the dedicated discovery form as a labeled region. Add accessible names for icon-only close buttons and tests for focus handling and dialog markup. All 95 JavaScript tests and 31 dashboard tests pass.
+- **C16** (plan-locked styling): visually distinguish disabled discovery sources, hiring controls, and custom-service editing; show compact, emphasized upgrade links; and mute the disabled hiring-submit button. Preserve server and client entitlement checks. Plan-capability tests verify locked-state classes, prompt labels, and submit behavior.
+- **C17** (accessible controls and listeners): label all rendered workspace form controls, give pagination buttons descriptive names, and replace inline event-handler attributes with delegated JavaScript listeners. Convert dynamic table-row/page and screenshot-error handlers to `addEventListener`. Rendered-page tests cover discovery, prospects, jobs, and settings; template parsing confirms there are no inline event-handler attributes. The inline dashboard script and styles remain, so CSP enforcement is still a separate follow-up.
+- **C18** (focus visibility and industry picker): restore strong focus-visible outlines for auth, settings, and workspace form controls; make industries searchable and add a select-visible action that continues to honor plan caps while retaining selections hidden by the search. Focused discovery/account-plan and rendered-page tests pass.
+- **D19** (plain-language copy): replace internal workspace jargon, clarify purchase availability without exposing setup terminology, and move detailed discovery matching, location, and pagination explanations into expandable help. Dashboard, billing, and workspace interaction regressions pass.
+- **D20** (icons and recipient clarity): replace dashboard emoji and bare close characters with the shared SVG icon macro; label the destination as a real recipient address, defaulted from the prospect record, and rename the stale test-email input/button copy. Rendered-page and interaction regressions cover the revised markup and dispatch field.
+- **D21** (formatting and terminology): use the same locale-aware credit and date formats across account status, the sidebar, Billing and search quotes; replace user-facing dashboard triple dots with `…`; standardize "Best Value" and website contact feature names. Focused UI and rendered-page tests cover the formats and copy.
+- **D22** (workspace navigation): remove repeated discovery calls to action and top-bar branding/credit status, group Billing and User Management under More, and add a keyboard-operable account menu with email, settings, password change, and CSRF-protected sign-out. Add Home and Plans & Pricing links to the shared public footer. Full Python (368 tests; 52 skipped) and JavaScript (102 tests) suites pass.
+- **D23** (theme and focus polish): add a browser theme-color meta tag to every page template and update it with the selected light/dark theme; apply consistent, theme-aware styling to native selects; replace native auth autofocus with desktop/fine-pointer-only focus to avoid opening mobile keyboards. Full Python (369 tests; 52 skipped) and JavaScript (103 tests) suites pass.
+- **D24** (registration feedback and password strength): associate server validation errors with the affected fields, set `aria-invalid`, preserve non-password values, and focus the first invalid field on fine-pointer devices. Add a live strength meter and server-side minimum-strength/common-password checks (including password reset). This uses a small known-common-password blocklist, not a breached-password lookup. Full Python (371 tests; 52 skipped) and JavaScript (105 tests) suites pass.
+- **D25** (CSV export, dates, and mobile navigation): keep CSV export disabled until the account has prospects and hide it for Job Leads; verify consistent locale-aware Billing/sidebar date formatting; use an action-oriented top-up label; move focus into the mobile navigation drawer and return it to the menu button on close. Full Python (372 tests; 52 skipped) and JavaScript (108 tests) suites pass.
 - **B10d** (escaping `innerHTML`): done in S1.
 - **B10e** (generic auth messages, rate limits): done in S9 and T8.
