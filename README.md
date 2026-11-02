@@ -308,6 +308,10 @@ refund (30% retained); this applies to the whole submission, not its individual
 empty industries or sources. Validation failures and wholly failed provider
 searches are not charged. Fractional refunds are intentional: 15 credits earns
 10.5 back. Prices, allowances, seats, rollover, and top-up amounts are unchanged.
+The discovery form shows a live cost estimate, the account's industry and hiring
+depth limits, and disables selections beyond those limits. No industry is
+preselected. Local locations are resolved before the server quote and inline
+cost confirmation; the server's quote remains authoritative before search.
 Owners can buy plans and top-ups through PayMongo QR Ph hosted checkout when
 configured. Verified payments activate purchases automatically; a new account
 starts its 7-day free trial with 30 credits when it verifies its email (one

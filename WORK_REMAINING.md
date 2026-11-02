@@ -3,7 +3,7 @@
 > **Companion document:** [WORK_DONE.md](./WORK_DONE.md) records everything finished so far.
 > **Master plan:** [SYSTEM_REVIEW_PLAN.md](./SYSTEM_REVIEW_PLAN.md) holds each item's finding codes (NV-, CP-, PR-, FL-, UI-, AX-) and full context. Mark items ✅ there as they're finished, and move a summary to [WORK_DONE.md](./WORK_DONE.md).
 
-Last updated: 2026-11-02. **Next item: Milestone B7 / B10b.**
+Last updated: 2026-11-02. **Next item: Milestone B8.**
 
 ## How to resume
 
@@ -28,7 +28,7 @@ Suggested prompt when resuming: *"Continue the system review fixes from WORK_REM
 
 - [x] **B5 / B10a** Anonymous plan CTAs now preserve the plan and Billing anchor through registration; `next` is carried between login and registration; Billing validates, preselects, and highlights the plan. Added a Free Trial CTA that returns visitors to the Billing trial offer (NV-03, PR-04, FL-06, FL-17).
 - [x] **B6** HTML plan/permission denials render a styled page with a Billing link; API denials remain JSON, and discovery upgrade prompts go to `/billing` (NV-04, NV-05).
-- [ ] **B7 / B10b** Show live search cost next to the discovery submit button and limit pages-per-role by plan. Show plan limits in the form (industry counter, disabled extra boxes), use no default industry, resolve the location before the confirm step, and replace `confirm()` with an in-page cost summary (PR-02, PR-03, FL-10–FL-12).
+- [x] **B7 / B10b** Show live, server-priced search estimates; enforce plan limits in the form (industry counter/checkboxes and hiring depth), select no default industry, resolve location before quoting, and replace browser `confirm()` with an in-page cost summary (PR-02, PR-03, FL-10–FL-12).
 - [ ] **B8** Generate the public pricing table from `plans.py` / `payments.PRICES` (PR-01).
 - [ ] **B9** Plan-aware copy: "your credits" for Trial/Solo, "shared credits" for teams; fix "1 industries" (CP-06, CP-07).
 - [ ] **B10** Home copy for 5 sources, LinkedIn Jobs and the free-trial CTA (CP-05). The trial now starts after email verification.

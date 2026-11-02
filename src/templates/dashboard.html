@@ -302,7 +302,7 @@
                         <div
                             class="grid grid-cols-2 gap-2 bg-slate-950 p-3 border border-slate-800 rounded-lg text-xs text-slate-300 max-h-32 overflow-y-auto">
                             <label class="flex items-center gap-2 cursor-pointer py-1"><input type="checkbox"
-                                    name="biz-type" value="Roofing Contractor" checked class="accent-emerald-500">
+                                    name="biz-type" value="Roofing Contractor" class="accent-emerald-500">
                                 Roofers</label>
                             <label class="flex items-center gap-2 cursor-pointer py-1"><input type="checkbox"
                                     name="biz-type" value="HVAC Contractor" class="accent-emerald-500"> HVAC /
@@ -354,6 +354,7 @@
                             <label class="flex items-center gap-2 cursor-pointer py-1"><input type="checkbox" name="biz-type" value="Spa" class="accent-emerald-500"> Spas & Wellness</label>
                             <div id="custom-biz-tags" class="contents"></div>
                         </div>
+                        <p id="industry-limit-status" role="status" aria-live="polite" class="text-xs text-slate-400 mt-1"></p>
                         <p class="text-xs text-slate-400 mt-1">
                             Google Maps/Yelp require a matching business category.
                             Facebook, Instagram, and LinkedIn use title or snippet evidence, not verified categories.
@@ -452,12 +453,21 @@
                     <option value="3">3 pages</option>
                     <option value="5">5 pages (maximum)</option>
                 </select>
-                <p id="job-search-budget" aria-live="polite" class="text-[11px] text-amber-400 mt-2"></p>
-                <p class="text-[11px] text-slate-400 mt-1">The estimate above is based on your selected roles and page depth. More pages use more search credits; results are not guaranteed and searches stop when no more results are available.</p>
+                <p id="job-pages-limit-status" role="status" class="text-[11px] text-slate-400 mt-1"></p>
+                <p class="text-[11px] text-slate-400 mt-1">The estimate near the search button reflects your selected roles and page depth. More pages use more search credits; results are not guaranteed and searches stop when no more results are available.</p>
             </div>
             </div>
             <p id="discovery-error" role="alert" class="hidden text-sm text-red-400"></p>
+            <section id="search-cost-confirmation" class="hidden rounded-xl border border-amber-500/40 bg-amber-950/20 p-4" role="group" aria-labelledby="search-cost-confirmation-title">
+                <h4 id="search-cost-confirmation-title" class="text-sm font-semibold text-amber-200">Confirm search cost</h4>
+                <p id="search-cost-summary" role="status" class="mt-2 text-xs leading-relaxed text-slate-300"></p>
+                <div class="mt-3 flex justify-end gap-2">
+                    <button id="search-cost-cancel" type="button" class="secondary-button">Cancel</button>
+                    <button id="search-cost-continue" type="button" class="bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs px-4 py-2 rounded-lg">Continue search</button>
+                </div>
+            </section>
             <p id="plan-discovery-policy" class="settings-hint" aria-live="polite"></p>
+            <p id="discovery-search-estimate" role="status" aria-live="polite" class="text-xs text-amber-300"></p>
             <div class="flex items-center justify-end gap-3 border-t border-slate-800 pt-3">
                 <a href="/" class="secondary-button">Back to overview</a>
                 <button id="btn-discovery-submit" onclick="submitActiveDiscovery()"
@@ -1201,6 +1211,7 @@
             label.append(checkbox, ' ', text);
             container.appendChild(label);
             input.value = '';
+            if (typeof window.applyAccountCapabilities === 'function') window.applyAccountCapabilities();
         }
 
         function renderSourceBadge(sourcePlatform, placeId) {
@@ -1320,6 +1331,7 @@
         }
 
         function setDiscoveryMode(mode) {
+            if (!document.getElementById('search-cost-confirmation').classList.contains('hidden')) return;
             discoveryMode = mode;
             const jobs = mode === 'jobs';
             ['local', 'jobs'].forEach(tabMode => {
@@ -1338,12 +1350,16 @@
             document.getElementById('btn-discovery-submit').innerText = jobs ? 'Find Hiring Companies' : 'Find Businesses';
             document.getElementById('discovery-error').classList.add('hidden');
             if (jobs) updateHiringSearchBudget();
-            if (!jobs) refreshDiscoveryMap();
+            else {
+                if (typeof window.updateDiscoverySearchEstimate === 'function') window.updateDiscoverySearchEstimate();
+                refreshDiscoveryMap();
+            }
             if (typeof window.applyAccountCapabilities === 'function') window.applyAccountCapabilities();
         }
 
         function handleDiscoveryTabKey(event) {
             if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+            if (!document.getElementById('search-cost-confirmation').classList.contains('hidden')) return;
             event.preventDefault();
             const mode = event.key === 'Home' ? 'local'
                 : event.key === 'End' ? 'jobs'
@@ -1879,16 +1895,22 @@
         }
 
         function updateHiringSearchBudget() {
+            if (document.getElementById('discovery-tab-jobs').getAttribute('aria-selected') !== 'true') return;
             const services = Array.from(document.querySelectorAll('input[name="job-service"]:checked'));
             const definitions = services.map(input => hiringServiceCatalog.get(input.value));
             if (definitions.some(service => !service)) {
-                document.getElementById('job-search-budget').innerText = 'A service definition is unavailable. Reload hiring services before searching.';
+                document.getElementById('discovery-search-estimate').innerText = 'A service definition is unavailable. Reload hiring services before searching.';
                 return;
             }
             const roles = definitions.reduce((count, service) => count + service.roles.length, 0);
             const pages = Number(document.getElementById('job-pages-input').value);
-            document.getElementById('job-search-budget').innerText = [1, 2, 3, 5].includes(pages)
-                ? `Hiring search estimate: ${roles * pages * 15} search credits for the selected roles and page depth, including company-contact lookups.`
+            const price = Number(window.discoverySearchPrices?.hiring);
+            if (!Number.isFinite(price)) {
+                document.getElementById('discovery-search-estimate').innerText = 'Loading plan prices…';
+                return;
+            }
+            document.getElementById('discovery-search-estimate').innerText = [1, 2, 3, 5].includes(pages)
+                ? `Hiring search estimate: ${roles * pages * price} search credits for the selected roles and page depth, including company-contact lookups.`
                 : 'Choose 1, 2, 3, or 5 pages per role.';
         }
 
@@ -2295,6 +2317,9 @@
 
         function toggleDiscoveryModal(show) {
             if (isWorking && show) return;
+            if (!show && typeof window.cancelPaidSearchConfirmation === 'function') {
+                window.cancelPaidSearchConfirmation();
+            }
             if (workspacePage === 'discovery') {
                 if (show) document.getElementById('discovery-error').classList.add('hidden');
                 return;

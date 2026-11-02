@@ -12,11 +12,11 @@ Last updated: 2026-11-02. Nothing has been committed yet; all changes are in the
 | S: Security hotfix (S1–S11) | ✅ Done |
 | T: Hardening (T1–T9) | ✅ Done |
 | A: Trust, legal & broken paths | ✅ Done |
-| B: Conversion & navigation | Partly done (B5/B6/B10a, 10d, 10e) |
+| B: Conversion & navigation | Partly done (B5–B7/B10a/b, 10d, 10e) |
 | C: Visual system & accessibility | Not started |
 | D: Copy polish & consistency | Not started |
 
-Latest full suites: **354 Python tests (including PostgreSQL integrations) and 83 JS tests pass.** After the final B6 adjustment, the 45 team/billing integration tests, 7 error-page tests, and 8 focused account-plan UI tests also pass.
+Latest full suites: **355 Python tests (including PostgreSQL integrations) and 86 JavaScript tests pass.** B7/B10b targeted discovery and account-plan coverage includes 65 tests.
 
 ## How each fix was done
 
@@ -84,5 +84,6 @@ For every item: plan and clarifying questions first, then the change, tests (uni
 - **A5b** (team invitation hand-off): keep the email-link token in tab-scoped storage through sign-in/registration; preserve `next` between auth pages; disable acceptance until a token is available; show the public layout while signed out; and give an actionable resend message for expired/invalid invitations.
 - **B5/B10a** (purchase intent): anonymous plan CTAs carry the selected plan and anchor through registration, sign-in/register links preserve `next`, and Billing validates/preselects/highlights the requested plan. Added a Free Trial CTA targeting the Billing trial offer.
 - **B6** (plan permissions): browser-side 403 plan/permission denials render the styled error page with Billing/workspace links; API denials stay JSON; discovery upgrade prompts link to `/billing`.
+- **B7/B10b** (discovery cost and plan limits): use server-provided prices for live estimates; display and enforce industry/depth limits in the form, default to no selected industry, resolve local location before quoting, and confirm the server quote in-page instead of `confirm()`.
 - **B10d** (escaping `innerHTML`): done in S1.
 - **B10e** (generic auth messages, rate limits): done in S9 and T8.

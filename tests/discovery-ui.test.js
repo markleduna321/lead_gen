@@ -32,6 +32,7 @@ function setup(page = 'prospects') {
                     toggle(value, force) { if (force) classes.add(value); else classes.delete(value); }
                 },
                 setAttribute(name, value) { this.attributes[name] = value; },
+                getAttribute(name) { return this.attributes[name]; },
                 removeAttribute(name) { delete this.attributes[name]; if (name === 'value') this.value = ''; },
                 replaceChildren(...children) { this.children = children; },
                 appendChild(child) { child.parent = this; this.children.push(child); },
@@ -43,6 +44,7 @@ function setup(page = 'prospects') {
         }
         return elements.get(id);
     }
+    element('search-cost-confirmation').classList.add('hidden');
     const context = vm.createContext({
         document: {
             body: { dataset: { page } },
@@ -66,7 +68,8 @@ function setup(page = 'prospects') {
                 return preset;
             }
         },
-        window: { location: { assign() {} } }, URL, URLSearchParams, AbortSignal, console: { error() {} },
+        window: { location: { assign() {} }, discoverySearchPrices: { hiring: 15 } },
+        URL, URLSearchParams, AbortSignal, console: { error() {} },
         setTimeout(handler) { const id = ++timerId; timers.set(id, handler); return id; },
         clearTimeout(id) { timers.delete(id); }, clearInterval() {},
         fetch: async (url, options) => {
@@ -94,6 +97,13 @@ test('one discovery workspace with two search modes', () => {
     assert.match(html, /id="discovery-modal"/);
     assert.doesNotMatch(html, /id="btn-job-discover"|id="job-discovery-modal"/);
     assert.equal((html.match(/function toggleDiscoveryModal\(/g) || []).length, 1);
+    assert.match(html, /id="industry-limit-status"/);
+    assert.match(html, /id="discovery-search-estimate"/);
+    assert.match(html, /id="search-cost-confirmation"/);
+    const industryInputs = [...html.matchAll(/<input\b[^>]*name="biz-type"[^>]*>/g)];
+    assert.ok(industryInputs.length > 0);
+    assert.ok(industryInputs.every(([input]) => !/\bchecked\b/.test(input)));
+    assert.doesNotMatch(html, /confirm\(`This search/);
 });
 
 test('Prospects removes bulk pitch drafting while retaining individual drafting and other tools', () => {
@@ -251,6 +261,15 @@ test('tabs preserve form values and support keyboard navigation', () => {
     assert.ok(element('discovery-tab-local').focused);
     assert.equal(element('modal-location').value, 'Town');
     assert.equal(element('job-country-input').value, 'Canada');
+});
+
+test('hiring service refresh leaves the local estimate intact while its tab is inactive', () => {
+    const { context, element } = setup();
+    element('discovery-tab-jobs').attributes['aria-selected'] = 'false';
+    element('discovery-search-estimate').innerText = 'Local search estimate: 10 search credits for 1 industry.';
+    context.updateHiringSearchBudget();
+    assert.equal(element('discovery-search-estimate').innerText,
+        'Local search estimate: 10 search credits for 1 industry.');
 });
 
 test('job profile displays full details, all links and honest contact provenance', () => {
@@ -518,12 +537,12 @@ test('hiring discovery uses only job fields and separate results', async () => {
 test('hiring depth shows a credit budget, preserves selection and sends explicit opt-in', async () => {
     const { context, element, checked, requests } = setup();
     context.setDiscoveryMode('jobs');
-    assert.match(element('job-search-budget').innerText, /Hiring search estimate: 60 search credits/);
+    assert.match(element('discovery-search-estimate').innerText, /Hiring search estimate: 60 search credits/);
     checked['job-service'] = ['video_editing', 'virtual_assistant'];
     element('job-pages-input').value = '5';
     context.updateHiringSearchBudget();
-    assert.match(element('job-search-budget').innerText, /Hiring search estimate: 600 search credits/);
-    assert.match(element('job-search-budget').innerText, /including company-contact lookups/);
+    assert.match(element('discovery-search-estimate').innerText, /Hiring search estimate: 600 search credits/);
+    assert.match(element('discovery-search-estimate').innerText, /including company-contact lookups/);
     context.setDiscoveryMode('local');
     context.setDiscoveryMode('jobs');
     assert.equal(element('job-pages-input').value, '5');
@@ -575,11 +594,11 @@ test('saved service is selected immediately and drives exact role budget, filter
     assert.equal(label.children[0].checked, true);
     assert.equal(context.hiringServiceLabel(customService.id), 'Bookkeeping');
     context.setDiscoveryMode('jobs');
-    assert.match(element('job-search-budget').innerText, /Hiring search estimate: 90 search credits/);
+    assert.match(element('discovery-search-estimate').innerText, /Hiring search estimate: 90 search credits/);
     checked['job-service'] = [];
     element('job-pages-input').value = '3';
     context.updateHiringSearchBudget();
-    assert.match(element('job-search-budget').innerText, /Hiring search estimate: 90 search credits/);
+    assert.match(element('discovery-search-estimate').innerText, /Hiring search estimate: 90 search credits/);
     await context.submitActiveDiscovery();
     assert.deepEqual(JSON.parse(requests[1].options.body), {
         service_types: [customService.id], country: '', pages_per_role: 3
@@ -672,7 +691,7 @@ test('unknown service definitions block estimates and paid discovery, names are 
     const { context, element, checked, requests } = setup('discovery');
     checked['job-service'] = ['custom_unknown'];
     context.setDiscoveryMode('jobs');
-    assert.match(element('job-search-budget').innerText, /definition is unavailable/);
+    assert.match(element('discovery-search-estimate').innerText, /definition is unavailable/);
     await context.submitActiveDiscovery();
     assert.equal(requests.length, 0);
     assert.match(element('discovery-error').innerText, /definition is unavailable/);
@@ -739,7 +758,12 @@ function locationResponse(label = 'Austin', lat = 30.2672, lng = -97.7431) {
 test('edited location is resolved before discovery, never using the stale pin', async () => {
     const { context, element, requests } = setup();
     const originalFetch = context.fetch;
+    let quotedPayload;
     element('modal-location').value = 'Austin';
+    context.window.preparePaidSearch = async (_endpoint, payload) => {
+        quotedPayload = payload;
+        return false;
+    };
     context.fetch = async (url, options) => {
         if (url.startsWith('https://photon.komoot.io/api/')) {
             requests.push({ url });
@@ -749,10 +773,9 @@ test('edited location is resolved before discovery, never using the stale pin', 
     };
     await context.submitDiscoveryRequest();
     assert.match(requests[0].url, /q=Austin/);
-    const payload = JSON.parse(requests[1].options.body);
-    assert.equal(payload.location, 'Austin, United States');
-    assert.equal(payload.lat, 30.2672);
-    assert.equal(payload.lng, -97.7431);
+    assert.equal(quotedPayload.location, 'Austin, United States');
+    assert.equal(quotedPayload.lat, 30.2672);
+    assert.equal(quotedPayload.lng, -97.7431);
 });
 
 test('lookup errors and no matches prevent log clearing and paid discovery', async () => {

@@ -6,26 +6,45 @@ const vm = require('node:vm');
 
 const source = fs.readFileSync(path.join(__dirname, '..', 'static', 'account_plan.js'), 'utf8');
 function element(value) {
+    const classes = new Set();
     return {
         value, children: [], disabled: false, checked: true, hidden: true, textContent: '',
-        attributes: {}, classList: {add() {}},
+        attributes: {}, listeners: {}, classList: {
+            add(name) { classes.add(name); },
+            remove(name) { classes.delete(name); },
+            contains(name) { return classes.has(name); }
+        },
         appendChild(child) { this.children.push(child); },
         setAttribute(key, value) { this.attributes[key] = value; },
         getAttribute(key) { return this.attributes[key]; },
+        addEventListener(name, callback) { this.listeners[name] = callback; },
+        click() { this.listeners.click?.(); },
         querySelectorAll() { return this.controls || []; }
     };
 }
-async function setup({team = false, enterprise = false, fail = false, sufficient = true, card = false} = {}) {
+async function setup({team = false, enterprise = false, trial = false, fail = false, sufficient = true, card = false} = {}) {
     const sources = ['google', 'yelp', 'facebook', 'instagram', 'linkedin'].map(value => {
         const input = element(value);
         input.parentElement = element();
         return input;
     });
+    const industries = ['Cafe', 'Law Firm', 'Roofing Contractor', 'Custom'].map(value => {
+        const input = element(value);
+        input.name = 'biz-type';
+        input.checked = false;
+        return input;
+    });
+    const confirmation = element();
+    confirmation.classList.add('hidden');
     const ids = new Map([
         ['account-plan-status', element()], ['btn-discovery-submit', element()],
         ['nav-user-management', element()], ['nav-billing', element()], ['discovery-tab-jobs', element()],
         ['custom-service-editor', element()], ['discovery-panel-jobs', element()],
-        ['job-pages-input', element()], ['plan-discovery-policy', element()]
+        ['job-pages-input', element()], ['plan-discovery-policy', element()],
+        ['discovery-tab-local', element()], ['industry-limit-status', element()],
+        ['discovery-search-estimate', element()], ['search-cost-confirmation', confirmation],
+        ['search-cost-summary', element()], ['search-cost-cancel', element()],
+        ['search-cost-continue', element()], ['job-pages-limit-status', element()]
     ]);
     if (card) ['sidebar-credits', 'credit-plan', 'credit-balance', 'credit-usage-values',
         'credit-usage-percent', 'credit-usage-meter', 'credit-ring-value', 'credit-renewal',
@@ -38,7 +57,9 @@ async function setup({team = false, enterprise = false, fail = false, sufficient
     ids.get('custom-service-editor').controls = [editor];
     ids.get('discovery-panel-jobs').controls = [];
     ids.get('job-pages-input').options = [1, 2, 3, 5].map(value => element(String(value)));
+    ids.get('job-pages-input').value = '1';
     ids.get('discovery-tab-jobs').attributes['aria-selected'] = 'false';
+    ids.get('discovery-tab-local').attributes['aria-selected'] = 'true';
     const calls = [], prompts = [], errors = [], storage = new Map();
     const events = {}, timers = [];
     const window = {addEventListener(name, callback) { events[name] = callback; }};
@@ -60,6 +81,12 @@ async function setup({team = false, enterprise = false, fail = false, sufficient
             querySelector: () => ({content: 'csrf-token'}),
             querySelectorAll(selector) {
                 if (selector === 'input[name="scan-source"]') return sources;
+                if (selector === 'input[name="biz-type"]') return industries;
+                if (selector === 'input[name="biz-type"]:checked') return industries.filter(input => input.checked);
+                if (selector.startsWith('#discovery-tab-local,')) {
+                    return [ids.get('discovery-tab-local'), ids.get('discovery-tab-jobs'),
+                        ...sources, ...industries, ids.get('job-pages-input'), ids.get('btn-discovery-submit')];
+                }
                 if (selector === '#custom-hiring-services input') return [custom];
                 if (selector.startsWith('input[name="scan-source"],')) return [...sources, editor, ids.get('btn-discovery-submit')];
                 if (selector.startsWith('#custom-service-editor input,')) return [editor];
@@ -75,11 +102,11 @@ async function setup({team = false, enterprise = false, fail = false, sufficient
                         usage: {used: '250', total: '1000', percent: '25.0',
                             next_date: '2026-11-27T00:00:00Z', next_event: 'expiry'},
                         plan: {
-                        id: enterprise ? 'enterprise' : team ? 'small_team' : 'solo',
-                        name: team ? 'Small Team' : 'Solo', active: true,
-                        sources: team ? sources.map(input => input.value) : ['google', 'yelp'],
+                        id: enterprise ? 'enterprise' : team ? 'small_team' : trial ? 'trial' : 'solo',
+                        name: team ? 'Small Team' : trial ? 'Free Trial' : 'Solo', active: true,
+                        sources: team ? sources.map(input => input.value) : trial ? ['google'] : ['google', 'yelp'],
                         custom_services: enterprise, hiring_pages: enterprise ? 5 : team ? 3 : 0,
-                        industries: team ? 5 : 3
+                        industries: trial ? 1 : team ? 5 : 3, local_price: '10', hiring_price: '15'
                     }}
                 }
             };
@@ -91,7 +118,7 @@ async function setup({team = false, enterprise = false, fail = false, sufficient
     });
     vm.runInContext(source, context);
     await new Promise(resolve => setImmediate(resolve));
-    return {context, window, ids, sources, editor, custom, calls, prompts, errors, storage, events, timers};
+    return {context, window, ids, sources, industries, editor, custom, calls, prompts, errors, storage, events, timers};
 }
 
 test('Solo keeps source and hiring upgrade controls visible but locked, with no owner navigation', async () => {
@@ -100,6 +127,14 @@ test('Solo keeps source and hiring upgrade controls visible but locked, with no 
     assert.equal(ui.editor.disabled, true);
     assert.equal(ui.custom.disabled, true);
     assert.equal(ui.ids.get('nav-user-management').hidden, true);
+    assert.equal(ui.ids.get('industry-limit-status').textContent, '0 of 3 industries selected');
+    ui.industries.slice(0, 3).forEach(input => { input.checked = true; });
+    ui.events.change({target: ui.industries[2]});
+    assert.deepEqual(ui.industries.map(input => input.disabled), [false, false, false, true]);
+    assert.match(ui.ids.get('discovery-search-estimate').textContent, /30 search credits for 3 industries/);
+    ui.industries[3].checked = true;
+    ui.events.change({target: ui.industries[3]});
+    assert.equal(ui.industries[3].checked, false);
     const hiringUpgrade = ui.ids.get('discovery-panel-jobs').children[0];
     assert.match(hiringUpgrade.textContent, /Upgrade to Small Team/);
     assert.equal(hiringUpgrade.href, '/billing');
@@ -114,27 +149,60 @@ test('Small Team owner sees management, preset hiring and locked custom editor; 
     assert.equal(ui.sources.some(input => input.disabled), false);
     assert.equal(ui.editor.disabled, true);
     assert.equal(ui.ids.get('job-pages-input').options[3].disabled, true);
+    assert.equal(ui.ids.get('job-pages-limit-status').textContent, 'Your plan supports up to 3 pages per role.');
     const enterprise = await setup({team: true, enterprise: true});
     assert.equal(enterprise.editor.disabled, false);
     assert.equal(enterprise.custom.disabled, false);
     assert.equal(enterprise.ids.get('job-pages-input').options[3].disabled, false);
+    assert.equal(enterprise.ids.get('job-pages-limit-status').textContent, 'Your plan supports up to 5 pages per role.');
+    ui.ids.get('job-pages-input').value = '5';
+    await ui.window.refreshAccountPlan();
+    assert.equal(ui.ids.get('job-pages-input').value, '3');
 });
 
-test('Search confirmation uses a server quote, CSRF, refund disclosure and stable replay key', async () => {
+test('Trial industry limits use singular copy and allow one selection', async () => {
+    const ui = await setup({trial: true});
+    assert.equal(ui.ids.get('industry-limit-status').textContent, '0 of 1 industry selected');
+    assert.match(ui.ids.get('discovery-search-estimate').textContent, /Choose up to 1 industry/);
+    ui.industries[0].checked = true;
+    ui.events.change({target: ui.industries[0]});
+    assert.deepEqual(ui.industries.map(input => input.disabled), [false, true, true, true]);
+});
+
+test('Search confirmation uses an in-page server quote, CSRF, refund disclosure and stable replay key', async () => {
     const ui = await setup();
     const payload = {categories: ['A', 'B', 'C'], sources: ['google']};
-    assert.equal(await ui.window.preparePaidSearch('/api/trigger/discover', payload), true);
+    const first = ui.window.preparePaidSearch('/api/trigger/discover', payload);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(ui.ids.get('search-cost-confirmation').classList.contains('hidden'), false);
     const quote = ui.calls.find(call => call.url === '/api/discovery/quote');
     assert.equal(quote.options.headers['X-CSRF-Token'], 'csrf-token');
-    assert.match(ui.prompts[0], /30 shared search credits/);
-    assert.match(ui.prompts[0], /21.00 credits/);
+    assert.match(ui.ids.get('search-cost-summary').textContent, /30 search credits from your shared balance of 750/);
+    assert.match(ui.ids.get('search-cost-summary').textContent, /21.00 credits/);
+    assert.equal(ui.ids.get('btn-discovery-submit').disabled, true);
+    ui.ids.get('search-cost-continue').click();
+    assert.equal(await first, true);
+    assert.equal(ui.ids.get('btn-discovery-submit').disabled, false);
     assert.equal(ui.window.paidDiscoveryHeaders['Idempotency-Key'], 'test-request-key');
-    assert.equal(await ui.window.preparePaidSearch('/api/trigger/discover', payload), true);
+    const second = ui.window.preparePaidSearch('/api/trigger/discover', payload);
+    await new Promise(resolve => setImmediate(resolve));
+    ui.ids.get('search-cost-continue').click();
+    assert.equal(await second, true);
     assert.equal(ui.window.paidDiscoveryHeaders['Idempotency-Key'], 'test-request-key');
+    assert.deepEqual(ui.prompts, []);
     ui.window.completePaidSearchRequest();
     assert.equal(ui.storage.size, 0);
 });
 
+test('Cancelling the in-page search cost confirmation prevents the search', async () => {
+    const ui = await setup();
+    const pending = ui.window.preparePaidSearch('/api/trigger/discover', {categories: ['A']});
+    await new Promise(resolve => setImmediate(resolve));
+    ui.ids.get('search-cost-cancel').click();
+    assert.equal(await pending, false);
+    assert.equal(ui.window.paidDiscoveryHeaders, undefined);
+    assert.equal(ui.ids.get('search-cost-confirmation').classList.contains('hidden'), true);
+});
 test('Unavailable plan or insufficient balance blocks search and surfaces errors', async () => {
     const unavailable = await setup({fail: true});
     assert.equal(unavailable.ids.get('btn-discovery-submit').disabled, true);
