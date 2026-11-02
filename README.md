@@ -286,6 +286,10 @@ create an account. Its Light / Dark / System appearance control shares the
 workspace's saved theme preference. The hero globe is illustrative, not live
 account data or a claim of provider coverage. Signed-in users at `/` still see their
 Overview; `/overview` also opens it directly and requires authentication.
+The home page describes all five local discovery sources (Google Maps, Yelp,
+Facebook, Instagram, and LinkedIn company pages), hiring signals from Google
+Jobs and LinkedIn Jobs, and links to the Plans & Pricing page. The free-trial
+CTA leads to registration; email verification starts the 7-day, 30-credit trial.
 
 The public navigation links to a separate **Plans & Pricing** page at `/plans`,
 available with or without signing in and using the same saved theme preference.

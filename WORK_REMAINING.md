@@ -3,7 +3,7 @@
 > **Companion document:** [WORK_DONE.md](./WORK_DONE.md) records everything finished so far.
 > **Master plan:** [SYSTEM_REVIEW_PLAN.md](./SYSTEM_REVIEW_PLAN.md) holds each item's finding codes (NV-, CP-, PR-, FL-, UI-, AX-) and full context. Mark items ✅ there as they're finished, and move a summary to [WORK_DONE.md](./WORK_DONE.md).
 
-Last updated: 2026-11-02. **Next item: Milestone B10.**
+Last updated: 2026-11-02. **Next item: Milestone B10c.**
 
 ## How to resume
 
@@ -31,7 +31,7 @@ Suggested prompt when resuming: *"Continue the system review fixes from WORK_REM
 - [x] **B7 / B10b** Show live, server-priced search estimates; enforce plan limits in the form (industry counter/checkboxes and hiring depth), select no default industry, resolve location before quoting, and replace browser `confirm()` with an in-page cost summary (PR-02, PR-03, FL-10–FL-12).
 - [x] **B8** Generate public plan cards and comparison rows from `plans.py` / `payments.PRICES`, use canonical plan IDs, and derive pricing copy from server-owned prices (PR-01).
 - [x] **B9** Use personal-balance wording for Trial/Solo, shared-balance wording for team plans, and singular "industry" when the cap is one across discovery and plan copy (CP-06, CP-07).
-- [ ] **B10** Home copy for 5 sources, LinkedIn Jobs and the free-trial CTA (CP-05). The trial now starts after email verification.
+- [x] **B10** Home copy names all 5 local sources, both Google Jobs and LinkedIn Jobs, links to plans, and promotes the 7-day/30-credit trial after email verification (CP-05).
 - [ ] **B10c** Clear outcome messages ("no credits charged"), hide internal log phrasing, and show visible errors for every failed action (FL-13, FL-15).
 - [x] B10d: done in S1. B10e: done in S9/T8.
 

@@ -21,6 +21,7 @@
 .home-hero h1 { margin: 0; font-size: clamp(44px, 4.9vw, 70px); line-height: 1.08; letter-spacing: -3.4px; font-weight: 750; }
 .home-hero h1 em, .home-bottom-cta em { font-family: Georgia, 'Times New Roman', serif; font-weight: 400; color: var(--accent); letter-spacing: -2px; }
 .home-hero-description { max-width: 370px; margin: 26px 0 30px; font-size: 15px; line-height: 1.9; color: var(--muted); }
+.home-hero-trial { max-width: 390px; margin: -14px 0 24px; color: var(--text); font-size: 13px; line-height: 1.7; }
 .home-hero-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 25px; }
 .home-text-link { display: inline-flex; align-items: center; gap: 12px; color: var(--text); font-size: 12px; font-weight: 650; padding-block: 12px; }
 .home-text-link:hover { color: var(--accent); }
