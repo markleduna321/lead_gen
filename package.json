@@ -1,5 +1,5 @@
 {
-  "name": "asuratech-web-assets",
+  "name": "diskubre-web-assets",
   "private": true,
   "scripts": {
     "build:css": "tailwindcss -i static/tailwind.input.css -o static/tailwind.css --minify",
