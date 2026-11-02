@@ -172,7 +172,9 @@ test('workspace header removes repeated branding and keeps account actions toget
     assert.match(base, /\('More', \[\('settings', '\/settings', 'Settings'\)\]\)/);
     assert.match(base, /id="nav-billing"[\s\S]*?id="nav-user-management"/);
     assert.match(base, /<details class="account-menu" id="account-menu">[\s\S]*?Change password[\s\S]*?Sign out[\s\S]*?<\/details>/);
-    assert.doesNotMatch(base, /AsuraTECH \/ Lead Gen|id="account-plan-status"|id="sidebar-logout"/);
+    assert.doesNotMatch(base, /AsuraTECH|id="account-plan-status"|id="sidebar-logout"/);
+    assert.match(base, /class="brand-logo"[^>]+diskubre-logo\.png/);
+    assert.match(base, />diskubre<small>LEAD WORKSPACE<\/small>/);
 });
 
 test('workspace data actions dispatch typed values and keyboard events', () => {

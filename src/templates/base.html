@@ -25,7 +25,8 @@
     <meta name="color-scheme" content="light dark">
     <meta id="theme-color-meta" name="theme-color" content="#f5f7f9">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>{{ page_title }} | AsuraTECH</title>
+    <title>{{ page_title }} | diskubre</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='diskubre-logo.png') }}">
     <link rel="preload" href="{{ url_for('static', filename='vendor/fonts/dm-sans-latin-wght-normal.woff2') }}" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="{{ url_for('static', filename='vendor/fonts/manrope-latin-wght-normal.woff2') }}" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="{{ url_for('static', filename='vendor/fonts/fonts.css') }}">
@@ -38,7 +39,7 @@
     <button class="sidebar-backdrop" id="sidebar-backdrop" aria-label="Close navigation" data-click-action="toggleSidebar" data-click-argument="false" data-click-argument-type="boolean" hidden></button>
     <aside class="sidebar" id="sidebar" aria-label="Workspace sidebar">
         <div class="sidebar-header">
-            <a class="brand" href="/" id="sidebar-brand" data-click-action="onSidebarBrandClick" data-click-argument="event"><span class="brand-mark">A<span>.</span></span><span class="brand-name">AsuraTECH<small>LEAD WORKSPACE</small></span></a>
+            <a class="brand" href="/" id="sidebar-brand" data-click-action="onSidebarBrandClick" data-click-argument="event"><img class="brand-logo" src="{{ url_for('static', filename='diskubre-logo.png') }}" alt=""><span class="brand-name">diskubre<small>LEAD WORKSPACE</small></span></a>
             <button type="button" class="sidebar-collapse" id="sidebar-collapse" data-click-action="toggleSidebarCollapsed" aria-controls="sidebar" aria-expanded="true" aria-label="Collapse sidebar" title="Collapse sidebar">{{ icon('panel') }}</button>
         </div>
         <div class="sidebar-scroll">
@@ -118,7 +119,7 @@
             {% block content %}{% endblock %}
         </main>
         <footer class="workspace-footer">
-            <span>AsuraTECH Lead Workspace</span>
+            <span>diskubre Lead Workspace</span>
             <nav aria-label="Policies and support">
                 <a href="{{ url_for('terms') }}">Terms</a>
                 <a href="{{ url_for('privacy') }}">Privacy</a>

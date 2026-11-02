@@ -163,7 +163,11 @@ class RouteGuardTests(unittest.TestCase):
     def test_the_account_is_looked_up_once_per_request(self):
         with patch("auth.load_user", side_effect=lambda dsn, uid: dict(id=uid)) as lookup:
             # Public endpoints skip the account check entirely.
-            self.assertEqual(self.module.app.test_client().get("/favicon.ico").status_code, 204)
+            favicon = self.module.app.test_client().get("/favicon.ico")
+            self.assertEqual(favicon.status_code, 200)
+            self.assertEqual(favicon.mimetype, "image/png")
+            self.assertTrue(favicon.data.startswith(b"\x89PNG\r\n\x1a\n"))
+            favicon.close()
             lookup.assert_not_called()
             # The guard and the template context share one lookup.
             signed_in_client(self.module.app).get("/prospects")

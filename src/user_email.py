@@ -465,9 +465,9 @@ def send_test_email(dsn: str, user_id: int) -> dict:
         raise EmailNotConfigured("Save your mail settings before sending a test.")
     body = (
         "<html><body style=\"font-family: Arial, sans-serif; font-size: 15px;\">"
-        "<p>Your AsuraTECH Lead Workspace sending address is working.</p>"
+        "<p>Your diskubre Lead Workspace sending address is working.</p>"
         "<p>Outreach you send will arrive from this mailbox.</p>"
         "</body></html>"
     )
     return send_email(dsn, user_id, row["from_email"],
-                      "AsuraTECH Lead Workspace test message", body)
+                      "diskubre Lead Workspace test message", body)

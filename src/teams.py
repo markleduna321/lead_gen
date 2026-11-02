@@ -65,9 +65,9 @@ def send_invitation(email, token):
     password, sender, base = mail_configuration()
     message = EmailMessage()
     message["From"], message["To"] = sender, email
-    message["Subject"] = "Join your AsuraTECH team"
+    message["Subject"] = "Join your diskubre team"
     message.set_content(
-        "You have been invited to an AsuraTECH team.\n\n"
+        "You have been invited to a diskubre team.\n\n"
         f"Sign in or create an account with this email, then accept:\n{base}/team-invitation#{token}\n\n"
         "This invitation expires in 7 days. Your leads remain private; team members share "
         "the owner's search credit balance. Ignore this email if you did not expect it."

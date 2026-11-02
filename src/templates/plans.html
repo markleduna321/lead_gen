@@ -6,7 +6,8 @@
     <meta name="color-scheme" content="light dark">
     <meta id="theme-color-meta" name="theme-color" content="#f5f7f9">
     <meta name="description" content="{{ pricing_description }}">
-    <title>Plans &amp; Pricing | AsuraTECH</title>
+    <title>Plans &amp; Pricing | diskubre</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='diskubre-logo.png') }}">
     <link rel="preload" href="{{ url_for('static', filename='vendor/fonts/dm-sans-latin-wght-normal.woff2') }}" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="{{ url_for('static', filename='vendor/fonts/manrope-latin-wght-normal.woff2') }}" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="{{ url_for('static', filename='vendor/fonts/fonts.css') }}">
@@ -58,7 +59,7 @@
             <p id="comparison-help" class="plans-table-hint">On smaller screens, scroll the table horizontally to compare every plan.</p>
             <div class="plans-table-scroll" tabindex="0" role="region" aria-label="Plan feature comparison" aria-describedby="comparison-help">
                 <table class="plans-table">
-                    <caption>AsuraTECH plans, prices, credits, and features</caption>
+                    <caption>diskubre plans, prices, credits, and features</caption>
                     <thead><tr><th scope="col">Feature / Metric</th>{% for plan in comparison_plans %}<th scope="col">{{ plan.name }}{% if plan.id != 'trial' %} Plan{% endif %}{% if plan.id == 'small_team' %} <span class="plan-best-value">Best Value</span>{% endif %}</th>{% endfor %}</tr></thead>
                     <tbody>
                         {% for metric, values in comparison_rows %}

@@ -1,5 +1,5 @@
 """
-Desktop launcher for AsuraTECH Lead Gen.
+Desktop launcher for diskubre.
 Starts the Flask server in a background thread, then opens a native
 OS window (Edge WebView2 on Windows) pointing at it.
 
@@ -65,7 +65,7 @@ if __name__ == '__main__':
 
     print('[LAUNCHER] Server ready — opening desktop window.')
     window = webview.create_window(
-        title='AsuraTECH Lead Gen',
+        title='diskubre',
         url=SERVER_URL,
         width=1440,
         height=900,

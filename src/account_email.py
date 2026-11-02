@@ -149,8 +149,8 @@ def send_verification(dsn: str, user_id: int, base: str) -> bool:
             return False
         token = _issue(cur, user_id, "verify")
     system_mail.send(
-        user["email"], "Verify your AsuraTECH email",
-        "Confirm this email address to finish setting up your AsuraTECH account:\n"
+        user["email"], "Verify your diskubre email",
+        "Confirm this email address to finish setting up your diskubre account:\n"
         f"{base}/verify-email#{token}\n\n"
         "The link expires in 24 hours. New accounts get a 7-day free trial once verified "
         "(one per network). Ignore this email if you did not create an account.")
@@ -183,8 +183,8 @@ def request_password_reset(dsn: str, address, base: str) -> None:
             return
         token = _issue(cur, user["id"], "reset")
     system_mail.send(
-        user["email"], "Reset your AsuraTECH password",
-        "Someone asked to reset the password for this AsuraTECH account.\n\n"
+        user["email"], "Reset your diskubre password",
+        "Someone asked to reset the password for this diskubre account.\n\n"
         f"Choose a new password here:\n{base}/reset-password#{token}\n\n"
         "The link expires in 1 hour and works once. Resetting signs out every device. "
         "If you did not ask for this, ignore this email; your password stays the same.")

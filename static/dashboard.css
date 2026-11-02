@@ -57,14 +57,13 @@ h1, h2, h3, .metric-value { font-family: 'Manrope', sans-serif; }
 .skip-link:focus { top: 12px; }
 .sidebar { width: var(--sidebar-width); position: fixed; inset: 0 auto 0 0; display: flex; flex-direction: column; background: var(--surface); border-right: 1px solid var(--border); z-index: 35; transition: width .22s ease; }
 .brand { display: flex; gap: 12px; align-items: center; font: 800 var(--type-title) 'Manrope', sans-serif; letter-spacing: -.7px; }
-.brand-mark { display: grid; place-content: center; width: 38px; height: 38px; background: #123c33; color: #fff; border-radius: 11px; display: block; text-align: center; line-height: 38px; }
-.brand-mark span { color: #8de7bf; }
+.brand-logo { display: block; flex: 0 0 38px; width: 38px; height: 38px; object-fit: contain; }
 .brand small { display: block; color: var(--subtle); font: 600 var(--type-caption) 'DM Sans', sans-serif; letter-spacing: 2px; margin-top: 5px; }
 
 /* Sidebar header: brand + collapse toggle, aligned with the 76px topbar. */
 .sidebar-header { position: relative; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 76px; padding: 0 16px 0 20px; border-bottom: 1px solid var(--border); overflow: hidden; }
 .sidebar .brand { min-width: 0; gap: 11px; font-size: var(--type-title-small); text-decoration: none; }
-.sidebar .brand-mark { flex-shrink: 0; width: 36px; height: 36px; line-height: 36px; border-radius: 10px; font-size: var(--type-title-small); font-weight: 800; transition: opacity .15s; }
+.sidebar .brand-logo { flex-basis: 36px; width: 36px; height: 36px; transition: opacity .15s; }
 .brand-name { min-width: 0; white-space: nowrap; overflow: hidden; transition: opacity .15s; }
 .sidebar-collapse { flex-shrink: 0; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 1px solid var(--border); border-radius: 8px; background: transparent; color: var(--subtle); transition: background .15s, color .15s, border-color .15s, opacity .15s; }
 .sidebar-collapse:hover { background: var(--surface-hover); color: var(--text); border-color: var(--border); }
@@ -197,7 +196,7 @@ body[data-page="billing"] button:disabled { opacity: .5; }
     :root[data-sidebar="collapsed"] .sidebar-collapse { position: absolute; inset: 0; margin: auto; opacity: 0; background: var(--surface-hover); color: var(--text); width: 36px; height: 36px; border: 1px solid var(--border); }
     :root[data-sidebar="collapsed"] .sidebar-header:hover .sidebar-collapse,
     :root[data-sidebar="collapsed"] .sidebar-collapse:focus-visible { opacity: 1; }
-    :root[data-sidebar="collapsed"] .sidebar-header:hover .brand-mark { opacity: 0; }
+    :root[data-sidebar="collapsed"] .sidebar-header:hover .brand-logo { opacity: 0; }
     :root[data-sidebar="collapsed"] .panel-chevron { transform: rotate(180deg); }
     :root[data-sidebar="collapsed"] .nav-link::after { content: attr(data-tooltip); position: absolute; left: calc(100% + 14px); top: 50%; z-index: 50; padding: 6px 12px; border-radius: 8px; background: var(--text); color: var(--surface); font-size: var(--type-caption); font-weight: 600; white-space: nowrap; pointer-events: none; opacity: 0; transform: translate(-4px, -50%); transition: opacity .12s, transform .12s; box-shadow: 0 4px 16px rgba(0,0,0,0.18); }
     :root[data-sidebar="collapsed"] .nav-link:hover::after,
@@ -282,7 +281,7 @@ input::placeholder, textarea::placeholder { color: var(--subtle); }
 .discovery-progress-topline { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 22px 28px; border-bottom: 1px solid var(--border); }
 .discovery-progress-brand { display: flex; align-items: center; gap: 8px; font-size: var(--type-caption); font-weight: 700; letter-spacing: 1.2px; color: var(--text); }
 .discovery-progress-brand > span:last-child { font-weight: 600; color: var(--subtle); letter-spacing: .8px; }
-.discovery-progress-monogram { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; background: #153e34; color: #a5e9cd; font: 800 var(--type-body) 'Manrope', sans-serif; letter-spacing: -1px; }
+.discovery-progress-logo { width: 26px; height: 26px; object-fit: cover; border-radius: 6px; }
 .discovery-live-badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; border: 1px solid color-mix(in srgb, var(--accent) 16%, var(--border)); border-radius: 20px; color: var(--accent); background: var(--accent-soft); font-size: var(--type-caption); font-weight: 600; white-space: nowrap; }
 .discovery-live-badge > span, .discovery-activity-pulse { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
 .discovery-progress-intro { text-align: center; padding: 24px 28px 19px; background: radial-gradient(ellipse at 50% 0, var(--accent-soft), transparent 72%); }

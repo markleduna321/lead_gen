@@ -828,7 +828,7 @@ def plans():
         retained_percent=(1 - ZERO_RESULT_REFUND) * 100,
         annual_free_months=annual_free_months,
         pricing_description=(
-            f"Compare AsuraTECH's {TRIAL_DAYS}-day free trial, "
+            f"Compare diskubre's {TRIAL_DAYS}-day free trial, "
             + ", ".join(
                 f"{plan['name']} at PHP {plan['monthly']}/month"
                 for plan in paid_plans
@@ -1387,7 +1387,7 @@ def update_prospect_email(lead_id):
 
 @app.route('/favicon.ico')
 def silence_favicon():
-    return '', 204
+    return app.send_static_file('diskubre-logo.png')
 
 @app.route('/.well-known/appspecific/<path:filename>')
 def silence_chrome_devtools(filename):

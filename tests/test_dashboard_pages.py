@@ -46,7 +46,11 @@ class DashboardPagesTests(unittest.TestCase):
                     self.assertEqual(response.status_code, 200)
                     html = response.get_data(as_text=True)
                     self.assertIn(f'data-page="{key}"', html)
-                    self.assertIn(f"<title>{title} | AsuraTECH</title>", html)
+                    self.assertIn(f"<title>{title} | diskubre</title>", html)
+                    self.assertIn('rel="icon" type="image/png"', html)
+                    self.assertIn('class="brand-logo"', html)
+                    self.assertIn(">diskubre<small>LEAD WORKSPACE</small>", html)
+                    self.assertNotIn("AsuraTECH", html)
                     self.assertEqual(html.count('aria-current="page"'), 1)
                     self.assertIn('href="/prospects"', html)
                     self.assertIn('href="/job-leads"', html)
@@ -108,7 +112,7 @@ class DashboardPagesTests(unittest.TestCase):
         self.assertIn('href="/settings#account-security-title">Change password</a>', html)
         self.assertIn('href="/settings">Account settings</a>', html)
         self.assertIn('action="/logout"', html)
-        self.assertNotIn("AsuraTECH / Lead Gen", html)
+        self.assertNotIn("AsuraTECH", html)
         self.assertNotIn('id="account-plan-status"', html)
         self.assertNotIn('class="primary-button" href="/discovery"', html)
         self.assertNotIn('id="sidebar-logout"', html)
@@ -598,7 +602,7 @@ class DashboardPagesTests(unittest.TestCase):
                 response = client.get(path)
                 self.assertEqual(response.status_code, 200)
                 html = response.get_data(as_text=True)
-                self.assertIn(f"<title>{title} | AsuraTECH</title>", html)
+                self.assertIn(f"<title>{title} | diskubre</title>", html)
                 for linked_path in ("/terms", "/privacy", "/refund-policy", "/support"):
                     self.assertIn(f'href="{linked_path}"', html)
 
@@ -625,7 +629,7 @@ class DashboardPagesTests(unittest.TestCase):
                     response = client.get("/plans")
                     self.assertEqual(response.status_code, 200)
                     html = response.get_data(as_text=True)
-                    self.assertIn('<title>Plans &amp; Pricing | AsuraTECH</title>', html)
+                    self.assertIn('<title>Plans &amp; Pricing | diskubre</title>', html)
                     self.assertIn('data-page="plans"', html)
                     for key, name in [('solo', 'Solo'), ('small_team', 'Small Team'), ('enterprise', 'Enterprise')]:
                         self.assertIn(f'<h2 id="plan-{key}">{name}</h2>', html)
@@ -781,7 +785,7 @@ class DashboardPagesTests(unittest.TestCase):
         self.assertIn("90 / mo", html)
         self.assertIn("Up to 2 Users", html)
         self.assertIn(
-            'content="Compare AsuraTECH\'s 7-day free trial, Solo at PHP 1,234/month,',
+            'content="Compare diskubre\'s 7-day free trial, Solo at PHP 1,234/month,',
             html,
         )
 
@@ -891,7 +895,7 @@ class DashboardPagesTests(unittest.TestCase):
                                      "team_role": "owner"}],
                         "invitations": [],
                     })
-                    self.assertIn("<title>User Management | AsuraTECH</title>", html)
+                    self.assertIn("<title>User Management | diskubre</title>", html)
                     self.assertIn('data-page="user-management"', html)
                     self.assertIn(f"{name} team", html)
                     values = re.findall(r'<strong class="metric-value">([\d.]+)</strong>', html)

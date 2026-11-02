@@ -2,9 +2,9 @@
 echo [BUILD] Installing pinned desktop dependencies...
 pip install -r requirements-desktop.txt --quiet
 
-echo [BUILD] Packaging AsuraTECH Lead Gen to .exe ...
+echo [BUILD] Packaging diskubre to .exe ...
 pyinstaller ^
-    --name "AsuraTECH_LeadGen" ^
+    --name "diskubre" ^
     --onedir ^
     --noconsole ^
     --add-data "src;src" ^
@@ -28,6 +28,6 @@ pyinstaller ^
     --collect-all pycountry ^
     app.py
 
-echo [BUILD] Done. Output is in dist\AsuraTECH_LeadGen\
-echo [BUILD] Copy your .env file into dist\AsuraTECH_LeadGen\ before running.
+echo [BUILD] Done. Output is in dist\diskubre\
+echo [BUILD] Copy your .env file into dist\diskubre\ before running.
 pause
