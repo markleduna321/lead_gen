@@ -343,6 +343,8 @@ regular members, Solo, and Trial cannot use owner actions. Members share their
 owner's wallet and UTC daily submission cap, **not leads, custom service
 definitions, or outgoing mailbox settings**. Removal restores the member to
 an unassigned private account without deleting their leads.
+Browser permission denials render a styled page with Billing and workspace
+navigation; API denials remain JSON.
 
 The registered main account is the team owner and occupies one seat, leaving
 up to 3 additional members on Small Team or 14 on Enterprise. Pending email

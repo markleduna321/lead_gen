@@ -607,9 +607,11 @@ def error_response(status, code, title, message, reference=None, headers=None):
             body["reference"] = reference
         response = jsonify(body)
     else:
+        signed_in = current_user_id() is not None
         try:
             html = render_template("error.html", status=status, title=title, message=message,
-                                   reference=reference, signed_in=current_user_id() is not None)
+                                   reference=reference, signed_in=signed_in,
+                                   show_billing=status == 403 and signed_in and request.path != "/billing")
         except Exception:
             app.logger.exception("Error page could not be rendered")
             html = f"{title}. {message}" + (f" Reference: {reference}" if reference else "")

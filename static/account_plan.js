@@ -48,7 +48,7 @@
     const csrf = () => document.querySelector('meta[name="csrf-token"]').content;
     const upgrade = (container, text) => {
         const link = document.createElement('a');
-        link.href = '/plans';
+        link.href = '/billing';
         link.textContent = text;
         link.className = 'settings-hint';
         container.appendChild(link);

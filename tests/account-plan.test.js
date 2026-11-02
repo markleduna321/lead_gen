@@ -100,7 +100,9 @@ test('Solo keeps source and hiring upgrade controls visible but locked, with no 
     assert.equal(ui.editor.disabled, true);
     assert.equal(ui.custom.disabled, true);
     assert.equal(ui.ids.get('nav-user-management').hidden, true);
-    assert.match(ui.ids.get('discovery-panel-jobs').children[0].textContent, /Upgrade to Small Team/);
+    const hiringUpgrade = ui.ids.get('discovery-panel-jobs').children[0];
+    assert.match(hiringUpgrade.textContent, /Upgrade to Small Team/);
+    assert.equal(hiringUpgrade.href, '/billing');
     ui.ids.get('discovery-tab-jobs').attributes['aria-selected'] = 'true';
     ui.window.applyAccountCapabilities();
     assert.equal(ui.ids.get('btn-discovery-submit').disabled, true);

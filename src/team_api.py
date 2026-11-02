@@ -22,6 +22,10 @@ def user_id():
 @bp.app_errorhandler(PlanError)
 def handle_plan_error(error):
     current_app.logger.warning("Account operation rejected: %s", error.code)
+    from auth import wants_json
+    if error.status == 403 and not wants_json():
+        from control_gate_api import error_response
+        return error_response(403, error.code, "Plan or permission required", str(error))
     return jsonify(status="error", code=error.code, message=str(error)), error.status
 
 

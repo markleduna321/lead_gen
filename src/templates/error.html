@@ -21,6 +21,7 @@
             {% if reference %}<p class="error-reference">Reference: <code>{{ reference }}</code></p>{% endif %}
             <div class="error-actions">
                 {% if signed_in %}
+                {% if show_billing %}<a class="home-button" href="/billing">Review billing options <span aria-hidden="true">&rarr;</span></a>{% endif %}
                 <a class="home-button" href="/overview">Back to workspace <span aria-hidden="true">&rarr;</span></a>
                 {% else %}
                 <a class="home-button" href="/">Go to home page <span aria-hidden="true">&rarr;</span></a>

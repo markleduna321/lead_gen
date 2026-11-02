@@ -53,6 +53,21 @@ class ErrorPageTests(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertIn("Back to workspace", response.get_data(as_text=True))
 
+    def test_signed_in_403_offers_billing_and_the_workspace(self):
+        from support import QA_USER_ID
+
+        with (
+            self.app.test_request_context("/forbidden-for-test"),
+            patch("auth.current_user_id", return_value=QA_USER_ID),
+            patch.object(self.module, "signed_in_user", return_value={"id": QA_USER_ID}),
+        ):
+            response = self.module.error_response(403, "forbidden", "Access denied", "No access.")
+        html = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.mimetype, "text/html")
+        self.assertIn('href="/billing"', html)
+        self.assertIn('href="/overview"', html)
+
     def test_unknown_api_route_returns_json_404(self):
         response = self.client.get("/api/no-such-thing")
         self.assertEqual(response.status_code, 404)
