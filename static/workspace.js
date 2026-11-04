@@ -107,6 +107,16 @@ function setThemePreference(preference, persist = true) {
     }
     const selector = document.getElementById('theme-preference');
     if (selector) selector.value = validPreference;
+    const toggle = document.getElementById('theme-toggle');
+    if (toggle) {
+        const label = theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
+        toggle.setAttribute('aria-label', label);
+        toggle.setAttribute('title', label);
+    }
+}
+
+function toggleThemePreference() {
+    setThemePreference(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
 }
 
 let savedTheme = 'system';

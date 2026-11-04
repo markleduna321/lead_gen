@@ -12,6 +12,18 @@ const script = [...template.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g
     .replace('{{ hiring_builtin_services | tojson }}', '[]');
 const themeScript = fs.readFileSync(path.join(root, 'static', 'workspace.js'), 'utf8');
 
+test('home section navigation uses native smooth scrolling only without reduced motion', () => {
+    const home = fs.readFileSync(path.join(root, 'src', 'templates', 'home.html'), 'utf8');
+    const css = fs.readFileSync(path.join(root, 'static', 'home.css'), 'utf8');
+    const nav = fs.readFileSync(path.join(root, 'src', 'templates', 'public_nav.html'), 'utf8');
+    assert.match(home, /<html lang="en" class="home-page">/);
+    assert.match(css, /@media \(prefers-reduced-motion: no-preference\)\s*\{\s*html\.home-page\s*\{\s*scroll-behavior: smooth;\s*\}\s*\}/);
+    for (const id of ['platform', 'how-it-works']) {
+        assert.ok(nav.includes(`#${id}"`));
+        assert.ok(home.includes(`id="${id}"`));
+    }
+});
+
 function mockElement() {
     const classes = new Set();
     return {
@@ -175,6 +187,9 @@ test('workspace header removes repeated branding and keeps account actions toget
     assert.doesNotMatch(base, /AsuraTECH|id="account-plan-status"|id="sidebar-logout"/);
     assert.match(base, /class="brand-logo"[^>]+diskubre-logo\.png/);
     assert.match(base, />diskubre<small>LEAD WORKSPACE<\/small>/);
+    assert.match(base, /include "theme_toggle.html"/);
+    assert.doesNotMatch(base, /id="theme-preference"|>Appearance</);
+    assert.match(base, /<svg class="account-menu-chevron"/);
 });
 
 test('workspace data actions dispatch typed values and keyboard events', () => {
@@ -244,6 +259,40 @@ test('public pages share theme persistence and Escape needs no sidebar', () => {
     context.setThemePreference('light');
     assert.equal(stored.get('asuratech-theme'), 'light');
     assert.equal(root.dataset.theme, 'light');
+});
+
+test('home icon toggle switches effective system theme and persists light and dark choices', () => {
+    const root = mockElement();
+    const toggle = mockElement();
+    const handlers = {};
+    const stored = new Map();
+    let systemChanged;
+    const media = { matches: true, addEventListener(type, handler) { systemChanged = handler; } };
+    const context = vm.createContext({
+        window: { matchMedia: query => query === '(prefers-color-scheme: dark)' ? media : { matches: false } },
+        console,
+        localStorage: { getItem: key => stored.get(key), setItem: (key, value) => stored.set(key, value) },
+        document: {
+            documentElement: root, body: { dataset: { page: 'home' } },
+            getElementById: id => id === 'theme-toggle' ? toggle : null,
+            addEventListener: (event, handler) => { handlers[event] = handler; }
+        }
+    });
+    vm.runInContext(themeScript, context);
+    handlers.DOMContentLoaded();
+    assert.equal(root.dataset.theme, 'dark');
+    assert.equal(toggle.attributes['aria-label'], 'Switch to light mode');
+    context.toggleThemePreference();
+    assert.equal(root.dataset.theme, 'light');
+    assert.equal(stored.get('asuratech-theme'), 'light');
+    assert.equal(toggle.attributes['aria-label'], 'Switch to dark mode');
+    assert.equal(toggle.attributes.title, 'Switch to dark mode');
+    systemChanged();
+    assert.equal(root.dataset.theme, 'light');
+    context.toggleThemePreference();
+    assert.equal(root.dataset.theme, 'dark');
+    assert.equal(stored.get('asuratech-theme'), 'dark');
+    assert.equal(toggle.attributes['aria-label'], 'Switch to light mode');
 });
 
 test('accessible modal traps focus, closes on Escape, and restores prior focus', () => {

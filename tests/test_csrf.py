@@ -72,9 +72,13 @@ class CsrfTests(unittest.TestCase):
     def test_form_field_token_is_accepted(self):
         client = self.tokenless_client()
         response = client.post("/logout", data={"csrf_token": "qa-csrf-token"})
-        self.assertTrue(response.headers["Location"].endswith("/login"))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers["Location"], "/")
         with client.session_transaction() as saved:
             self.assertNotIn("user_id", saved)
+        home = client.get(response.headers["Location"])
+        self.assertEqual(home.status_code, 200)
+        self.assertIn('data-page="home"', home.get_data(as_text=True))
 
     def test_stale_logout_keeps_the_user_signed_in(self):
         client = self.tokenless_client()

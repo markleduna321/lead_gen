@@ -1,5 +1,37 @@
 {% extends "base.html" %}
 {% block content %}
+    {% if page in ('prospects', 'jobs') %}
+    <div id="outreach-modal" class="hidden outreach-overlay" role="dialog" aria-modal="true" aria-labelledby="outreach-title" tabindex="-1">
+        <section class="outreach-card">
+            <header><h2 id="outreach-title">Track outreach</h2><button type="button" id="outreach-close" class="secondary-button" aria-label="Close outreach tracking">Close</button></header>
+            <p id="outreach-lead-name"></p>
+            <p class="settings-hint">Tracking only. These actions do not send email. You can correct a status or reopen outreach at any time.</p>
+            <p id="outreach-message" role="status" aria-live="polite"></p>
+            <form id="outreach-form">
+                <label for="outreach-next-status">Outreach status</label>
+                <select id="outreach-next-status" required>
+                    <option value="not_contacted">Not contacted / Reopen</option>
+                    <option value="awaiting_reply">Email sent / Awaiting reply</option>
+                    <option value="replied">Response received / Replied</option>
+                    <option value="successful">Successful outreach</option>
+                    <option value="failed">Failed outreach</option>
+                </select>
+                <label for="outreach-note">Optional note</label>
+                <textarea id="outreach-note" rows="3" maxlength="2000" placeholder="Add context about the conversation or outcome"></textarea>
+                <div class="outreach-quick-actions" aria-label="Quick outreach actions">
+                    <button type="button" class="secondary-button" data-outreach-status="awaiting_reply">Mark email sent</button>
+                    <button type="button" class="secondary-button" data-outreach-status="replied">Response received</button>
+                    <button type="button" class="secondary-button" data-outreach-status="successful">Successful</button>
+                    <button type="button" class="secondary-button" data-outreach-status="failed">Failed</button>
+                </div>
+                <button type="submit" id="outreach-save" class="primary-button">Save status / note</button>
+            </form>
+            <h3>Outreach history</h3>
+            <p class="settings-hint">Latest 100 updates, newest first. Earlier updates remain stored for analytics.</p>
+            <ol id="outreach-history"></ol>
+        </section>
+    </div>
+    {% endif %}
 
     {% if page == 'overview' %}
     {% include "overview.html" %}
@@ -577,6 +609,9 @@
                             </select>
 
                             <div class="h-4 w-px bg-slate-800 mx-0.5"></div>
+                            <select id="filter-outreach" data-change-action="handleFilterChange" aria-label="Outreach status">
+                                <option value="">All outreach</option>
+                            </select>
 
                             <select id="filter-sort" data-change-action="handleFilterChange" aria-label="Sort results"
                                 class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-slate-300 focus:outline-none focus:border-slate-500 cursor-pointer">
@@ -702,6 +737,7 @@
     </section>
 
     <link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet-1.9.4/leaflet.css') }}" />
+    {% if page in ('prospects', 'jobs') %}<script src="{{ url_for('static', filename='outreach.js') }}" defer></script>{% endif %}
     <script src="{{ url_for('static', filename='vendor/leaflet-1.9.4/leaflet.js') }}"></script>
 
     <script>
@@ -1019,6 +1055,7 @@
                 params.set(config.source.param, activeSourceFilter);
                 params.set(config.type.param, activeLeadTypeFilter);
                 params.set(config.status.param, activeStatusFilter);
+                params.set('outreach_status', document.getElementById('filter-outreach').value);
                 const res = await fetch(`${endpoint}?${params}`);
                 const data = await res.json();
                 if (requestId !== queueRequestId) return;
@@ -1074,6 +1111,7 @@
             document.getElementById('filter-source').value = '';
             document.getElementById('filter-lead-type').value = '';
             document.getElementById('filter-status').value = '';
+            document.getElementById('filter-outreach').value = '';
             document.getElementById('filter-sort').value = activeSortBy;
             renderQueueFilterOptions();
             document.getElementById('filter-sort').querySelector('option[value="lead_score"]').hidden = view === 'jobs';
@@ -1181,6 +1219,9 @@
                 facet(config.type.facet), activeLeadTypeFilter, config.type.label);
             renderFilterSelect(document.getElementById(queueFilterSelects.status), 'All Active',
                 facet('status'), activeStatusFilter, option => statusLabels[option.value] || option.value);
+            const outreach = document.getElementById('filter-outreach');
+            renderFilterSelect(outreach, 'All outreach', facet('outreach'), outreach.value,
+                option => outreachLabel(option.value));
         }
 
         function handleFilterChange() {
@@ -1198,6 +1239,7 @@
             document.getElementById('filter-source').value    = '';
             document.getElementById('filter-lead-type').value = '';
             document.getElementById('filter-status').value    = '';
+            document.getElementById('filter-outreach').value = '';
             const defaultSort = 'date_desc';
             document.getElementById('filter-sort').value      = defaultSort;
             document.getElementById('table-search-input').value = '';
@@ -1212,6 +1254,7 @@
 
         function updateFilterBadge() {
             const isFiltered = activeSourceFilter || activeLeadTypeFilter ||
+                               document.getElementById('filter-outreach').value ||
                                activeStatusFilter || searchFilterString ||
                                activeSortBy !== 'date_desc';
             document.getElementById('btn-clear-filters').classList.toggle('hidden', !isFiltered);
@@ -1345,6 +1388,26 @@
                 ? 'CSV export is available.' : 'Export becomes available when prospects are in your list.';
         }
 
+        function outreachLabel(status) {
+            const labels = {not_contacted: 'Not contacted', awaiting_reply: 'Awaiting reply',
+                replied: 'Replied', successful: 'Successful', failed: 'Failed'};
+            return Object.hasOwn(labels, status) ? labels[status] : 'Not contacted';
+        }
+
+        function appendOutreachAction(cell, lead) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'outreach-action';
+            button.id = `outreach-${activeQueueView}-${lead.id}`;
+            button.textContent = `${outreachLabel(lead.outreach_status)} · Update`;
+            button.setAttribute('aria-label', `Track outreach for ${lead.business_name || lead.company_name}`);
+            button.addEventListener('click', event => {
+                event.stopPropagation();
+                if (!isWorking) window.openOutreachTracker(activeQueueView, lead);
+            });
+            cell.appendChild(button);
+        }
+
         function renderTable() {
             const tbody = document.getElementById('table-body');
             tbody.innerHTML = '';
@@ -1381,6 +1444,7 @@
                         } else {
                             td.textContent = value || '—';
                         }
+                        if (index === 4) appendOutreachAction(td, lead);
                         tr.appendChild(td);
                     });
                     tbody.appendChild(tr);
@@ -1422,6 +1486,7 @@
                 const statusCell = cell('p-3');
                 if (Object.hasOwn(statusBadges, lead.status)) statusCell.innerHTML = statusBadges[lead.status];
                 else statusCell.textContent = lead.status || '—';
+                appendOutreachAction(statusCell, lead);
                 tbody.appendChild(tr);
             });
         }

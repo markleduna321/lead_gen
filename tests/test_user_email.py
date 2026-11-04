@@ -366,7 +366,7 @@ class EmailSettingsRouteTests(unittest.TestCase):
         # The dashboard keys off this code to offer the Settings page.
         self.assertEqual(response.json["code"], "email_not_configured")
 
-    def dispatch(self, payload, lead=None):
+    def dispatch(self, payload, lead=None, send_error=None):
         """Runs /api/dispatch against a fake prospects table; returns
         (response, send_email mock, executed SQL)."""
         lead = lead or {"business_name": "Acme <Co>", "status": "pending", "subject_line": "Hi"}
@@ -382,7 +382,7 @@ class EmailSettingsRouteTests(unittest.TestCase):
         with (
             patch.dict(os.environ, {"SMTP_ENCRYPTION_KEY": QA_KEY}),
             patch.object(user_email, "_load_raw", return_value=row_with_password("pw")),
-            patch.object(user_email, "send_email") as send,
+            patch.object(user_email, "send_email", side_effect=send_error) as send,
             patch.object(self.module.psycopg2, "connect", return_value=conn),
             patch("followup_scheduler.schedule_followup"),
         ):
@@ -413,6 +413,16 @@ class EmailSettingsRouteTests(unittest.TestCase):
         self.assertNotIn("<b>team</b>", body)
         update = next(params for sql, params in executed if sql.lstrip().upper().startswith("UPDATE"))
         self.assertEqual(update[1], "lead@example.test")
+        event = next(params for sql, params in executed if "INSERT INTO outreach_events" in sql)
+        self.assertEqual(event[-3:], ("awaiting_reply", "", "email_sent"))
+
+    def test_failed_email_does_not_change_outreach_or_write_history(self):
+        response, send, executed = self.dispatch(
+            {"final_pitch": "Hello", "destination_email": "lead@example.test"},
+            send_error=user_email.EmailSettingsError("SMTP delivery failed"))
+        self.assertEqual(response.status_code, 400)
+        send.assert_called_once()
+        self.assertFalse(any(sql.lstrip().startswith(("UPDATE", "INSERT")) for sql, _ in executed))
 
 
 if __name__ == "__main__":

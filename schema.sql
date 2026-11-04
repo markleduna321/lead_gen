@@ -186,3 +186,22 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_job_leads_user_identity   ON job_leads (us
 CREATE UNIQUE INDEX IF NOT EXISTS idx_hiring_services_user_name ON hiring_services (user_id, name_key);
 CREATE INDEX IF NOT EXISTS idx_prospects_user ON prospects (user_id);
 CREATE INDEX IF NOT EXISTS idx_job_leads_user ON job_leads (user_id);
+
+-- Outreach is independent of draft/archive workflow. Startup migrations also
+-- backfill existing sent/won/lost leads; see outreach.SCHEMA.
+ALTER TABLE prospects ADD COLUMN IF NOT EXISTS outreach_status TEXT;
+ALTER TABLE job_leads ADD COLUMN IF NOT EXISTS outreach_status TEXT;
+CREATE TABLE IF NOT EXISTS outreach_events (
+    id BIGSERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    prospect_id INTEGER REFERENCES prospects(id) ON DELETE CASCADE,
+    job_lead_id INTEGER REFERENCES job_leads(id) ON DELETE CASCADE,
+    previous_status TEXT NOT NULL,
+    status TEXT NOT NULL,
+    note TEXT NOT NULL DEFAULT '',
+    source TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CHECK ((prospect_id IS NOT NULL)::int + (job_lead_id IS NOT NULL)::int = 1)
+);
+CREATE INDEX IF NOT EXISTS idx_outreach_prospect ON outreach_events(user_id, prospect_id, id DESC);
+CREATE INDEX IF NOT EXISTS idx_outreach_job ON outreach_events(user_id, job_lead_id, id DESC);

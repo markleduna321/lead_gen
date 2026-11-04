@@ -58,7 +58,8 @@ def schedule_followup(lead_id: int, current_status: str, user_id=None):
         with psycopg2.connect(DB_DSN) as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "UPDATE prospects SET followup_due_at = %s WHERE id = %s AND user_id = %s;",
+                    "UPDATE prospects SET followup_due_at = %s WHERE id = %s AND user_id = %s "
+                    "AND outreach_status = 'awaiting_reply';",
                     (due, lead_id, user_id),
                 )
                 conn.commit()
@@ -85,6 +86,7 @@ def run_followup_sweep(user_id=None):
                     SELECT id, business_name, status FROM prospects
                     WHERE followup_due_at <= NOW()
                       AND status IN ('sent', 'followup_1', 'followup_2')
+                      AND outreach_status = 'awaiting_reply'
                       AND user_id = %s
                     ORDER BY followup_due_at ASC;
                     """,
@@ -104,9 +106,12 @@ def run_followup_sweep(user_id=None):
                     if not seq or not seq["template"]:
                         # End of sequence — mark as cold, no more follow-ups
                         cur.execute(
-                            "UPDATE prospects SET status = 'cold', followup_due_at = NULL WHERE id = %s AND user_id = %s;",
+                            "UPDATE prospects SET status = 'cold', followup_due_at = NULL WHERE id = %s AND user_id = %s "
+                            "AND outreach_status = 'awaiting_reply';",
                             (lead["id"], user_id),
                         )
+                        if cur.rowcount == 0:
+                            continue
                         emit_ui_log(
                             f"🧊 [FOLLOWUP] Sequence ended, marked cold: {lead['business_name']}"
                         )
@@ -125,10 +130,12 @@ def run_followup_sweep(user_id=None):
                             """
                             UPDATE prospects
                             SET ai_pitch_draft = %s, status = %s, followup_due_at = %s
-                            WHERE id = %s AND user_id = %s;
+                            WHERE id = %s AND user_id = %s AND outreach_status = 'awaiting_reply';
                             """,
                             (draft, next_status, next_due, lead["id"], user_id),
                         )
+                        if cur.rowcount == 0:
+                            continue
                         emit_ui_log(
                             f"📩 [FOLLOWUP] Staged '{next_status}' draft for: {lead['business_name']}"
                         )

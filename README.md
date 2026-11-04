@@ -14,7 +14,7 @@ instead of failing on an unexpected HTML response.
 | `/overview` | Signed-in Overview |
 | `/register` | Create an account (open registration) |
 | `/login` | Sign in |
-| `/logout` | Sign out (POST) |
+| `/logout` | Sign out and return to the public home page (POST) |
 | `/terms`, `/privacy`, `/refund-policy`, `/support` | Public service policies and support information |
 | `/api/session` | The signed-in account, or `null` |
 
@@ -289,14 +289,19 @@ neither can add extra headers.
 ## Workspace
 
 Visitors at `/` see the public product home page, with links to sign in or
-create an account. Its Light / Dark / System appearance control shares the
-workspace's saved theme preference. The hero globe is illustrative, not live
+create an account. Its icon-only appearance button toggles Light / Dark and shares
+the workspace's saved theme preference. Until toggled, an existing System
+preference continues to follow the device theme. The hero globe is illustrative, not live
 account data or a claim of provider coverage. Signed-in users at `/` still see their
 Overview; `/overview` also opens it directly and requires authentication.
 The home page describes all five local discovery sources (Google Maps, Yelp,
 Facebook, Instagram, and LinkedIn company pages), hiring signals from Google
 Jobs and LinkedIn Jobs, and links to the Plans & Pricing page. The free-trial
 CTA leads to registration; email verification starts the 7-day, 30-credit trial.
+Home-page section links scroll smoothly unless reduced motion is preferred.
+The sign-in page pairs a vertically halved, rotating hero globe at the panel divider with a right-hand login
+form on desktop and a stacked layout on mobile. It shares the hero's pause,
+reduced-motion, and static-fallback behavior; other account forms stay unchanged.
 
 The public navigation links to a separate **Plans & Pricing** page at `/plans`,
 available with or without signing in and using the same saved theme preference.
@@ -708,6 +713,8 @@ choose Light or Dark. The browser's theme color follows that selection.
 The workspace account menu shows your signed-in email and links to account
 settings, password changes, and sign-out. Billing and User Management appear
 under More when available for your plan.
+The signed-in header uses a compact sun/moon theme toggle and a bordered account
+control with name-based initials; account actions remain in its dropdown.
 
 CSV export is available only when your account has at least one prospect; it
 stays disabled in the Job Leads view. Billing dates use the same locale-aware
@@ -727,6 +734,25 @@ list, with a count next to it:
 
 **All Active** hides archived leads. Pick **Archived** in Status to see them.
 Source/industry/service counts follow the selected status.
+
+Both lead tables have an outreach **Update** action. Track **Not contacted →
+Awaiting reply → Replied → Successful / Failed**, correct earlier selections,
+or reopen a lead. Quick actions such as **Mark email sent** only record activity;
+they never send mail. A successful in-app prospect email send automatically
+records Awaiting reply. Job Leads currently uses manual tracking.
+
+Each update can include an optional note (up to 2,000 characters). Status changes
+and notes are saved as dated, owner-private history, independent of discovery,
+draft, and archive statuses. The dialog shows the latest 100 updates; all events
+remain stored for later analytics. **Outreach status** filters show counts of
+non-archived leads for each outcome. Replies and closed outcomes stop automatic
+prospect follow-up staging. No analytics dashboard is added yet.
+Prospect CSV exports include the current `outreach_status`. If a save cannot be
+confirmed after a connection/server failure, retry is disabled to avoid duplicate
+notes; copy the retained note, then reopen tracking to check the saved history.
+Startup migrations add `outreach_status` to both lead tables and create
+`outreach_events`; pre-existing sent leads start as Awaiting reply without
+inventing historical events. Restart the production service after deploying.
 
 Discovery keeps each form's values when switching search modes. After a search
 finishes, it opens the corresponding results page. Form values reset on a full

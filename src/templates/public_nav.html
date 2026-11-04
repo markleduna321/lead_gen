@@ -7,11 +7,15 @@
             <a href="{{ url_for('plans') }}" {% if request.endpoint == 'plans' %}aria-current="page"{% endif %}>Plans &amp; Pricing</a>
         </div>
         <div class="home-nav-actions">
+            {% if request.endpoint == 'home' %}
+            {% include "theme_toggle.html" %}
+            {% else %}
             <label class="home-theme" for="theme-preference">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2"/></svg>
                 <span class="home-sr-only">Appearance</span>
                 <select id="theme-preference"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select>
             </label>
+            {% endif %}
             <a class="home-sign-in" href="{{ url_for('sign_in') }}">Sign in</a>
             <a class="home-button home-nav-cta" href="{{ url_for('register') }}">Get started <span aria-hidden="true">&rarr;</span></a>
         </div>

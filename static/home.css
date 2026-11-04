@@ -1,3 +1,6 @@
+@media (prefers-reduced-motion: no-preference) {
+    html.home-page { scroll-behavior: smooth; }
+}
 .home-body { overflow-x: clip; }
 .home-container { width: min(1200px, calc(100% - 96px)); margin-inline: auto; }
 .home-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

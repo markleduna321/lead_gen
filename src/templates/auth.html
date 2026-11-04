@@ -14,13 +14,42 @@
     <script src="{{ url_for('static', filename='workspace.js') }}"></script>
     <link rel="stylesheet" href="{{ url_for('static', filename='tailwind.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+    {% if mode == 'login' %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='home.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='login.css') }}">
+    <script type="module" src="{{ url_for('static', filename='globe/globe.js') }}"></script>
+    {% endif %}
     {% if mode in ('register', 'login') %}<script src="{{ url_for('static', filename='auth.js') }}" defer></script>{% endif %}
     {% if mode == 'reset' %}<script src="{{ url_for('static', filename='account_email.js') }}" defer></script>{% endif %}
 </head>
 <body data-page="auth" data-auth-mode="{{ mode }}" class="auth-body">
-    <main class="auth-shell" id="main-content">
+    <main class="auth-shell{% if mode == 'login' %} login-shell{% endif %}" id="main-content">
+        {% if mode == 'login' %}
+        <section class="login-story" aria-labelledby="login-story-title">
+            <a class="brand login-brand" href="/"><img class="brand-logo" src="{{ url_for('static', filename='diskubre-logo.png') }}" alt=""><span>diskubre<small>LEAD WORKSPACE</small></span></a>
+            <div class="login-story-copy">
+                <p class="login-eyebrow">LESS SEARCHING. MORE CONNECTING.</p>
+                <h2 id="login-story-title">A world of possibility.<br><em>Your next connection.</em></h2>
+                <p>Discover businesses. Follow hiring signals. Turn a promising lead into a meaningful introduction.</p>
+            </div>
+            <div class="login-globe-stage">
+                <figure id="hero-globe" class="home-globe login-globe" data-state="loading"
+                    data-asset-base="{{ url_for('static', filename='globe/') }}"
+                    aria-label="Illustrative rotating globe. This is not live lead coverage.">
+                    <img class="home-globe-fallback" src="{{ url_for('static', filename='globe/globe-fallback.png') }}" width="600" height="600" alt="">
+                    <canvas class="home-globe-canvas" aria-hidden="true"></canvas>
+                    <figcaption class="auth-visually-hidden"><span data-globe-caption>Global possibilities. One focused workspace.</span> Illustrative animation, not live discovery data.</figcaption>
+                    <button type="button" class="home-globe-pause" aria-pressed="false" hidden>Pause globe</button>
+                </figure>
+            </div>
+        </section>
+        <div class="login-form-panel">
+            <a class="login-back" href="{{ url_for('home') }}"><span aria-hidden="true">&larr;</span> Back to home</a>
+        {% endif %}
         <section class="auth-card">
+            {% if mode != 'login' %}
             <a class="brand" href="/"><img class="brand-logo" src="{{ url_for('static', filename='diskubre-logo.png') }}" alt=""><span>diskubre<small>LEAD WORKSPACE</small></span></a>
+            {% endif %}
 
             {% if mode == 'register' %}
             <h1>Create your account</h1>
@@ -32,8 +61,9 @@
             <h1>Choose a new password</h1>
             <p class="auth-subtitle">Resetting signs you out on every device.</p>
             {% else %}
-            <h1>Welcome back</h1>
-            <p class="auth-subtitle">Sign in to reach your lead workspace.</p>
+            <p class="login-eyebrow">YOUR NEXT CHAPTER</p>
+            <h1>Welcome back.</h1>
+            <p class="auth-subtitle">Good connections are worth coming back to. Sign in to pick up where you left off.</p>
             {% endif %}
 
             {% if error %}
@@ -133,6 +163,10 @@
             <p class="auth-legal">By creating an account, you agree to the <a href="{{ url_for('terms') }}">Terms of Service</a> and acknowledge the <a href="{{ url_for('privacy') }}">Privacy Policy</a>. Need help? Visit <a href="{{ url_for('support_page') }}">Contact &amp; Support</a>.</p>
             {% endif %}
         </section>
+        {% if mode == 'login' %}
+            <p class="login-footer">Your workspace. Your leads. Your next move.<br><a href="{{ url_for('privacy') }}">Privacy</a><span aria-hidden="true"> &middot; </span><a href="{{ url_for('support_page') }}">Support</a></p>
+        </div>
+        {% endif %}
     </main>
 </body>
 </html>

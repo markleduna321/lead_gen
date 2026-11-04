@@ -138,14 +138,22 @@ body[data-page="billing"] button:disabled { opacity: .5; }
 .breadcrumb { display: flex; align-items: center; gap: 15px; color: var(--subtle); font-size: var(--type-caption); }
 .breadcrumb strong { color: var(--text); font-size: var(--type-body); font-weight: 700; }
 .topbar-right { display: flex; align-items: center; gap: 16px; }
+.theme-toggle { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; padding: 0; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--muted); cursor: pointer; }
+.theme-toggle:hover { background: var(--surface-hover); color: var(--accent); }
+.theme-toggle .theme-icon-sun { display: none; }
+:root[data-theme="dark"] .theme-toggle .theme-icon-sun { display: block; }
+:root[data-theme="dark"] .theme-toggle .theme-icon-moon { display: none; }
 .profile-dot { border: 3px solid var(--canvas); background: var(--accent-soft); color: var(--accent); border-radius: 50%; width: 34px; height: 34px; display: grid; place-content: center; font-size: var(--type-caption); font-weight: 700; }
 .account-menu { position: relative; }
-.account-menu-trigger { display: flex; align-items: center; gap: 9px; min-height: 44px; padding: 4px 8px; border: 1px solid transparent; border-radius: 10px; color: var(--text); list-style: none; cursor: pointer; }
+.account-menu-trigger { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 6px 12px 6px 8px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); color: var(--text); list-style: none; cursor: pointer; }
 .account-menu-trigger::-webkit-details-marker { display: none; }
 .account-menu-trigger:hover, .account-menu[open] .account-menu-trigger { background: var(--surface-soft); border-color: var(--border); }
-.account-menu-trigger .profile-dot { flex-shrink: 0; }
-.account-menu-trigger-name { max-width: 180px; overflow: hidden; color: var(--muted); font-size: var(--type-caption); text-overflow: ellipsis; white-space: nowrap; }
-.account-menu-chevron { color: var(--subtle); font-size: 18px; line-height: 1; }
+.account-menu-trigger .profile-dot { flex-shrink: 0; width: 34px; height: 34px; border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent); border-radius: 10px; }
+.account-menu-trigger-name { display: grid; gap: 2px; min-width: 0; max-width: 180px; text-align: left; }
+.account-menu-caption { color: var(--subtle); font-size: var(--type-caption); line-height: 1.2; }
+.account-menu-trigger-name strong { overflow: hidden; color: var(--text); font-size: var(--type-body-small); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.account-menu-chevron { flex-shrink: 0; color: var(--subtle); }
+.account-menu[open] .account-menu-chevron { transform: rotate(180deg); }
 .account-menu-panel { position: absolute; z-index: 60; top: calc(100% + 8px); right: 0; display: grid; gap: 4px; width: min(300px, calc(100vw - 32px)); padding: 8px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); box-shadow: 0 12px 32px #152d3a20; }
 .account-menu-identity { display: grid; gap: 2px; padding: 10px; overflow: hidden; border-bottom: 1px solid var(--border); }
 .account-menu-identity strong, .account-menu-identity span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -441,6 +449,17 @@ body[data-page="discovery"] #discovery-panel-local { grid-template-columns: minm
 .verify-banner .secondary-button { white-space: nowrap; }
 
 /* --- Settings ------------------------------------------------------------- */
+.outreach-action { display: block; margin-top: 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--accent); font-size: var(--type-caption); cursor: pointer; white-space: nowrap; }
+.outreach-overlay { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 20px; background: #0008; }
+.outreach-overlay.hidden { display: none; }
+.outreach-card { width: min(100%, 560px); max-height: 90dvh; overflow-y: auto; padding: 24px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+.outreach-card header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.outreach-card form { display: grid; gap: 10px; margin-block: 20px; }
+.outreach-quick-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.outreach-card textarea, .outreach-card select { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 8px; color: var(--text); background: var(--surface-soft); }
+.outreach-card li { padding-block: 12px; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+.outreach-card small { display: block; color: var(--muted); margin-top: 4px; }
+.outreach-card li p { white-space: pre-wrap; }
 .settings-grid { display: grid; gap: 22px; max-width: 760px; }
 .settings-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 26px 26px 24px; box-shadow: var(--shadow); }
 .settings-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; margin-bottom: 18px; }

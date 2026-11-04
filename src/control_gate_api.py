@@ -332,6 +332,8 @@ def run_startup_migrations():
                 from payments import SCHEMA as PAYMENT_SCHEMA
                 cur.execute(PAYMENT_SCHEMA)
                 cur.execute(rate_limit.SCHEMA)
+                from outreach import SCHEMA as OUTREACH_SCHEMA
+                cur.execute(OUTREACH_SCHEMA)
             conn.commit()
     except Exception as e:
         print(f"[STARTUP] Migration warning (non-fatal): {e}", file=sys.stderr)
@@ -522,7 +524,7 @@ def register():
 def sign_out():
     from auth import sign_out_session
     sign_out_session()
-    return redirect(url_for('sign_in'))
+    return redirect(url_for('home'))
 
 
 @app.route('/api/account/password', methods=['POST'])
@@ -1133,6 +1135,14 @@ def get_review_queue():
     scope_where = " AND ".join(conditions)
     scope_params = list(query_params)
 
+    outreach_filter = request.args.get('outreach_status', '').strip()
+    if outreach_filter:
+        from outreach import STATUSES
+        if outreach_filter not in STATUSES:
+            return jsonify(status="error", message="Choose a valid outreach status."), 400
+        conditions.append("outreach_status = %s")
+        query_params.append(outreach_filter)
+
     # Search every text field the prospect table and inspector show.
     if search_query:
         conditions.append(
@@ -1176,7 +1186,7 @@ def get_review_queue():
                suggested_angle, subject_line, ai_pitch_draft,
                phone, email, formatted_address,
                website_url, profile_url, google_place_id, screenshot_path,
-               followup_due_at, status, last_discovered_at,
+               followup_due_at, status, outreach_status, last_discovered_at,
                job_via, job_salary, job_schedule, job_description, job_apply_link
         FROM prospects
         {where_clause}
@@ -1194,6 +1204,9 @@ def get_review_queue():
         UNION ALL
         SELECT 'status', status, status, COUNT(*)
         FROM prospects WHERE user_id = %s AND COALESCE(status, '') <> '' GROUP BY status
+        UNION ALL
+        SELECT 'outreach', outreach_status, outreach_status, COUNT(*)
+        FROM prospects WHERE user_id = %s AND status != 'rejected' GROUP BY outreach_status
         ORDER BY 1, 4 DESC, 3;
     """
 
@@ -1207,7 +1220,7 @@ def get_review_queue():
             records = cur.fetchall()
 
             filter_options = read_filter_options(
-                cur, facet_query, scope_params + scope_params + [active_user_id()])
+                cur, facet_query, scope_params + scope_params + [active_user_id(), active_user_id()])
 
             import r2_storage
             for record in records:
@@ -1277,7 +1290,7 @@ def dispatch_lead_pitch(lead_id):
     with psycopg2.connect(DB_DSN, cursor_factory=RealDictCursor) as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT business_name, status, subject_line FROM prospects WHERE id = %s AND user_id = %s;",
+                "SELECT business_name, status, subject_line FROM prospects WHERE id = %s AND user_id = %s FOR UPDATE;",
                 (lead_id, active_user_id())
             )
             res = cur.fetchone()
@@ -1289,6 +1302,7 @@ def dispatch_lead_pitch(lead_id):
             stored_subject = res.get('subject_line') or ''
 
             if current_status == 'sent':
+                conn.commit()
                 from followup_scheduler import schedule_followup
                 schedule_followup(lead_id, 'sent', active_user_id())
                 return jsonify({"status": "success", "message": "Follow-up scheduled. Use the follow-up sweep to stage the draft."})
@@ -1350,6 +1364,8 @@ def dispatch_lead_pitch(lead_id):
                 "UPDATE prospects SET ai_pitch_draft = %s, email = %s, status = %s WHERE id = %s AND user_id = %s;",
                 (final_pitch_text, final_recipient, next_pipeline_status, lead_id, active_user_id())
             )
+            from outreach import record_update
+            record_update(cur, "prospects", lead_id, owner_id, "awaiting_reply", source="email_sent")
             conn.commit()
 
             # Auto-schedule the follow-up timer after a successful send
@@ -1554,6 +1570,14 @@ def get_job_leads():
     scope_where = " AND ".join(conditions)
     scope_params = list(params)
 
+    outreach_filter = request.args.get('outreach_status', '').strip()
+    if outreach_filter:
+        from outreach import STATUSES
+        if outreach_filter not in STATUSES:
+            return jsonify(status="error", message="Choose a valid outreach status."), 400
+        conditions.append("outreach_status = %s")
+        params.append(outreach_filter)
+
     if search_q:
         conditions.append(
             "(company_name ILIKE %s OR job_title ILIKE %s OR COALESCE(email, '') ILIKE %s"
@@ -1583,7 +1607,7 @@ def get_job_leads():
         SELECT id, company_name, job_title, location, lead_type, job_role_signal,
                job_via, job_salary, job_schedule, job_description, job_apply_link,
                website_url, email, suggested_angle, ai_pitch_draft, subject_line,
-               status, source_platform, created_at, updated_at, last_discovered_at,
+               status, outreach_status, source_platform, created_at, updated_at, last_discovered_at,
                job_details, contact_evidence
         FROM job_leads
         {where}
@@ -1600,6 +1624,9 @@ def get_job_leads():
         UNION ALL
         SELECT 'status', status, status, COUNT(*)
         FROM job_leads WHERE user_id = %s AND COALESCE(status, '') <> '' GROUP BY status
+        UNION ALL
+        SELECT 'outreach', outreach_status, outreach_status, COUNT(*)
+        FROM job_leads WHERE user_id = %s AND status != 'rejected' GROUP BY outreach_status
         ORDER BY 1, 4 DESC, 3;
     """
 
@@ -1610,7 +1637,7 @@ def get_job_leads():
             cur.execute(data_sql, tuple(params) + (per_page, offset))
             records = cur.fetchall()
             filter_options = read_filter_options(
-                cur, facet_sql, scope_params + scope_params + [active_user_id()])
+                cur, facet_sql, scope_params + scope_params + [active_user_id(), active_user_id()])
 
     return jsonify({
         "status":       "success",
@@ -1637,6 +1664,44 @@ def reject_job_lead(lead_id):
                 return jsonify({"status": "error", "message": "That job lead is not in your workspace."}), 404
             conn.commit()
     return jsonify({"status": "success", "message": "Job lead rejected."})
+
+
+@app.route('/api/outreach/<kind>/<int:lead_id>', methods=['GET', 'POST'])
+def lead_outreach(kind, lead_id):
+    from outreach import TABLES, record_update, validate_update
+    if kind not in TABLES:
+        return jsonify(status="error", message="Unknown lead type."), 404
+    owner = active_user_id()
+    update = None
+    if request.method == 'POST':
+        try:
+            update = validate_update(request.get_json(silent=True))
+        except ValueError as error:
+            return jsonify(status="error", message=str(error)), 400
+    table = TABLES[kind]
+    with psycopg2.connect(DB_DSN, cursor_factory=RealDictCursor) as conn:
+        with conn.cursor() as cur:
+            if update:
+                status, expected, note = update
+                result = record_update(cur, kind, lead_id, owner, status, note, expected=expected)
+                if result == "missing":
+                    return jsonify(status="error", message="That lead is not in your workspace."), 404
+                if result == "conflict":
+                    return jsonify(status="error", message="Outreach changed elsewhere. Close and reopen tracking before retrying."), 409
+            cur.execute(f"SELECT outreach_status FROM {table} WHERE id = %s AND user_id = %s",
+                        (lead_id, owner))
+            lead = cur.fetchone()
+            if not lead:
+                return jsonify(status="error", message="That lead is not in your workspace."), 404
+            column = "prospect_id" if kind == "prospects" else "job_lead_id"
+            cur.execute(f"SELECT id, previous_status, status, note, source, created_at "
+                        f"FROM outreach_events WHERE {column} = %s AND user_id = %s "
+                        "ORDER BY id DESC LIMIT 100", (lead_id, owner))
+            events = cur.fetchall()
+            for event in events:
+                event["created_at"] = event["created_at"].isoformat()
+        conn.commit()
+    return jsonify(status="success", outreach_status=lead["outreach_status"], history=events)
 
 
 @app.route('/api/job-leads/<int:lead_id>/update-email', methods=['POST'])
@@ -1693,7 +1758,7 @@ def export_leads_csv():
         'rating', 'review_count', 'lead_score', 'site_quality_score',
         'email', 'phone', 'formatted_address', 'website_url', 'profile_url',
         'subject_line', 'ai_pitch_draft', 'suggested_angle',
-        'status', 'followup_due_at', 'created_at'
+        'status', 'outreach_status', 'followup_due_at', 'created_at'
     ]
     col_str = ', '.join(columns)
     query = f"SELECT {col_str} FROM prospects WHERE user_id = %s"

@@ -77,15 +77,16 @@
         <header class="topbar">
             <div class="breadcrumb"><button id="menu-toggle" class="menu-toggle" data-click-action="toggleSidebar" aria-controls="sidebar" aria-expanded="false" aria-label="Open navigation">&#9776;</button><strong>{{ page_title }}</strong></div>
             <div class="topbar-right">
-                <label class="theme-setting" for="theme-preference"><span>Appearance</span><select id="theme-preference"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
+                {% include "theme_toggle.html" %}
                 {% set u_email = current_user.get('email') if (current_user and current_user.get is defined) else (current_user.email if (current_user and current_user.email is defined) else '') %}
                 {% set u_name = current_user.get('display_name') if (current_user and current_user.get is defined) else (current_user.display_name if (current_user and current_user.display_name is defined) else '') %}
                 {% if current_user %}
                 <details class="account-menu" id="account-menu">
                     <summary class="account-menu-trigger" aria-label="Account menu for {{ u_email }}">
-                        <span class="profile-dot" aria-hidden="true">{{ (u_name or u_email or 'AT')[:2]|upper }}</span>
-                        <span class="account-menu-trigger-name">{{ u_name or u_email }}</span>
-                        <span class="account-menu-chevron" aria-hidden="true">⌄</span>
+                        {% set name_parts = (u_name or '').split() %}
+                        <span class="profile-dot" aria-hidden="true">{% if name_parts %}{{ name_parts[0][0]|upper }}{% if name_parts|length > 1 %}{{ name_parts[-1][0]|upper }}{% endif %}{% else %}{{ (u_email or 'DK')[:2]|upper }}{% endif %}</span>
+                        <span class="account-menu-trigger-name"><span class="account-menu-caption">Your account</span><strong>{{ u_name or u_email }}</strong></span>
+                        <svg class="account-menu-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
                     </summary>
                     <div class="account-menu-panel">
                         <div class="account-menu-identity">
