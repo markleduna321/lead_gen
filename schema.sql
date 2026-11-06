@@ -205,3 +205,29 @@ CREATE TABLE IF NOT EXISTS outreach_events (
 );
 CREATE INDEX IF NOT EXISTS idx_outreach_prospect ON outreach_events(user_id, prospect_id, id DESC);
 CREATE INDEX IF NOT EXISTS idx_outreach_job ON outreach_events(user_id, job_lead_id, id DESC);
+
+-- Call logging: events record channel/outcome/time; leads keep a call summary.
+ALTER TABLE outreach_events ADD COLUMN IF NOT EXISTS channel TEXT;
+UPDATE outreach_events SET channel = CASE WHEN source = 'email_sent' THEN 'email' ELSE 'manual' END
+    WHERE channel IS NULL;
+ALTER TABLE outreach_events ALTER COLUMN channel SET DEFAULT 'manual';
+ALTER TABLE outreach_events ALTER COLUMN channel SET NOT NULL;
+ALTER TABLE outreach_events ADD COLUMN IF NOT EXISTS call_outcome TEXT;
+ALTER TABLE outreach_events ADD COLUMN IF NOT EXISTS callback_at TIMESTAMPTZ;
+ALTER TABLE outreach_events ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE outreach_events ADD COLUMN IF NOT EXISTS occurred_at TIMESTAMPTZ;
+UPDATE outreach_events SET occurred_at = created_at WHERE occurred_at IS NULL;
+ALTER TABLE outreach_events ALTER COLUMN occurred_at SET DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE outreach_events ALTER COLUMN occurred_at SET NOT NULL;
+ALTER TABLE prospects ADD COLUMN IF NOT EXISTS call_attempts INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE prospects ADD COLUMN IF NOT EXISTS last_called_at TIMESTAMPTZ;
+ALTER TABLE prospects ADD COLUMN IF NOT EXISTS callback_at TIMESTAMPTZ;
+ALTER TABLE prospects ADD COLUMN IF NOT EXISTS call_phone TEXT;
+ALTER TABLE prospects ADD COLUMN IF NOT EXISTS phone_invalid BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE job_leads ADD COLUMN IF NOT EXISTS call_attempts INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE job_leads ADD COLUMN IF NOT EXISTS last_called_at TIMESTAMPTZ;
+ALTER TABLE job_leads ADD COLUMN IF NOT EXISTS callback_at TIMESTAMPTZ;
+ALTER TABLE job_leads ADD COLUMN IF NOT EXISTS call_phone TEXT;
+ALTER TABLE job_leads ADD COLUMN IF NOT EXISTS phone_invalid BOOLEAN NOT NULL DEFAULT FALSE;
+CREATE INDEX IF NOT EXISTS idx_prospects_callback ON prospects(user_id, callback_at) WHERE callback_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_job_leads_callback ON job_leads(user_id, callback_at) WHERE callback_at IS NOT NULL;

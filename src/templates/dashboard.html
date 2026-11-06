@@ -5,9 +5,13 @@
         <section class="outreach-card">
             <header><h2 id="outreach-title">Track outreach</h2><button type="button" id="outreach-close" class="secondary-button" aria-label="Close outreach tracking">Close</button></header>
             <p id="outreach-lead-name"></p>
-            <p class="settings-hint">Tracking only. These actions do not send email. You can correct a status or reopen outreach at any time.</p>
             <p id="outreach-message" role="status" aria-live="polite"></p>
-            <form id="outreach-form">
+            <div class="outreach-tabs" role="tablist" aria-label="Outreach actions">
+                <button type="button" role="tab" id="outreach-tab-status" aria-controls="outreach-form" aria-selected="true">Update status</button>
+                <button type="button" role="tab" id="outreach-tab-call" aria-controls="outreach-call-form" aria-selected="false" tabindex="-1">Log call</button>
+            </div>
+            <form id="outreach-form" role="tabpanel" aria-labelledby="outreach-tab-status">
+                <p class="settings-hint">Tracking only. These actions do not send email. You can correct a status or reopen outreach at any time.</p>
                 <label for="outreach-next-status">Outreach status</label>
                 <select id="outreach-next-status" required>
                     <option value="not_contacted">Not contacted / Reopen</option>
@@ -25,6 +29,39 @@
                     <button type="button" class="secondary-button" data-outreach-status="failed">Failed</button>
                 </div>
                 <button type="submit" id="outreach-save" class="primary-button">Save status / note</button>
+            </form>
+            <form id="outreach-call-form" class="hidden" role="tabpanel" aria-labelledby="outreach-tab-call">
+                <div class="outreach-phone">
+                    <div>
+                        <strong id="outreach-phone-display">No number saved</strong>
+                        <small id="outreach-phone-source"></small>
+                    </div>
+                    <a id="outreach-call-link" class="secondary-button hidden" href="#">Call</a>
+                    <button type="button" id="outreach-copy-phone" class="secondary-button hidden">Copy number</button>
+                </div>
+                <p class="settings-hint">Calling from a desk phone, mobile, or other dialer? Dial there, then log the result here. Tapping Call only opens this device's dialer and records nothing.</p>
+                <label for="outreach-call-phone">Number called <span class="settings-optional">(optional)</span></label>
+                <input id="outreach-call-phone" type="tel" maxlength="40" autocomplete="off" inputmode="tel">
+                <fieldset id="outreach-call-outcomes">
+                    <legend>How did the call go?</legend>
+                    <label><input type="radio" name="outreach-call-outcome" value="no_answer"> No answer <small>Status unchanged</small></label>
+                    <label><input type="radio" name="outreach-call-outcome" value="voicemail"> Left voicemail <small>Not contacted → Awaiting reply</small></label>
+                    <label><input type="radio" name="outreach-call-outcome" value="connected"> Spoke with them <small>Moves to Replied</small></label>
+                    <label><input type="radio" name="outreach-call-outcome" value="callback_requested"> Callback requested <small>Moves to Replied</small></label>
+                    <label><input type="radio" name="outreach-call-outcome" value="interested"> Interested / meeting booked <small>Sets Successful</small></label>
+                    <label><input type="radio" name="outreach-call-outcome" value="not_interested"> Not interested <small>Sets Failed</small></label>
+                    <label><input type="radio" name="outreach-call-outcome" value="wrong_number"> Wrong or invalid number <small>Status unchanged; number flagged</small></label>
+                </fieldset>
+                <div id="outreach-callback-row" class="hidden">
+                    <label for="outreach-callback-at">Callback date and time <span class="settings-optional">(optional)</span></label>
+                    <input id="outreach-callback-at" type="datetime-local">
+                </div>
+                <label for="outreach-call-time">When did you call?</label>
+                <input id="outreach-call-time" type="datetime-local" required>
+                <label for="outreach-call-note">Optional note</label>
+                <textarea id="outreach-call-note" rows="3" maxlength="2000" placeholder="What was discussed, who you spoke with, next steps"></textarea>
+                <p class="settings-hint">Calls only move status forward. Use Update status to correct it.</p>
+                <button type="submit" id="outreach-call-save" class="primary-button">Save call</button>
             </form>
             <h3>Outreach history</h3>
             <p class="settings-hint">Latest 100 updates, newest first. Earlier updates remain stored for analytics.</p>
@@ -153,6 +190,7 @@
                 <div class="text-xs text-slate-400 space-y-1">
                     <p id="job-modal-contact-status"></p>
                     <p id="job-modal-contacts" class="whitespace-pre-wrap break-words"></p>
+                    <button type="button" data-click-action="openCallFromProfile" class="outreach-log-call secondary-button">Log call</button>
                     <div id="job-modal-contact-sources" class="flex flex-col gap-1 text-emerald-400"></div>
                     <p>Public-evidence matching does not verify legal identity, branch ownership, hiring eligibility, or mailbox deliverability.</p>
                 </div>
@@ -203,6 +241,7 @@
                     <label class="text-xs font-bold uppercase tracking-wider text-slate-500 block mb-0.5">Public
                         Maps Phone Number</label>
                     <p id="profile-phone" class="text-slate-300 font-mono"></p>
+                    <button type="button" data-click-action="openCallFromProfile" class="outreach-log-call secondary-button">Log call</button>
                 </div>
                 <div>
                     <label class="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-1">Company
@@ -612,6 +651,9 @@
                             <select id="filter-outreach" data-change-action="handleFilterChange" aria-label="Outreach status">
                                 <option value="">All outreach</option>
                             </select>
+                            <select id="filter-contact" data-change-action="handleFilterChange" aria-label="Contact activity">
+                                <option value="">All contact activity</option>
+                            </select>
 
                             <select id="filter-sort" data-change-action="handleFilterChange" aria-label="Sort results"
                                 class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-slate-300 focus:outline-none focus:border-slate-500 cursor-pointer">
@@ -781,6 +823,8 @@
             followup_1: 'Follow-Up 1', followup_2: 'Follow-Up 2', sent_followup_1: 'Follow-Up Sent',
             cold: 'Cold', closed_won: 'Closed Won', rejected: 'Archived'
         };
+        const contactActivityLabels = {called: 'Called', not_called: 'Not called',
+            callback_due: 'Callback due', invalid_number: 'Invalid number'};
         // Each queue filters on its own fields. The three selects are shared, so
         // this maps every select to the facet and request parameter for the view.
         const queueFilterConfig = {
@@ -1056,6 +1100,7 @@
                 params.set(config.type.param, activeLeadTypeFilter);
                 params.set(config.status.param, activeStatusFilter);
                 params.set('outreach_status', document.getElementById('filter-outreach').value);
+                params.set('contact_activity', document.getElementById('filter-contact').value);
                 const res = await fetch(`${endpoint}?${params}`);
                 const data = await res.json();
                 if (requestId !== queueRequestId) return;
@@ -1112,6 +1157,7 @@
             document.getElementById('filter-lead-type').value = '';
             document.getElementById('filter-status').value = '';
             document.getElementById('filter-outreach').value = '';
+            document.getElementById('filter-contact').value = '';
             document.getElementById('filter-sort').value = activeSortBy;
             renderQueueFilterOptions();
             document.getElementById('filter-sort').querySelector('option[value="lead_score"]').hidden = view === 'jobs';
@@ -1222,6 +1268,9 @@
             const outreach = document.getElementById('filter-outreach');
             renderFilterSelect(outreach, 'All outreach', facet('outreach'), outreach.value,
                 option => outreachLabel(option.value));
+            const contact = document.getElementById('filter-contact');
+            renderFilterSelect(contact, 'All contact activity', facet('contact'), contact.value,
+                option => contactActivityLabels[option.value] || option.value);
         }
 
         function handleFilterChange() {
@@ -1240,6 +1289,7 @@
             document.getElementById('filter-lead-type').value = '';
             document.getElementById('filter-status').value    = '';
             document.getElementById('filter-outreach').value = '';
+            document.getElementById('filter-contact').value = '';
             const defaultSort = 'date_desc';
             document.getElementById('filter-sort').value      = defaultSort;
             document.getElementById('table-search-input').value = '';
@@ -1255,6 +1305,7 @@
         function updateFilterBadge() {
             const isFiltered = activeSourceFilter || activeLeadTypeFilter ||
                                document.getElementById('filter-outreach').value ||
+                               document.getElementById('filter-contact').value ||
                                activeStatusFilter || searchFilterString ||
                                activeSortBy !== 'date_desc';
             document.getElementById('btn-clear-filters').classList.toggle('hidden', !isFiltered);
@@ -1394,13 +1445,26 @@
             return Object.hasOwn(labels, status) ? labels[status] : 'Not contacted';
         }
 
+        function outreachSummary(lead) {
+            const parts = [outreachLabel(lead.outreach_status)];
+            const calls = Number(lead.call_attempts) || 0;
+            if (lead.phone_invalid) parts.push('Invalid number');
+            if (lead.callback_at) {
+                const due = new Date(lead.callback_at);
+                parts.push(`${due <= new Date() ? 'Callback due' : 'Callback'} ${new Intl.DateTimeFormat(undefined,
+                    {month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'}).format(due)}`);
+            } else if (calls) parts.push(`${calls} call${calls === 1 ? '' : 's'}`);
+            return parts.join(' · ');
+        }
+
         function appendOutreachAction(cell, lead) {
             const button = document.createElement('button');
             button.type = 'button';
             button.className = 'outreach-action';
             button.id = `outreach-${activeQueueView}-${lead.id}`;
-            button.textContent = `${outreachLabel(lead.outreach_status)} · Update`;
-            button.setAttribute('aria-label', `Track outreach for ${lead.business_name || lead.company_name}`);
+            const summary = outreachSummary(lead);
+            button.textContent = `${summary} · Update`;
+            button.setAttribute('aria-label', `Track outreach for ${lead.business_name || lead.company_name}: ${summary}`);
             button.addEventListener('click', event => {
                 event.stopPropagation();
                 if (!isWorking) window.openOutreachTracker(activeQueueView, lead);
@@ -1725,6 +1789,14 @@
             } catch (err) {
                 showQueueNotice(`${err.message} Your change may not have been saved; check the record before retrying.`, true);
             } finally { setGlobalLock(false); }
+        }
+
+        function openCallFromProfile() {
+            const lead = currentLeads.find(l => l.id === selectedLeadId);
+            if (!lead || isWorking || !window.openOutreachTracker) return;
+            closeAccessibleModal('profile-modal');
+            closeAccessibleModal('job-profile-modal');
+            window.openOutreachTracker(activeQueueView, lead, {tab: 'call'});
         }
 
         function toggleProfileModal(show) {

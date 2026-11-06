@@ -414,7 +414,7 @@ class EmailSettingsRouteTests(unittest.TestCase):
         update = next(params for sql, params in executed if sql.lstrip().upper().startswith("UPDATE"))
         self.assertEqual(update[1], "lead@example.test")
         event = next(params for sql, params in executed if "INSERT INTO outreach_events" in sql)
-        self.assertEqual(event[-3:], ("awaiting_reply", "", "email_sent"))
+        self.assertEqual(event[-4:], ("awaiting_reply", "", "email_sent", "email"))
 
     def test_failed_email_does_not_change_outreach_or_write_history(self):
         response, send, executed = self.dispatch(

@@ -747,12 +747,48 @@ draft, and archive statuses. The dialog shows the latest 100 updates; all events
 remain stored for later analytics. **Outreach status** filters show counts of
 non-archived leads for each outcome. Replies and closed outcomes stop automatic
 prospect follow-up staging. No analytics dashboard is added yet.
-Prospect CSV exports include the current `outreach_status`. If a save cannot be
+Prospect CSV exports include the current `outreach_status`, `call_attempts`,
+`last_called_at`, and `callback_at`. If a save cannot be
 confirmed after a connection/server failure, retry is disabled to avoid duplicate
 notes; copy the retained note, then reopen tracking to check the saved history.
 Startup migrations add `outreach_status` to both lead tables and create
 `outreach_events`; pre-existing sent leads start as Awaiting reply without
 inventing historical events. Restart the production service after deploying.
+
+#### Call logging
+
+The tracking dialog has **Update status** and **Log call** tabs; profiles also
+have a **Log call** button. Calls are logged activity, not a separate status.
+Each call records its outcome, time, number, optional note, and optional
+callback time, and only moves outreach status forward:
+
+| Outcome | Outreach status effect |
+| --- | --- |
+| No answer | Unchanged |
+| Left voicemail | Not contacted → Awaiting reply |
+| Spoke with them / Callback requested | Not contacted or Awaiting reply → Replied |
+| Interested / meeting booked | Successful |
+| Not interested | Failed |
+| Wrong or invalid number | Unchanged; number flagged invalid |
+
+Use **Update status** to correct a status manually. Answered calls stop
+automatic prospect follow-up staging.
+
+Calling from a desk phone, mobile, or another dialer works the same way: dial
+there, then log the result. **Call** only opens this device's `tel:` dialer,
+**Copy number** copies it, and neither records anything; nothing is auto-logged.
+**When did you call?** defaults to now and accepts earlier times (up to a year).
+**Number called** shows the listed number (job-lead numbers are listed,
+unverified); entering a different one saves it as the lead's manual number.
+Reaching someone or dialing a new number clears an invalid-number flag; a
+no-answer does not. Closing a lead (Successful, Failed, Not contacted) clears
+any pending callback.
+
+The table action shows call counts, callbacks, and invalid numbers. The
+**Contact activity** filter offers Called, Not called, Callback due (callback
+time has passed), and Invalid number, with counts. Startup migrations add call
+fields to `outreach_events` and both lead tables, backfilling existing events as
+email/manual; restart the production service after deploying.
 
 Discovery keeps each form's values when switching search modes. After a search
 finishes, it opens the corresponding results page. Form values reset on a full

@@ -460,6 +460,28 @@ body[data-page="discovery"] #discovery-panel-local { grid-template-columns: minm
 .outreach-card li { padding-block: 12px; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
 .outreach-card small { display: block; color: var(--muted); margin-top: 4px; }
 .outreach-card li p { white-space: pre-wrap; }
+.outreach-card .hidden { display: none; }
+.outreach-tabs { display: flex; gap: 4px; margin-top: 16px; border-bottom: 1px solid var(--border); }
+.outreach-tabs [role="tab"] { padding: 10px 14px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--muted); font-weight: 600; cursor: pointer; }
+.outreach-tabs [role="tab"][aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+.outreach-card input[type="tel"], .outreach-card input[type="datetime-local"] { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 8px; color: var(--text); background: var(--surface-soft); }
+.outreach-phone { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-soft); }
+.outreach-phone > div { flex: 1 1 180px; min-width: 0; overflow-wrap: anywhere; }
+.outreach-phone strong { font-family: ui-monospace, monospace; }
+.outreach-phone-invalid strong { color: #ef4444; text-decoration: line-through; }
+.outreach-phone a { text-decoration: none; }
+.outreach-card fieldset { display: grid; gap: 6px; margin: 0; padding: 12px; border: 1px solid var(--border); border-radius: 12px; }
+.outreach-card legend { padding-inline: 4px; font-weight: 600; }
+.outreach-card fieldset label { display: grid; grid-template-columns: auto 1fr; column-gap: 8px; align-items: center; padding: 6px; border-radius: 8px; cursor: pointer; }
+.outreach-card fieldset label:has(input:checked) { background: var(--surface-soft); }
+.outreach-card fieldset label small { grid-column: 2; margin-top: 0; }
+.outreach-log-call { margin-top: 6px; }
+@media (max-width: 640px) {
+    .outreach-overlay { padding: 8px; }
+    .outreach-card { padding: 16px; max-height: 96dvh; }
+    .outreach-tabs [role="tab"] { flex: 1; }
+    .outreach-phone a, .outreach-phone button { flex: 1; text-align: center; }
+}
 .settings-grid { display: grid; gap: 22px; max-width: 760px; }
 .settings-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 26px 26px 24px; box-shadow: var(--shadow); }
 .settings-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; margin-bottom: 18px; }

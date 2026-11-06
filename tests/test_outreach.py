@@ -1,5 +1,5 @@
 import contextlib
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import importlib
 import io
 import os
@@ -62,8 +62,74 @@ class OutreachTests(unittest.TestCase):
             self.assertIn("FOR UPDATE", sql)
             self.assertIn("user_id = %s", sql)
             self.assertIn("INSERT INTO outreach_events", sql)
-            self.assertEqual(cur.execute.call_args.args[1][-2:], ("<script>note</script>", "manual"))
+            self.assertEqual(cur.execute.call_args.args[1][-3:], ("<script>note</script>", "manual", "manual"))
             self.assertEqual("followup_due_at = NULL" in sql, kind == "prospects")
+
+    def test_call_validation_covers_outcome_phone_times_and_callbacks(self):
+        now = datetime(2026, 11, 4, 12, tzinfo=timezone.utc)
+        base = {"outcome": "no_answer", "expected_status": "not_contacted"}
+        for extra in ({"outcome": "emailed"}, {"outcome": None}, {"expected_status": "sent"},
+                      {"note": "x" * 2001}, {"phone": "call me"}, {"phone": "123"}, {"phone": "1" * 41},
+                      {"phone": 5551234}, {"occurred_at": "2026-11-04T12:00"},
+                      {"occurred_at": "2026-11-04T12:10:00Z"}, {"occurred_at": "2025-01-01T00:00:00Z"},
+                      {"occurred_at": "yesterday"}, {"callback_at": "2026-11-05T09:00:00Z"},
+                      {"outcome": "callback_requested", "callback_at": "2026-11-04T11:00:00Z"},
+                      {"outcome": "callback_requested", "callback_at": "2028-01-01T00:00:00Z"}):
+            with self.subTest(extra=extra), self.assertRaises(ValueError):
+                outreach.validate_call({**base, **extra}, now=now)
+        self.assertRaises(ValueError, outreach.validate_call, None, now)
+        call = outreach.validate_call({
+            "outcome": "callback_requested", "expected_status": "awaiting_reply", "note": " Ring Friday ",
+            "phone": " +1 (555) 010-2000 ext 4 ", "occurred_at": "2026-11-04T11:30:00Z",
+            "callback_at": "2026-11-06T09:00:00+02:00"}, now=now)
+        self.assertEqual(call["note"], "Ring Friday")
+        self.assertEqual(call["phone"], "+1 (555) 010-2000 ext 4")
+        self.assertEqual(call["occurred_at"], datetime(2026, 11, 4, 11, 30, tzinfo=timezone.utc))
+        self.assertEqual(call["callback_at"], datetime(2026, 11, 6, 7, tzinfo=timezone.utc))
+        self.assertEqual(outreach.validate_call(base, now=now)["occurred_at"], now)
+
+    def test_call_outcomes_only_move_status_forward(self):
+        expected = {
+            ("no_answer", "awaiting_reply"): "awaiting_reply",
+            ("voicemail", "not_contacted"): "awaiting_reply",
+            ("voicemail", "replied"): "replied",
+            ("connected", "awaiting_reply"): "replied",
+            ("connected", "successful"): "successful",
+            ("callback_requested", "not_contacted"): "replied",
+            ("interested", "failed"): "successful",
+            ("not_interested", "replied"): "failed",
+            ("wrong_number", "not_contacted"): "not_contacted",
+        }
+        for (outcome, previous), status in expected.items():
+            with self.subTest(outcome=outcome, previous=previous):
+                cur = MagicMock()
+                cur.fetchone.return_value = {"outreach_status": previous, "phone": "555 0100"}
+                call = {"outcome": outcome, "expected": previous, "note": "", "phone": "",
+                        "occurred_at": datetime(2026, 11, 4, tzinfo=timezone.utc), "callback_at": None}
+                self.assertEqual(outreach.record_call(cur, "prospects", 3, 1, call), "updated")
+                update = cur.execute.call_args_list[1].args
+                self.assertEqual(update[1][0], status)
+                self.assertIn("user_id = %s", update[0])
+                insert = cur.execute.call_args.args
+                self.assertIn("'call', 'call'", insert[0])
+                self.assertEqual(insert[1][2:5], (previous, status, ""))
+                self.assertEqual(insert[1][-2], "555 0100")
+        cur = MagicMock()
+        cur.fetchone.return_value = {"outreach_status": "replied", "phone": None}
+        self.assertEqual(outreach.record_call(cur, "jobs", 3, 1, {**call, "expected": "awaiting_reply"}),
+                         "conflict")
+        self.assertEqual(cur.execute.call_count, 1)
+
+    def test_call_routes_validate_before_opening_database(self):
+        client = signed_in_client(self.api.app)
+        with patch("psycopg2.connect", side_effect=AssertionError("No database expected")):
+            self.assertEqual(client.post("/api/outreach/unknown/1/calls", json={}).status_code, 404)
+            response = client.post("/api/outreach/jobs/1/calls",
+                                   json={"outcome": "texted", "expected_status": "not_contacted"})
+            self.assertEqual(response.status_code, 400)
+            self.assertEqual(response.json["message"], "Choose how the call went.")
+            for path in ("/api/queue", "/api/job-leads"):
+                self.assertEqual(client.get(path + "?contact_activity=invalid").status_code, 400)
 
     def test_routes_validate_before_opening_database(self):
         client = signed_in_client(self.api.app)
@@ -143,6 +209,124 @@ class OutreachDatabaseTests(unittest.TestCase):
                             "THEN 'awaiting_reply' ELSE 'not_contacted' END")
                 cur.execute("UPDATE job_leads SET outreach_status = CASE WHEN id = 1 "
                             "THEN 'not_contacted' ELSE 'awaiting_reply' END")
+                for table in outreach.TABLES.values():
+                    cur.execute(f"UPDATE {table} SET call_attempts = 0, last_called_at = NULL, "
+                                "callback_at = NULL, call_phone = NULL, phone_invalid = FALSE")
+                cur.execute("UPDATE prospects SET phone = '+1 555 0100'")
+                cur.execute("""UPDATE job_leads SET contact_evidence =
+                    '{"phones": [{"phone": "+1 555 0200", "source_url": "https://x.test"}]}'::jsonb""")
+
+    def call_client(self):
+        with (
+            patch.dict(os.environ, {"APP_ENV": "local"}, clear=True),
+            patch("dotenv.load_dotenv"),
+            contextlib.redirect_stderr(io.StringIO()),
+        ):
+            api = importlib.import_module("control_gate_api")
+        return api, signed_in_client(api.app)
+
+    def test_call_log_workflow_persists_counts_callbacks_and_numbers(self):
+        api, client = self.call_client()
+        with patch.object(api, "DB_DSN", self.dsn):
+            for kind, listed, source in (("prospects", "+1 555 0100", "listed"),
+                                         ("jobs", "+1 555 0200", "listed_unverified")):
+                url = f"/api/outreach/{kind}/1"
+                start = client.get(url).json
+                self.assertEqual(start["calls"], {"call_attempts": 0, "last_called_at": None, "callback_at": None,
+                                                  "phone_invalid": False, "phone": listed, "phone_source": source})
+                status = start["outreach_status"]
+
+                def log(outcome, **extra):
+                    response = client.post(url + "/calls", json={
+                        "outcome": outcome, "expected_status": status, **extra})
+                    self.assertEqual(response.status_code, 200, response.json)
+                    return response.json
+
+                data = log("no_answer", occurred_at="2026-01-02T10:00:00Z")
+                self.assertEqual(data["outreach_status"], status)
+                self.assertEqual(data["calls"]["call_attempts"], 1)
+                self.assertEqual(data["history"][0]["channel"], "call")
+                self.assertEqual(data["history"][0]["phone"], listed)
+                first_call = datetime(2026, 1, 2, 10, tzinfo=timezone.utc)
+                self.assertEqual(datetime.fromisoformat(data["history"][0]["occurred_at"]), first_call)
+                data = log("wrong_number", note="Disconnected")
+                self.assertTrue(data["calls"]["phone_invalid"])
+                data = log("no_answer")
+                self.assertTrue(data["calls"]["phone_invalid"], "No answer must not clear the flag")
+                data = log("callback_requested", phone="+1 555 0999", note="Owner asked for Friday")
+                status = data["outreach_status"]
+                self.assertEqual(status, "replied")
+                self.assertEqual(data["calls"]["phone"], "+1 555 0999")
+                self.assertEqual(data["calls"]["phone_source"], "manual")
+                self.assertFalse(data["calls"]["phone_invalid"])
+                self.assertEqual(data["calls"]["call_attempts"], 4)
+                self.assertGreater(datetime.fromisoformat(data["calls"]["last_called_at"]), first_call)
+                with psycopg2.connect(self.dsn) as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(f"UPDATE {outreach.TABLES[kind]} SET callback_at = NOW() - INTERVAL '1 hour' "
+                                    "WHERE id = 1")
+                queue_url = "/api/queue" if kind == "prospects" else "/api/job-leads"
+                queue = client.get(queue_url + "?contact_activity=callback_due")
+                self.assertEqual(queue.status_code, 200, queue.json)
+                self.assertEqual([lead["id"] for lead in queue.json["leads"]], [1])
+                self.assertEqual(queue.json["leads"][0]["call_attempts"], 4)
+                self.assertEqual({o["value"]: o["count"] for o in queue.json["filter_options"]["contact"]},
+                                 {"called": 1, "callback_due": 1})
+                self.assertEqual(client.get(queue_url + "?contact_activity=invalid_number").json["leads"], [])
+                self.assertEqual(client.get(queue_url + "?contact_activity=not_called").json["leads"], [])
+                stale = client.post(url + "/calls", json={"outcome": "connected", "expected_status": "not_contacted"})
+                self.assertEqual(stale.status_code, 409)
+                data = log("interested", note="Booked a meeting")
+                self.assertEqual(data["outreach_status"], "successful")
+                self.assertIsNone(data["calls"]["callback_at"])
+                self.assertEqual(len(data["history"]), 5)
+                self.assertEqual(data["history"][0]["call_outcome"], "interested")
+                self.assertEqual(client.post(f"/api/outreach/{kind}/2/calls", json={
+                    "outcome": "connected", "expected_status": "not_contacted"}).status_code, 404)
+                self.assertEqual(client.post(f"/api/outreach/{kind}/2/calls", json={
+                    "outcome": "connected", "expected_status": "awaiting_reply"}).status_code, 404)
+            with psycopg2.connect(self.dsn, cursor_factory=RealDictCursor) as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT call_attempts FROM prospects WHERE id = 2 UNION ALL "
+                                "SELECT call_attempts FROM job_leads WHERE id = 2")
+                    self.assertEqual([row["call_attempts"] for row in cur.fetchall()], [0, 0])
+                    cur.execute("SELECT COUNT(*) AS n FROM outreach_events")
+                    before = cur.fetchone()["n"]
+                    cur.execute(outreach.SCHEMA)
+                    cur.execute("SELECT COUNT(*) AS n, COUNT(*) FILTER (WHERE channel = 'call') AS calls "
+                                "FROM outreach_events")
+                    self.assertEqual(dict(cur.fetchone()), {"n": before, "calls": before})
+
+    def test_callback_time_and_answered_calls_stop_prospect_followups(self):
+        api, client = self.call_client()
+        with psycopg2.connect(self.dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("UPDATE prospects SET followup_due_at = NOW() + INTERVAL '2 days' WHERE id = 1")
+        with patch.object(api, "DB_DSN", self.dsn):
+            voicemail = client.post("/api/outreach/prospects/1/calls", json={
+                "outcome": "voicemail", "expected_status": "awaiting_reply"}).json
+            self.assertEqual(voicemail["outreach_status"], "awaiting_reply")
+            with psycopg2.connect(self.dsn, cursor_factory=RealDictCursor) as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT followup_due_at FROM prospects WHERE id = 1")
+                    self.assertIsNotNone(cur.fetchone()["followup_due_at"])
+            callback = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(days=2)
+            data = client.post("/api/outreach/prospects/1/calls", json={
+                "outcome": "callback_requested", "expected_status": "awaiting_reply",
+                "callback_at": callback.isoformat()}).json
+            self.assertEqual(datetime.fromisoformat(data["calls"]["callback_at"]), callback)
+            self.assertEqual(datetime.fromisoformat(data["history"][0]["callback_at"]), callback)
+            with psycopg2.connect(self.dsn, cursor_factory=RealDictCursor) as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT followup_due_at, outreach_status FROM prospects WHERE id = 1")
+                    row = cur.fetchone()
+                    self.assertIsNone(row["followup_due_at"])
+                    self.assertEqual(row["outreach_status"], "replied")
+            self.assertEqual(client.get("/api/queue?contact_activity=callback_due").json["leads"], [])
+            closed = client.post("/api/outreach/prospects/1", json={
+                "status": "failed", "expected_status": "replied"}).json
+            self.assertIsNone(closed["calls"]["callback_at"])
+            self.assertEqual(closed["history"][0]["channel"], "manual")
 
     def test_status_history_reopen_privacy_backfill_and_migration_idempotence(self):
         with psycopg2.connect(self.dsn, cursor_factory=RealDictCursor) as conn:

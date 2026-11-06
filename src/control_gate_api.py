@@ -1142,6 +1142,13 @@ def get_review_queue():
             return jsonify(status="error", message="Choose a valid outreach status."), 400
         conditions.append("outreach_status = %s")
         query_params.append(outreach_filter)
+    contact_filter = request.args.get('contact_activity', '').strip()
+    if contact_filter:
+        from outreach import CONTACT_FILTERS
+        if contact_filter not in CONTACT_FILTERS:
+            return jsonify(status="error", message="Choose a valid contact activity."), 400
+        conditions.append(CONTACT_FILTERS[contact_filter])
+    from outreach import CALL_FIELDS, contact_facet_sql, phone_sql
 
     # Search every text field the prospect table and inspector show.
     if search_query:
@@ -1186,7 +1193,8 @@ def get_review_queue():
                suggested_angle, subject_line, ai_pitch_draft,
                phone, email, formatted_address,
                website_url, profile_url, google_place_id, screenshot_path,
-               followup_due_at, status, outreach_status, last_discovered_at,
+               followup_due_at, status, outreach_status, {CALL_FIELDS},
+               {phone_sql('prospects')} AS call_number, last_discovered_at,
                job_via, job_salary, job_schedule, job_description, job_apply_link
         FROM prospects
         {where_clause}
@@ -1207,6 +1215,8 @@ def get_review_queue():
         UNION ALL
         SELECT 'outreach', outreach_status, outreach_status, COUNT(*)
         FROM prospects WHERE user_id = %s AND status != 'rejected' GROUP BY outreach_status
+        UNION ALL
+        {contact_facet_sql('prospects')}
         ORDER BY 1, 4 DESC, 3;
     """
 
@@ -1220,7 +1230,7 @@ def get_review_queue():
             records = cur.fetchall()
 
             filter_options = read_filter_options(
-                cur, facet_query, scope_params + scope_params + [active_user_id(), active_user_id()])
+                cur, facet_query, scope_params + scope_params + [active_user_id()] * 3)
 
             import r2_storage
             for record in records:
@@ -1577,6 +1587,13 @@ def get_job_leads():
             return jsonify(status="error", message="Choose a valid outreach status."), 400
         conditions.append("outreach_status = %s")
         params.append(outreach_filter)
+    contact_filter = request.args.get('contact_activity', '').strip()
+    if contact_filter:
+        from outreach import CONTACT_FILTERS
+        if contact_filter not in CONTACT_FILTERS:
+            return jsonify(status="error", message="Choose a valid contact activity."), 400
+        conditions.append(CONTACT_FILTERS[contact_filter])
+    from outreach import CALL_FIELDS, contact_facet_sql, phone_sql
 
     if search_q:
         conditions.append(
@@ -1607,7 +1624,8 @@ def get_job_leads():
         SELECT id, company_name, job_title, location, lead_type, job_role_signal,
                job_via, job_salary, job_schedule, job_description, job_apply_link,
                website_url, email, suggested_angle, ai_pitch_draft, subject_line,
-               status, outreach_status, source_platform, created_at, updated_at, last_discovered_at,
+               status, outreach_status, {CALL_FIELDS}, {phone_sql('jobs')} AS call_number,
+               source_platform, created_at, updated_at, last_discovered_at,
                job_details, contact_evidence
         FROM job_leads
         {where}
@@ -1627,6 +1645,8 @@ def get_job_leads():
         UNION ALL
         SELECT 'outreach', outreach_status, outreach_status, COUNT(*)
         FROM job_leads WHERE user_id = %s AND status != 'rejected' GROUP BY outreach_status
+        UNION ALL
+        {contact_facet_sql('job_leads')}
         ORDER BY 1, 4 DESC, 3;
     """
 
@@ -1637,7 +1657,7 @@ def get_job_leads():
             cur.execute(data_sql, tuple(params) + (per_page, offset))
             records = cur.fetchall()
             filter_options = read_filter_options(
-                cur, facet_sql, scope_params + scope_params + [active_user_id(), active_user_id()])
+                cur, facet_sql, scope_params + scope_params + [active_user_id()] * 3)
 
     return jsonify({
         "status":       "success",
@@ -1671,37 +1691,69 @@ def lead_outreach(kind, lead_id):
     from outreach import TABLES, record_update, validate_update
     if kind not in TABLES:
         return jsonify(status="error", message="Unknown lead type."), 404
-    owner = active_user_id()
     update = None
     if request.method == 'POST':
         try:
             update = validate_update(request.get_json(silent=True))
         except ValueError as error:
             return jsonify(status="error", message=str(error)), 400
+
+    def write(cur, owner):
+        status, expected, note = update
+        return record_update(cur, kind, lead_id, owner, status, note, expected=expected)
+    return outreach_response(kind, lead_id, write if update else None)
+
+
+@app.route('/api/outreach/<kind>/<int:lead_id>/calls', methods=['POST'])
+def log_lead_call(kind, lead_id):
+    from outreach import TABLES, record_call, validate_call
+    if kind not in TABLES:
+        return jsonify(status="error", message="Unknown lead type."), 404
+    try:
+        call = validate_call(request.get_json(silent=True))
+    except ValueError as error:
+        return jsonify(status="error", message=str(error)), 400
+    return outreach_response(kind, lead_id, lambda cur, owner: record_call(cur, kind, lead_id, owner, call))
+
+
+def outreach_response(kind, lead_id, write=None):
+    from outreach import TABLES, phone_source_sql, phone_sql
+    owner = active_user_id()
     table = TABLES[kind]
     with psycopg2.connect(DB_DSN, cursor_factory=RealDictCursor) as conn:
         with conn.cursor() as cur:
-            if update:
-                status, expected, note = update
-                result = record_update(cur, kind, lead_id, owner, status, note, expected=expected)
+            if write:
+                result = write(cur, owner)
                 if result == "missing":
                     return jsonify(status="error", message="That lead is not in your workspace."), 404
                 if result == "conflict":
                     return jsonify(status="error", message="Outreach changed elsewhere. Close and reopen tracking before retrying."), 409
-            cur.execute(f"SELECT outreach_status FROM {table} WHERE id = %s AND user_id = %s",
+            cur.execute(f"SELECT outreach_status, call_attempts, last_called_at, callback_at, phone_invalid, "
+                        f"{phone_sql(kind)} AS phone, {phone_source_sql(kind)} AS phone_source "
+                        f"FROM {table} WHERE id = %s AND user_id = %s",
                         (lead_id, owner))
             lead = cur.fetchone()
             if not lead:
                 return jsonify(status="error", message="That lead is not in your workspace."), 404
             column = "prospect_id" if kind == "prospects" else "job_lead_id"
-            cur.execute(f"SELECT id, previous_status, status, note, source, created_at "
+            cur.execute(f"SELECT id, previous_status, status, note, source, channel, call_outcome, "
+                        f"callback_at, phone, occurred_at, created_at "
                         f"FROM outreach_events WHERE {column} = %s AND user_id = %s "
-                        "ORDER BY id DESC LIMIT 100", (lead_id, owner))
+                        "ORDER BY occurred_at DESC, id DESC LIMIT 100", (lead_id, owner))
             events = cur.fetchall()
             for event in events:
-                event["created_at"] = event["created_at"].isoformat()
+                for key in ("created_at", "occurred_at", "callback_at"):
+                    if event.get(key) is not None:
+                        event[key] = event[key].isoformat()
         conn.commit()
-    return jsonify(status="success", outreach_status=lead["outreach_status"], history=events)
+    calls = {key: lead.get(key) for key in ("call_attempts", "last_called_at", "callback_at",
+                                             "phone_invalid", "phone", "phone_source")}
+    for key in ("last_called_at", "callback_at"):
+        if calls[key] is not None:
+            calls[key] = calls[key].isoformat()
+    calls["call_attempts"] = calls["call_attempts"] or 0
+    calls["phone_invalid"] = bool(calls["phone_invalid"])
+    return jsonify(status="success", outreach_status=lead["outreach_status"], calls=calls, history=events)
 
 
 @app.route('/api/job-leads/<int:lead_id>/update-email', methods=['POST'])
@@ -1758,7 +1810,8 @@ def export_leads_csv():
         'rating', 'review_count', 'lead_score', 'site_quality_score',
         'email', 'phone', 'formatted_address', 'website_url', 'profile_url',
         'subject_line', 'ai_pitch_draft', 'suggested_angle',
-        'status', 'outreach_status', 'followup_due_at', 'created_at'
+        'status', 'outreach_status', 'call_attempts', 'last_called_at', 'callback_at',
+        'followup_due_at', 'created_at'
     ]
     col_str = ', '.join(columns)
     query = f"SELECT {col_str} FROM prospects WHERE user_id = %s"
