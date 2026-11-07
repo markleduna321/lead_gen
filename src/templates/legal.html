@@ -5,8 +5,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="color-scheme" content="light dark">
     <meta id="theme-color-meta" name="theme-color" content="#f5f7f9">
-    <meta name="description" content="{{ policy_title }} for diskubre Lead Workspace.">
+    {% set policy_descriptions = {
+        'terms': 'Read the terms for using diskubre, including account, trial, payment, search, and outreach responsibilities.',
+        'privacy': 'Learn what account and lead information diskubre uses, why it is processed, and how to ask about your data.',
+        'refunds': 'Understand diskubre discovery-credit adjustments, one-time purchases, and how to contact support about payments.',
+        'support': 'Get help with diskubre accounts, plans, payments, lead discovery, and the workspace.'
+    } %}
+    {% set description = policy_descriptions.get(policy_page, policy_title ~ ' for diskubre Lead Workspace.') %}
+    <meta name="description" content="{{ description }}">
     <title>{{ policy_title }} | diskubre</title>
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="diskubre">
+    <meta property="og:title" content="{{ policy_title }} | diskubre">
+    <meta property="og:description" content="{{ description }}">
+    <meta name="twitter:card" content="summary">
+    {% if site_origin %}
+    <link rel="canonical" href="{{ site_origin }}{{ request.path }}">
+    <meta property="og:url" content="{{ site_origin }}{{ request.path }}">
+    {% endif %}
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='diskubre-logo.png') }}">
     <link rel="preload" href="{{ url_for('static', filename='vendor/fonts/dm-sans-latin-wght-normal.woff2') }}" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="{{ url_for('static', filename='vendor/fonts/manrope-latin-wght-normal.woff2') }}" as="font" type="font/woff2" crossorigin>

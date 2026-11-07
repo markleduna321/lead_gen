@@ -6,7 +6,16 @@
     <meta name="color-scheme" content="light dark">
     <meta id="theme-color-meta" name="theme-color" content="#f5f7f9">
     <meta name="description" content="{{ pricing_description }}">
-    <title>Plans &amp; Pricing | diskubre</title>
+    <title>Lead Discovery Plans &amp; Pricing | diskubre</title>
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="diskubre">
+    <meta property="og:title" content="Lead Discovery Plans &amp; Pricing | diskubre">
+    <meta property="og:description" content="{{ pricing_description }}">
+    <meta name="twitter:card" content="summary">
+    {% if site_origin %}
+    <link rel="canonical" href="{{ site_origin }}{{ request.path }}">
+    <meta property="og:url" content="{{ site_origin }}{{ request.path }}">
+    {% endif %}
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='diskubre-logo.png') }}">
     <link rel="preload" href="{{ url_for('static', filename='vendor/fonts/dm-sans-latin-wght-normal.woff2') }}" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="{{ url_for('static', filename='vendor/fonts/manrope-latin-wght-normal.woff2') }}" as="font" type="font/woff2" crossorigin>
@@ -21,8 +30,8 @@
     <main id="main-content" class="plans-main home-container">
         <section class="plans-intro" aria-labelledby="plans-title">
             <p class="home-kicker"><span></span> ROOM FOR YOUR NEXT CHAPTER</p>
-            <h1 id="plans-title">Your ambition.<br><em>A plan to match.</em></h1>
-            <p>From your first introduction to your next stage of growth.<br>Explore the plan designed for the way you work.</p>
+            <h1 id="plans-title">Lead discovery plans and pricing.</h1>
+            <p>Compare plans for local business lead generation, hiring-company discovery, and personalized prospect outreach. Prices are shown in Philippine pesos.</p>
             <span class="plans-announcement"><span aria-hidden="true"></span> Annual billing includes {{ annual_free_months }} months free</span>
         </section>
         <aside class="plans-trial" aria-labelledby="trial-title">
@@ -63,7 +72,7 @@
                     <thead><tr><th scope="col">Feature / Metric</th>{% for plan in comparison_plans %}<th scope="col">{{ plan.name }}{% if plan.id != 'trial' %} Plan{% endif %}{% if plan.id == 'small_team' %} <span class="plan-best-value">Best Value</span>{% endif %}</th>{% endfor %}</tr></thead>
                     <tbody>
                         {% for metric, values in comparison_rows %}
-                        <tr><th scope="row">{{ metric }}</th>{% for value in values %}<td>{{ value }}</td>{% endfor %}</tr>
+                        <tr{% if metric == 'Local Discovery Data Sources' %} id="local-business-discovery"{% elif metric == 'Hiring Companies Discovery' %} id="hiring-company-discovery"{% elif metric == 'AI Pitch Drafts' %} id="personalized-outreach"{% endif %}><th scope="row">{{ metric }}</th>{% for value in values %}<td>{{ value }}</td>{% endfor %}</tr>
                         {% endfor %}
                     </tbody>
                 </table>

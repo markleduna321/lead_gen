@@ -141,6 +141,90 @@ class DashboardPagesTests(unittest.TestCase):
             self.assertIn('<a href="/">Home</a>', html)
             self.assertIn('<a href="/plans">Plans &amp; Pricing</a>', html)
 
+    def test_public_seo_content_canonicals_and_sitemap(self):
+        client = self.module.app.test_client()
+        with patch.dict(os.environ, {"APP_BASE_URL": "https://www.diskubre.example/"}):
+            home = client.get("/").get_data(as_text=True)
+            self.assertIn(
+                "<title>Local Business Leads &amp; Hiring Signals | diskubre</title>",
+                home,
+            )
+            self.assertIn(
+                'name="description" content="Find local business leads by industry and location, discover companies hiring for your services, and organize prospect outreach with diskubre."',
+                home,
+            )
+            self.assertIn(
+                'rel="canonical" href="https://www.diskubre.example/"',
+                home,
+            )
+            self.assertIn(
+                "<h1 id=\"home-title\">Find local business leads and hiring companies.</h1>",
+                home,
+            )
+            for fragment in (
+                "local-business-discovery",
+                "hiring-company-discovery",
+                "personalized-outreach",
+            ):
+                self.assertIn(f'href="/plans#{fragment}"', home)
+
+            plans = client.get("/plans").get_data(as_text=True)
+            self.assertIn(
+                "<title>Lead Discovery Plans &amp; Pricing | diskubre</title>",
+                plans,
+            )
+            self.assertIn(
+                'rel="canonical" href="https://www.diskubre.example/plans"',
+                plans,
+            )
+            for fragment in (
+                "local-business-discovery",
+                "hiring-company-discovery",
+                "personalized-outreach",
+            ):
+                self.assertIn(f'id="{fragment}"', plans)
+
+            robots = client.get("/robots.txt")
+            self.assertEqual(robots.status_code, 200)
+            self.assertIn("Disallow: /api/", robots.get_data(as_text=True))
+            self.assertIn(
+                "Sitemap: https://www.diskubre.example/sitemap.xml",
+                robots.get_data(as_text=True),
+            )
+            sitemap = client.get("/sitemap.xml")
+            self.assertEqual(sitemap.status_code, 200)
+            sitemap_xml = sitemap.get_data(as_text=True)
+            self.assertIn("<loc>https://www.diskubre.example/</loc>", sitemap_xml)
+            self.assertIn("<loc>https://www.diskubre.example/plans</loc>", sitemap_xml)
+            self.assertNotIn("/login", sitemap_xml)
+            self.assertNotIn("/prospects", sitemap_xml)
+
+    def test_private_and_auth_pages_are_not_indexable(self):
+        clients_and_paths = (
+            (self.module.app.test_client(), ("/login", "/register", "/verify-email",
+                                              "/team-invitation")),
+            (self.client, ("/overview", "/prospects", "/job-leads", "/settings")),
+        )
+        for client, paths in clients_and_paths:
+            for path in paths:
+                with self.subTest(path=path):
+                    html = client.get(path).get_data(as_text=True)
+                    self.assertIn(
+                        '<meta name="robots" content="noindex, nofollow">',
+                        html,
+                    )
+
+    def test_sitemap_requires_a_configured_https_site_origin(self):
+        client = self.module.app.test_client()
+        with patch.dict(os.environ, {"APP_BASE_URL": "http://diskubre.example"}):
+            response = client.get("/sitemap.xml")
+            self.assertEqual(response.status_code, 503)
+            self.assertIn("APP_BASE_URL", response.get_data(as_text=True))
+            self.assertNotIn(
+                "Sitemap:",
+                client.get("/robots.txt").get_data(as_text=True),
+            )
+
     def test_workspace_controls_have_programmatic_names(self):
         class FormControlNameParser(HTMLParser):
             def __init__(self):
@@ -660,7 +744,7 @@ class DashboardPagesTests(unittest.TestCase):
                     response = client.get("/plans")
                     self.assertEqual(response.status_code, 200)
                     html = response.get_data(as_text=True)
-                    self.assertIn('<title>Plans &amp; Pricing | diskubre</title>', html)
+                    self.assertIn('<title>Lead Discovery Plans &amp; Pricing | diskubre</title>', html)
                     self.assertIn('data-page="plans"', html)
                     for key, name in [('solo', 'Solo'), ('small_team', 'Small Team'), ('enterprise', 'Enterprise')]:
                         self.assertIn(f'<h2 id="plan-{key}">{name}</h2>', html)
@@ -726,7 +810,7 @@ class DashboardPagesTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         html = unescape(response.get_data(as_text=True))
         table = re.search(r'<table class="plans-table">(.*?)</table>', html, re.S).group(1)
-        rows = re.findall(r'<tr>(.*?)</tr>', table, re.S)
+        rows = re.findall(r'<tr\b[^>]*>(.*?)</tr>', table, re.S)
         cells = [
             [' '.join(re.sub(r'<[^>]+>', ' ', cell).split())
              for cell in re.findall(r'<t[hd]\b[^>]*>(.*?)</t[hd]>', row, re.S)]
@@ -816,7 +900,7 @@ class DashboardPagesTests(unittest.TestCase):
         self.assertIn("90 / mo", html)
         self.assertIn("Up to 2 Users", html)
         self.assertIn(
-            'content="Compare diskubre\'s 7-day free trial, Solo at PHP 1,234/month,',
+            'content="Compare diskubre plans for local business leads, hiring searches, and prospect outreach. Start a 7-day free trial; plans from PHP 1,234/month.',
             html,
         )
 

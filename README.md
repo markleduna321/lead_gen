@@ -83,7 +83,7 @@ promotes `user_id` to `NOT NULL`. **Back up first:**
 | `MAX_DISCOVERY_WORKERS` | No (`4`) | Discovery searches running at once across all accounts (clamped to 1-32) |
 | `APP_HOST` / `APP_PORT` | No | Bind address, default `127.0.0.1:5000` |
 | `TRIAL_IP_HASH_SECRET` | When `APP_ENV` is `production` or `staging` (or unset) | Key for the one-trial-per-network rule (see *Email verification and free trials*). Keep it stable; changing it forgets which networks already used a trial |
-| `SYSTEM_SMTP_PASSWORD` / `SYSTEM_SMTP_FROM` / `APP_BASE_URL` | When `APP_ENV` is `production` or `staging` (or unset) | System mail for verification, password reset and team invitations (see *Sending email*). Hosted deployments refuse to start without them |
+| `SYSTEM_SMTP_PASSWORD` / `SYSTEM_SMTP_FROM` / `APP_BASE_URL` | When `APP_ENV` is `production` or `staging` (or unset) | System mail for verification, password reset and team invitations (see *Sending email*); `APP_BASE_URL` also sets public-page canonical URLs and the sitemap origin |
 | `TRUSTED_PROXY_HOPS` | Behind a proxy (`0`) | Number of proxies in front of the app (Render, Railway, Heroku or Nginx: `1`). Needed so rate limits see the real client IP; never set it higher than the real number of proxies, or clients can fake their IP |
 
 ```powershell
@@ -118,6 +118,16 @@ instead, rate limits (stored in PostgreSQL, so they hold across workers) apply:
 
 Limits use fixed windows, so a block can end sooner than the full window.
 APIs answer `429` with code `rate_limited` and a `Retry-After` header.
+
+### Search indexing
+
+The public home, plans, and policy pages provide page-specific titles and
+descriptions, canonical URLs, and social-sharing metadata. Canonicals and
+`/sitemap.xml` use the configured public HTTPS origin in `APP_BASE_URL`; the
+sitemap returns `503` until that origin is configured. `/robots.txt` links to
+the sitemap when available. Sign-in, registration, verification, invitations,
+and workspace pages are marked `noindex, nofollow`; the sitemap lists only
+public pages.
 
 ### Sessions and account security
 

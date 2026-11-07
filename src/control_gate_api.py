@@ -13,6 +13,7 @@ from psycopg2.extras import RealDictCursor
 from flask import Flask, request, jsonify, render_template, Response, redirect, session, url_for
 from werkzeug.exceptions import HTTPException
 from dotenv import load_dotenv
+from urllib.parse import urlsplit
 import app_env
 import log_redact
 from discovery_runs import DiscoveryBusyError, LocalDiscoveryRuns
@@ -115,6 +116,39 @@ def limiter():
     return app.config["RATE_LIMITER"]
 
 
+def configured_public_origin():
+    """Return the configured HTTPS site origin for canonical SEO URLs."""
+    base_url = os.getenv("APP_BASE_URL", "").strip()
+    if not base_url:
+        return None
+    try:
+        parsed = urlsplit(base_url)
+        port = parsed.port
+    except ValueError:
+        return None
+    if (
+        parsed.scheme != "https"
+        or not parsed.hostname
+        or parsed.username
+        or parsed.password
+        or parsed.query
+        or parsed.fragment
+        or parsed.path not in ("", "/")
+    ):
+        return None
+    hostname = parsed.hostname.lower()
+    if ":" in hostname:
+        hostname = f"[{hostname}]"
+    if port and port != 443:
+        hostname = f"{hostname}:{port}"
+    return f"https://{hostname}"
+
+
+@app.context_processor
+def seo_template_context():
+    return {"site_origin": configured_public_origin()}
+
+
 def client_ip():
     return request.remote_addr or "unknown"
 
@@ -131,6 +165,38 @@ import security_headers
 security_headers.install(app, APP_ENV)
 CSP_REPORTS_SEEN = set()
 CSP_REPORTS_SEEN_MAX = 500
+
+
+@app.route('/robots.txt', methods=['GET'])
+def robots_txt():
+    lines = ["User-agent: *", "Allow: /", "Disallow: /api/"]
+    site_origin = configured_public_origin()
+    if site_origin:
+        lines.append(f"Sitemap: {site_origin}/sitemap.xml")
+    return Response("\n".join(lines) + "\n", mimetype="text/plain")
+
+
+@app.route('/sitemap.xml', methods=['GET'])
+def sitemap_xml():
+    site_origin = configured_public_origin()
+    if not site_origin:
+        return Response(
+            "Set APP_BASE_URL to the public HTTPS site origin to serve the sitemap.\n",
+            status=503,
+            mimetype="text/plain",
+        )
+    public_paths = ("/", "/plans", "/terms", "/privacy", "/refund-policy", "/support")
+    locations = "".join(
+        f"<url><loc>{site_origin}{path}</loc></url>" for path in public_paths
+    )
+    response = Response(
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        f"{locations}</urlset>",
+        mimetype="application/xml",
+    )
+    response.headers["Cache-Control"] = "public, max-age=3600"
+    return response
 
 
 def _report_field(report, *names):
@@ -830,12 +896,10 @@ def plans():
         retained_percent=(1 - ZERO_RESULT_REFUND) * 100,
         annual_free_months=annual_free_months,
         pricing_description=(
-            f"Compare diskubre's {TRIAL_DAYS}-day free trial, "
-            + ", ".join(
-                f"{plan['name']} at PHP {plan['monthly']}/month"
-                for plan in paid_plans
-            )
-            + "."
+            "Compare diskubre plans for local business leads, hiring searches, "
+            "and prospect outreach. "
+            f"Start a {TRIAL_DAYS}-day free trial; plans from "
+            f"PHP {paid_plans[0]['monthly']}/month."
         ),
     )
 
